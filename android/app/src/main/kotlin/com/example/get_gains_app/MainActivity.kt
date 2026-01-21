@@ -1,4 +1,4 @@
-package com.example.get_gains_app
+package com.getgains.app
 
 import io.flutter.embedding.android.FlutterActivity
 
