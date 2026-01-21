@@ -14,6 +14,10 @@ migrate_working_dir/
 .fvm/flutter_sdk
 !.fvm/fvm_config.json
 
+# Environment variables
+.env
+!.env.example
+
 # IntelliJ related
 *.iml
 *.ipr

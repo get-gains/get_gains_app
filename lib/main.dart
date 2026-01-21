@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/core.dart';
@@ -7,8 +8,8 @@ import 'providers/providers.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize any services that need early setup here
-  // Example: await Firebase.initializeApp();
+  // Load environment variables
+  await dotenv.load(fileName: '.env');
 
   AppLogger.info('Starting Get Gains App', tag: 'Main');
 

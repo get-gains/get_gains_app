@@ -1,15 +1,17 @@
 /// API Configuration Constants
 ///
 /// Contains base URLs and API endpoint paths.
-/// Environment-specific configurations should be handled via build flavors.
+/// Environment-specific configurations should be handled via .env file.
 library;
+
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiConstants {
   ApiConstants._();
 
-  // Base URLs - Configure based on environment
-  static const String baseUrl = 'http://localhost:3000/api';
-  static const String prodBaseUrl = 'https://api.getgains.com/api';
+  // Base URL - Loaded from .env file
+  static String get baseUrl =>
+      dotenv.env['API_BASE_URL'] ?? 'http://localhost:3000/api';
 
   // Timeouts
   static const Duration connectTimeout = Duration(seconds: 30);
