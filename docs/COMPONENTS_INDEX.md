@@ -12,10 +12,10 @@
 |----------|-----------|--------|
 | Core | Button, Card, TextField | ✅ Complete |
 | Identity | Avatar, Badge, Chip | ✅ Complete |
-| Feedback | BottomSheet, Dialog, Progress, Toast | ✅ Complete |
+| Feedback | BottomSheet, Dialog, Progress, Toast, Snackbar | ✅ Complete |
 | Navigation | NavBar, TopBar, ListTile, Tabs | ✅ Complete |
 | Input | Switch, Checkbox, Radio, Slider, DatePicker | ✅ Complete |
-| Data Display | Image | ✅ Complete |
+| Data Display | Image, Table | ✅ Complete |
 | Layout | EmptyState | ✅ Complete |
 
 ---
@@ -158,6 +158,20 @@ Non-intrusive notifications for brief feedback.
 **Helpers**: `AppToast.show` · `AppToast.success` · `AppToast.error` · `AppToast.warning` · `AppToast.info`
 
 ---
+
+### [AppSnackbar](./components/SNACKBAR.md)
+Brief feedback messages with optional actions.
+
+| Variant | Purpose |
+|---------|----------|
+| `info` | Neutral information |
+| `success` | Positive feedback |
+| `warning` | Caution messages |
+| `error` | Error messages |
+
+**Helpers**: `AppSnackbar.show` · `AppSnackbar.success` · `AppSnackbar.error` · `AppSnackbar.warning` · `AppSnackbar.info`
+
+---
 ## Navigation Components
 
 ### [AppNavigation](./components/NAVIGATION.md)
@@ -280,6 +294,20 @@ Optimized image loading with placeholders and error handling.
 
 ---
 
+### [AppTable](./components/TABLE.md)
+Data table for displaying structured data with sorting and selection.
+
+| Feature | Description |
+|---------|-------------|
+| Sortable columns | Click headers to sort |
+| Selectable rows | Checkbox selection |
+| Loading state | Built-in loading indicator |
+| Empty state | Customizable empty content |
+
+**Sizes**: `sm` (40px rows) · `md` (52px rows) · `lg` (64px rows)
+
+---
+
 ## Input Components (Extended)
 
 ### [AppDatePicker](./components/DATE_PICKER.md)
@@ -315,11 +343,11 @@ Tab navigation for content switching.
 ---
 ## Planned Components
 
-> **Note**: Start a new session to document each component below.
+> **Note**: All planned components have been implemented! 🎉
 
 ### Data Display
 - [x] `AppImage` - Optimized image loading with placeholders ✅
-- [ ] `AppTable` - Data tables with sorting/filtering
+- [x] `AppTable` - Data tables with sorting/filtering ✅
 
 ### Input
 - [x] `AppSlider` - Range input sliders ✅
@@ -327,7 +355,7 @@ Tab navigation for content switching.
 
 ### Feedback
 - [x] `AppToast` - Toast notifications ✅
-- [ ] `AppSnackbar` - Snackbar messages
+- [x] `AppSnackbar` - Snackbar messages ✅
 
 ### Layout
 - [x] `AppTabs` - Tab navigation ✅
@@ -396,7 +424,9 @@ docs/
     ├── PROGRESS.md          # AppProgress documentation
     ├── RADIO.md             # AppRadio documentation
     ├── SLIDER.md            # AppSlider documentation
+    ├── SNACKBAR.md          # AppSnackbar documentation
     ├── SWITCH.md            # AppSwitch documentation
+    ├── TABLE.md             # AppTable documentation
     ├── TABS.md              # AppTabs documentation
     ├── TEXT_FIELD.md        # AppTextField documentation
     └── TOAST.md             # AppToast documentation
