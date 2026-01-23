@@ -11,6 +11,10 @@
 1. [Component 1: AppButton](#component-1-appbutton)
 2. [Component 2: AppCard](#component-2-appcard)
 3. [Component 3: AppTextField](#component-3-apptextfield)
+4. [Component 4: AppAvatar](#component-4-appavatar)
+5. [Component 5: AppBadge & AppChip](#component-5-appbadge--appchip)
+6. [Component 6: AppBottomSheet](#component-6-appbottomsheet)
+7. [Component 7: AppProgress](#component-7-appprogress)
 
 ---
 
@@ -2086,20 +2090,536 @@ AppTextField(
 
 ---
 
+## Component 4: AppAvatar
+
+### Purpose
+Displays user images, initials, or icons in a consistent circular or rounded container. Used for profile displays, user lists, and collaborative features.
+
+### Variants
+
+#### 1. Image Avatar
+- **Purpose**: Display user profile photos
+- **Specifications**:
+  - Circular or rounded square container
+  - Image fills container with cover fit
+  - Loading state with progress indicator
+  - Fallback to initials on error
+
+#### 2. Initials Avatar
+- **Purpose**: Fallback when no image available
+- **Specifications**:
+  - Background: `primary` at 15% opacity
+  - Text: `primary` color
+  - Font: Sans-serif, weight 600
+  - Extracts 1-2 initials from name
+
+#### 3. Icon Avatar
+- **Purpose**: Generic or action-based avatars
+- **Specifications**:
+  - Background: Customizable
+  - Icon centered in container
+  - Icon size proportional to avatar size
+
+#### 4. Custom Avatar
+- **Purpose**: Flexible content display
+- **Specifications**:
+  - Accepts any child widget
+  - Maintains consistent container styling
+
+### Size Variants
+
+| Size | Diameter | Icon Size | Font Size |
+|------|----------|-----------|-----------|
+| `xs` | 24px | 14px | 10px |
+| `sm` | 32px | 16px | 12px |
+| `md` | 40px | 20px | 14px |
+| `lg` | 48px | 24px | 16px |
+| `xl` | 64px | 32px | 24px |
+| `xxl` | 96px | 48px | 36px |
+
+### Status Indicators
+
+| Status | Color | Usage |
+|--------|-------|-------|
+| `online` | `#4ADE80` (success) | User is active |
+| `offline` | `#71717A` (gray) | User is inactive |
+| `away` | `#FBBF24` (warning) | User is idle |
+| `busy` | `#F87171` (error) | Do not disturb |
+
+### Implementation
+
+```dart
+// lib/widgets/app_avatar.dart
+
+// Image avatar
+AppAvatar(
+  imageUrl: 'https://example.com/avatar.jpg',
+  name: 'John Doe',
+  size: AppAvatarSize.lg,
+)
+
+// Initials avatar
+AppAvatar(
+  name: 'John Doe',
+  size: AppAvatarSize.md,
+)
+
+// Icon avatar
+AppAvatar.icon(
+  icon: Icons.person,
+  backgroundColor: AppColors.primaryDark,
+)
+
+// With status indicator
+AppAvatar(
+  imageUrl: user.avatarUrl,
+  name: user.name,
+  status: AppAvatarStatus.online,
+)
+
+// Avatar group (stacked)
+AppAvatarGroup(
+  avatars: [
+    AppAvatar(name: 'User 1'),
+    AppAvatar(name: 'User 2'),
+    AppAvatar(name: 'User 3'),
+  ],
+  maxVisible: 3,
+  onExcessTap: () => showAllUsers(),
+)
+```
+
+### Accessibility Notes
+- Image avatars include alt text from name
+- Tappable avatars have appropriate touch targets
+- Status indicators have semantic meaning
+
+---
+
+## Component 5: AppBadge & AppChip
+
+### Purpose
+Badges display status, labels, or counts. Chips represent selection, filtering, or actions in a compact form.
+
+### AppBadge Variants
+
+#### 1. Secondary (Default)
+- **Purpose**: Neutral information
+- **Specifications**:
+  - Background: `secondary` color
+  - Text: `mutedForeground` color
+
+#### 2. Primary
+- **Purpose**: Highlighted information
+- **Specifications**:
+  - Background: `primary` at 15% opacity
+  - Text: `primary` color
+
+#### 3. Success
+- **Purpose**: Positive/completed states
+- **Specifications**:
+  - Background: `success` at 15% opacity (dark) / `successLight` (light)
+  - Text: `success` (dark) / `successMuted` (light)
+
+#### 4. Warning
+- **Purpose**: Caution states
+- **Specifications**:
+  - Background: `warning` at 15% opacity (dark) / `warningLight` (light)
+  - Text: `warning` (dark) / `warningMuted` (light)
+
+#### 5. Error
+- **Purpose**: Error/critical states
+- **Specifications**:
+  - Background: `error` at 15% opacity (dark) / `errorLight` (light)
+  - Text: `error` (dark) / `errorMuted` (light)
+
+#### 6. Info
+- **Purpose**: Informational content
+- **Specifications**:
+  - Background: `info` at 15% opacity (dark) / `infoLight` (light)
+  - Text: `info` (dark) / `infoMuted` (light)
+
+#### 7. Outline
+- **Purpose**: Minimal visual weight
+- **Specifications**:
+  - Background: transparent
+  - Border: 1px `border` color
+  - Text: `foreground` color
+
+#### 8. Dot
+- **Purpose**: Notification indicator
+- **Specifications**:
+  - Small colored circle
+  - No text content
+  - Positioned absolutely on parent
+
+### AppBadge Size Variants
+
+| Size | Height | Font Size | Padding |
+|------|--------|-----------|---------|
+| `sm` | 18px | 10px | 6px horizontal |
+| `md` | 22px | 11px | 8px horizontal |
+| `lg` | 26px | 12px | 10px horizontal |
+
+### AppChip Variants
+
+#### 1. Filled (Default)
+- **Purpose**: Standard chip
+- **Specifications**:
+  - Background: `secondary` color
+  - Text: `foreground` color
+  - Selected: `primary` background, white text
+
+#### 2. Outlined
+- **Purpose**: Lighter visual weight
+- **Specifications**:
+  - Background: transparent
+  - Border: 1px `border` color
+  - Selected: `primary` border
+
+#### 3. Tonal
+- **Purpose**: Subtle primary emphasis
+- **Specifications**:
+  - Background: `primary` at 15% opacity
+  - Text: `primary` color
+
+### AppChip Size Variants
+
+| Size | Height | Font Size | Icon Size |
+|------|--------|-----------|-----------|
+| `sm` | 28px | 12px | 14px |
+| `md` | 32px | 13px | 16px |
+| `lg` | 40px | 14px | 18px |
+
+### Implementation
+
+```dart
+// lib/widgets/app_badge.dart
+
+// Status badge
+AppBadge(
+  label: 'Active',
+  variant: AppBadgeVariant.success,
+)
+
+// Count badge
+AppBadge(
+  label: '5',
+  variant: AppBadgeVariant.primary,
+)
+
+// Dot indicator
+AppBadge.dot(variant: AppBadgeVariant.error)
+
+// Selectable chip
+AppChip(
+  label: 'Strength',
+  selected: isSelected,
+  onSelected: (selected) => setState(() => isSelected = selected),
+)
+
+// Deletable chip
+AppChip(
+  label: 'Tag Name',
+  onDeleted: () => removeTag(),
+)
+
+// Chip group
+AppChipGroup(
+  chips: [
+    AppChip(label: 'All', selected: true),
+    AppChip(label: 'Strength'),
+    AppChip(label: 'Cardio'),
+  ],
+  spacing: 8,
+)
+```
+
+### Accessibility Notes
+- Chips announce selection state to screen readers
+- Delete buttons have appropriate labels
+- Touch targets meet minimum 44px requirements
+
+---
+
+## Component 6: AppBottomSheet
+
+### Purpose
+Modal sheets that slide up from the bottom of the screen. Used for actions, confirmations, options, and additional content.
+
+### Variants
+
+#### 1. Standard Bottom Sheet
+- **Purpose**: Custom content container
+- **Specifications**:
+  - Background: `card` color
+  - Border radius: 20px top corners
+  - Drag handle: 32x4px centered bar
+  - Max height: 90% of screen
+
+#### 2. Confirm Sheet
+- **Purpose**: Confirmation dialogs
+- **Specifications**:
+  - Optional icon (64px circle)
+  - Title and message
+  - Cancel and confirm buttons
+  - Destructive variant for dangerous actions
+
+#### 3. Action Sheet
+- **Purpose**: List of options/actions
+- **Specifications**:
+  - Optional title and message
+  - List of tappable items
+  - Selected state support
+  - Optional cancel button
+
+### Helper Functions
+
+```dart
+// Standard bottom sheet
+showAppBottomSheet(
+  context: context,
+  builder: (context) => MyContent(),
+)
+
+// Confirmation sheet
+showAppConfirmSheet(
+  context: context,
+  title: 'Delete Workout?',
+  message: 'This action cannot be undone.',
+  confirmLabel: 'Delete',
+  isDestructive: true,
+)
+
+// Action sheet
+showAppActionSheet<String>(
+  context: context,
+  title: 'Sort By',
+  actions: [
+    AppActionSheetItem(label: 'Name', value: 'name', icon: Icons.sort_by_alpha),
+    AppActionSheetItem(label: 'Date', value: 'date', icon: Icons.calendar_today),
+  ],
+)
+```
+
+### Sub-Components
+
+#### AppBottomSheetContent
+- Wrapper with drag handle
+- Consistent padding
+
+#### AppBottomSheetHeader
+- Title and optional subtitle
+- Close button
+- Optional trailing widget
+
+#### AppConfirmSheet
+- Icon area
+- Title and message
+- Two-button layout
+
+#### AppActionSheet
+- Header section
+- Scrollable action list
+- Cancel button
+
+### Implementation
+
+```dart
+// lib/widgets/app_bottom_sheet.dart
+
+// Custom content
+showAppBottomSheet(
+  context: context,
+  showDragHandle: true,
+  builder: (context) => Column(
+    children: [
+      AppBottomSheetHeader(title: 'Options'),
+      // Content here
+    ],
+  ),
+)
+
+// Confirmation
+final confirmed = await showAppConfirmSheet(
+  context: context,
+  title: 'Delete Exercise?',
+  message: 'This will remove the exercise from your workout.',
+  confirmLabel: 'Delete',
+  isDestructive: true,
+  icon: Icons.delete_outline,
+);
+
+if (confirmed == true) {
+  deleteExercise();
+}
+
+// Action selection
+final sortOption = await showAppActionSheet<String>(
+  context: context,
+  title: 'Sort Workouts',
+  actions: [
+    AppActionSheetItem(
+      label: 'Most Recent',
+      value: 'recent',
+      icon: Icons.access_time,
+      isSelected: currentSort == 'recent',
+    ),
+    AppActionSheetItem(
+      label: 'Name (A-Z)',
+      value: 'name',
+      icon: Icons.sort_by_alpha,
+    ),
+  ],
+);
+```
+
+### Accessibility Notes
+- Sheets can be dismissed with back gesture
+- Focus trapped within sheet when open
+- Drag handle provides visual affordance
+- Buttons have appropriate labels
+
+---
+
+## Component 7: AppProgress
+
+### Purpose
+Visual indicators for progress, loading states, and multi-step flows. Includes linear, circular, and step-based variants.
+
+### Variants
+
+#### 1. Linear Progress (AppLinearProgress)
+- **Purpose**: Show progress along a track
+- **Specifications**:
+  - Height based on size variant
+  - Rounded ends
+  - Optional percentage label
+  - Supports determinate and indeterminate
+
+#### 2. Circular Progress (AppCircularProgress)
+- **Purpose**: Compact progress indicator
+- **Specifications**:
+  - Diameter based on size variant
+  - Rounded stroke cap
+  - Optional center content
+  - Supports determinate and indeterminate
+
+#### 3. Progress Ring (AppProgressRing)
+- **Purpose**: Goal/stat display
+- **Specifications**:
+  - Configurable size and stroke
+  - Center label and sublabel
+  - Optional icon
+  - Monospace numbers
+
+#### 4. Step Progress (AppStepProgress)
+- **Purpose**: Multi-step flow indicator
+- **Specifications**:
+  - Dots for each step
+  - Lines connecting steps
+  - Completed, active, and inactive states
+  - Optional step labels
+
+#### 5. Skeleton (AppSkeleton)
+- **Purpose**: Loading placeholder
+- **Specifications**:
+  - Shimmer animation
+  - Rectangle or circle shapes
+  - Customizable dimensions
+
+### Size Variants
+
+| Size | Linear Height | Circular Diameter | Stroke Width |
+|------|--------------|-------------------|--------------|
+| `sm` | 2px | 16px | 2px |
+| `md` | 4px | 24px | 3px |
+| `lg` | 8px | 40px | 4px |
+
+### Label Positions (Linear)
+
+| Position | Description |
+|----------|-------------|
+| `top` | Label above progress bar |
+| `bottom` | Label below progress bar |
+| `start` | Label before progress bar |
+| `end` | Label after progress bar |
+
+### Implementation
+
+```dart
+// lib/widgets/app_progress.dart
+
+// Determinate linear progress
+AppLinearProgress(
+  value: 0.65,
+  showLabel: true,
+)
+
+// Indeterminate linear progress
+AppLinearProgress(value: null)
+
+// Circular progress
+AppCircularProgress(
+  value: 0.75,
+  showLabel: true,
+  size: AppProgressSize.lg,
+)
+
+// Loading spinner
+AppCircularProgress(value: null)
+
+// Progress ring for goals
+AppProgressRing(
+  value: 0.75,
+  size: 120,
+  strokeWidth: 10,
+  label: '750',
+  sublabel: 'of 1000 cal',
+)
+
+// Step progress
+AppStepProgress(
+  currentStep: 2,
+  totalSteps: 4,
+  labels: ['Info', 'Details', 'Review', 'Confirm'],
+)
+
+// Skeleton loading
+AppSkeleton(width: 200, height: 16)
+AppSkeleton.circle(size: 48)
+AppSkeleton(
+  width: double.infinity,
+  height: 100,
+  borderRadius: BorderRadius.circular(16),
+)
+```
+
+### Accessibility Notes
+- Progress values exposed to screen readers
+- Indeterminate states announced appropriately
+- Step labels provide context for navigation
+- Skeleton placeholders are aria-hidden
+
+---
+
 ## Status
 
-**Documented**: 3 components
+**Documented**: 7 components
 - ✅ AppButton (8 variants)
 - ✅ AppCard (6 variants + 2 specialized)
 - ✅ AppTextField (3 variants + 3 specialized)
+- ✅ AppAvatar (4 variants + group)
+- ✅ AppBadge (8 variants) & AppChip (3 variants)
+- ✅ AppBottomSheet (3 variants + helpers)
+- ✅ AppProgress (5 variants)
 
 **Next Session**: Continue with the following components:
-- Avatar / UserAvatar
-- Badge / Chip
-- BottomSheet / Modal
 - Navigation components (BottomNav, AppBar)
 - List / ListTile
-- Progress indicators
+- Dialog / AlertDialog
+- Toast / Snackbar
+- Switch / Checkbox / Radio
 
 ---
 
