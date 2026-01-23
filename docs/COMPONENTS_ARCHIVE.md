@@ -2603,9 +2603,385 @@ AppSkeleton(
 
 ---
 
+## Component 8: AppNavigation
+
+### Purpose
+Navigation components for app-wide navigation. Includes bottom navigation bar for tab switching and top app bar for page headers.
+
+### Variants
+
+#### 1. AppBottomNavBar
+- **Purpose**: Primary tab navigation at bottom of screen
+- **Specifications**:
+  - Height: 64px (+ safe area)
+  - Background: `card` color
+  - Border top or floating style
+  - Badge support for notifications
+
+#### 2. AppTopBar
+- **Purpose**: Page header with title and actions
+- **Specifications**:
+  - Implements `PreferredSizeWidget`
+  - Title with optional subtitle
+  - Leading and trailing actions
+  - Optional bottom widget (TabBar)
+
+#### 3. AppSliverHeader
+- **Purpose**: Large scrollable header for lists
+- **Specifications**:
+  - Expandable/collapsible
+  - Pinned or floating behavior
+  - Large title typography
+
+### Sub-Components
+
+#### AppNavItem
+- Icon (active/inactive)
+- Label
+- Optional badge
+
+#### AppTopBarAction
+- Icon button with badge support
+- Tooltip
+
+#### AppBackButton / AppCloseButton
+- Consistent back/close actions
+
+### Implementation
+
+```dart
+// lib/widgets/app_navigation.dart
+
+// Bottom navigation
+AppBottomNavBar(
+  currentIndex: _selectedIndex,
+  onTap: (index) => setState(() => _selectedIndex = index),
+  items: [
+    AppNavItem(icon: Icons.home_outlined, label: 'Home', activeIcon: Icons.home),
+    AppNavItem(icon: Icons.fitness_center_outlined, label: 'Workouts'),
+    AppNavItem(icon: Icons.bar_chart_outlined, label: 'Progress'),
+    AppNavItem(icon: Icons.person_outline, label: 'Profile', badge: 3),
+  ],
+)
+
+// Floating bottom nav
+AppBottomNavBar(
+  currentIndex: _selectedIndex,
+  onTap: onTap,
+  items: items,
+  margin: EdgeInsets.all(16),
+  borderRadius: BorderRadius.circular(24),
+  elevation: 8,
+)
+
+// Top app bar
+AppTopBar(
+  title: 'Workouts',
+  leading: AppBackButton(),
+  actions: [
+    AppTopBarAction(icon: Icons.search, onPressed: () => showSearch()),
+    AppTopBarAction(icon: Icons.more_vert, onPressed: () => showMenu()),
+  ],
+)
+
+// Top bar with subtitle
+AppTopBar(
+  title: 'John Doe',
+  subtitle: 'Premium Member',
+  centerTitle: true,
+)
+
+// Sliver header
+CustomScrollView(
+  slivers: [
+    AppSliverHeader(
+      title: 'My Workouts',
+      subtitle: '12 total',
+      actions: [
+        AppTopBarAction(icon: Icons.add, onPressed: () => addWorkout()),
+      ],
+    ),
+    SliverList(...),
+  ],
+)
+```
+
+### Accessibility Notes
+- Navigation items have semantic labels
+- Badge counts announced to screen readers
+- Back/close buttons have proper tooltips
+- Touch targets minimum 48px
+
+---
+
+## Component 9: AppListTile
+
+### Purpose
+List item components for displaying data in lists. Supports various layouts and interactive states.
+
+### Variants
+
+#### 1. AppListTile (Default)
+- **Purpose**: Standard list item
+- **Specifications**:
+  - Leading, content, trailing layout
+  - Title and subtitle
+  - Tap/long press callbacks
+  - Selection state
+
+#### 2. AppListTile.selectable
+- **Purpose**: List item with checkbox indicator
+- **Specifications**:
+  - Checkmark in trailing position
+  - Selected background color
+  - Toggle on tap
+
+#### 3. AppMenuTile
+- **Purpose**: Settings/menu style item
+- **Specifications**:
+  - Icon with background
+  - Navigation chevron
+  - Destructive variant
+
+### Density Variants
+
+| Density | Height | Vertical Padding |
+|---------|--------|-----------------|
+| `compact` | 44px | 8px |
+| `standard` | 56px | 12px |
+| `comfortable` | 72px | 16px |
+
+### Grouping Components
+
+#### AppListSection
+- Section header with title
+- Optional trailing (e.g., "See All")
+- Groups related tiles
+
+#### AppListGroup
+- Card container for tiles
+- Dividers between items
+- Optional header/footer
+
+### Implementation
+
+```dart
+// lib/widgets/app_list_tile.dart
+
+// Basic list tile
+AppListTile(
+  title: 'Bench Press',
+  subtitle: '3 sets × 10 reps',
+  leading: CircleAvatar(child: Icon(Icons.fitness_center)),
+  trailing: Icon(Icons.chevron_right),
+  onTap: () => navigateToExercise(),
+)
+
+// Selectable list tile
+AppListTile.selectable(
+  title: 'Option A',
+  selected: isSelected,
+  onTap: () => toggleSelection(),
+)
+
+// Menu tile
+AppMenuTile(
+  icon: Icons.settings,
+  title: 'Settings',
+  subtitle: 'App preferences',
+  onTap: () => navigateToSettings(),
+)
+
+// Destructive menu tile
+AppMenuTile(
+  icon: Icons.logout,
+  title: 'Sign Out',
+  destructive: true,
+  onTap: () => signOut(),
+)
+
+// Grouped list
+AppListSection(
+  title: 'Account',
+  children: [
+    AppListTile(title: 'Profile', leading: Icon(Icons.person)),
+    AppListTile(title: 'Preferences', leading: Icon(Icons.tune)),
+  ],
+)
+
+// Card group
+AppListGroup(
+  header: Text('Settings'),
+  children: [
+    AppListTile(title: 'Notifications'),
+    AppListTile(title: 'Privacy'),
+    AppListTile(title: 'Security'),
+  ],
+)
+```
+
+### Accessibility Notes
+- List items announce as buttons when tappable
+- Selection state communicated to screen readers
+- Minimum touch target 44px height
+- Dividers don't interfere with navigation
+
+---
+
+## Component 10: AppDialog
+
+### Purpose
+Modal dialogs for alerts, confirmations, input, and selections. Provides consistent styling and behavior.
+
+### Variants
+
+#### 1. Alert Dialog
+- **Purpose**: Information display
+- **Specifications**:
+  - Optional icon
+  - Title and message
+  - Single action button
+
+#### 2. Confirm Dialog
+- **Purpose**: User confirmation
+- **Specifications**:
+  - Two action buttons
+  - Destructive variant
+  - Returns boolean
+
+#### 3. Input Dialog
+- **Purpose**: Text input
+- **Specifications**:
+  - Text field with validation
+  - Returns entered text
+  - Keyboard support
+
+#### 4. Selection Dialog
+- **Purpose**: Single selection from list
+- **Specifications**:
+  - Scrollable options
+  - Selected state indicator
+  - Returns selected value
+
+#### 5. Loading Dialog
+- **Purpose**: Async operation indicator
+- **Specifications**:
+  - Non-dismissible
+  - Circular progress
+  - Optional message
+
+### Helper Functions
+
+| Function | Purpose | Returns |
+|----------|---------|---------|
+| `showAppDialog` | Custom dialog | `T?` |
+| `showAppAlertDialog` | Alert | `void` |
+| `showAppConfirmDialog` | Confirmation | `bool?` |
+| `showAppInputDialog` | Text input | `String?` |
+| `showAppSelectionDialog` | Selection | `T?` |
+| `showAppLoadingDialog` | Loading | `void` |
+
+### Sub-Components
+
+#### AppDialogContainer
+- Consistent card styling
+- Max width constraint
+- Shadow and border radius
+
+#### AppDialogContent
+- Icon, title, content layout
+- Actions row/column
+
+#### AppDialogAction
+- Primary/secondary styling
+- Destructive variant
+- Loading state
+
+### Implementation
+
+```dart
+// lib/widgets/app_dialog.dart
+
+// Alert dialog
+await showAppAlertDialog(
+  context: context,
+  title: 'Error',
+  message: 'Something went wrong. Please try again.',
+  icon: Icons.error_outline,
+);
+
+// Confirm dialog
+final confirmed = await showAppConfirmDialog(
+  context: context,
+  title: 'Delete Workout?',
+  message: 'This action cannot be undone.',
+  confirmLabel: 'Delete',
+  isDestructive: true,
+  icon: Icons.delete_outline,
+);
+
+if (confirmed == true) {
+  deleteWorkout();
+}
+
+// Input dialog
+final name = await showAppInputDialog(
+  context: context,
+  title: 'Rename Workout',
+  hintText: 'Enter new name',
+  initialValue: workout.name,
+  validator: (value) {
+    if (value == null || value.isEmpty) return 'Name is required';
+    return null;
+  },
+);
+
+// Selection dialog
+final sortBy = await showAppSelectionDialog<String>(
+  context: context,
+  title: 'Sort By',
+  options: [
+    AppSelectionOption(value: 'name', label: 'Name', icon: Icons.sort_by_alpha),
+    AppSelectionOption(value: 'date', label: 'Date', icon: Icons.calendar_today),
+    AppSelectionOption(value: 'duration', label: 'Duration', icon: Icons.timer),
+  ],
+  selectedValue: currentSort,
+);
+
+// Loading dialog
+showAppLoadingDialog(context: context, message: 'Saving...');
+await saveData();
+Navigator.pop(context);
+
+// Custom dialog
+showAppDialog(
+  context: context,
+  builder: (context) => AppDialogContent(
+    icon: Icons.celebration,
+    title: 'Congratulations!',
+    content: 'You completed your first workout!',
+    actions: [
+      AppDialogAction(
+        label: 'Continue',
+        onPressed: () => Navigator.pop(context),
+        isPrimary: true,
+      ),
+    ],
+  ),
+);
+```
+
+### Accessibility Notes
+- Focus trapped within dialog
+- Escape key dismisses when allowed
+- Action buttons have proper labels
+- Loading state prevents interaction
+
+---
+
 ## Status
 
-**Documented**: 7 components
+**Documented**: 10 components
 - ✅ AppButton (8 variants)
 - ✅ AppCard (6 variants + 2 specialized)
 - ✅ AppTextField (3 variants + 3 specialized)
@@ -2613,13 +2989,16 @@ AppSkeleton(
 - ✅ AppBadge (8 variants) & AppChip (3 variants)
 - ✅ AppBottomSheet (3 variants + helpers)
 - ✅ AppProgress (5 variants)
+- ✅ AppNavigation (3 variants + helpers)
+- ✅ AppListTile (3 variants + grouping)
+- ✅ AppDialog (5 variants + helpers)
 
 **Next Session**: Continue with the following components:
-- Navigation components (BottomNav, AppBar)
-- List / ListTile
-- Dialog / AlertDialog
 - Toast / Snackbar
 - Switch / Checkbox / Radio
+- Tabs / TabBar
+- Empty State / Error State
+- Image / CachedImage
 
 ---
 
