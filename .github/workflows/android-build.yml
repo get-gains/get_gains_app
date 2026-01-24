@@ -76,6 +76,11 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Install Flutter (to get Dart for FVM)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
       - name: Install FVM
         run: |
           dart pub global activate fvm
@@ -86,9 +91,6 @@ jobs:
           fvm install stable
           fvm use stable --force
 
-      - name: Add FVM Flutter to PATH
-        run: echo "$HOME/fvm/versions/stable/bin" >> $GITHUB_PATH
-
       - name: Cache Flutter dependencies
         uses: actions/cache@v4
         with:
@@ -98,6 +100,9 @@ jobs:
           key: ${{ runner.os }}-flutter-${{ hashFiles('**/pubspec.lock') }}
           restore-keys: |
             ${{ runner.os }}-flutter-
+
+      - name: Create .env file
+        run: touch .env
 
       - name: Get dependencies
         run: fvm flutter pub get
@@ -118,3 +123,4 @@ jobs:
           name: debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 7
+
