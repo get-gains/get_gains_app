@@ -146,40 +146,63 @@ abstract class UserModel with _$UserModel {
   factory UserModel.fromJson(Map<String, dynamic> json) => 
       _$UserModelFromJson(json);
 }
+```
 
-// For custom factory methods, use static extension methods:
-extension UserModelX on UserModel {
-  static UserModel fromApiResponse(Map<String, dynamic> json) {
-    final data = json['data'] as Map<String, dynamic>;
-    return UserModel.fromJson(data);
-  }
+### 3. Server Response Format
+
+The server always returns responses in a standard format:
+
+```json
+// Success response
+{
+  "data": { "user": { "id": "123", "email": "user@example.com" } },
+  "errors": []
+}
+
+// Error response  
+{
+  "data": null,
+  "errors": [{ "field": "email", "message": "Email already exists" }]
 }
 ```
 
-### 3. Making API Calls
+**The ApiClient automatically handles this format:**
+- On success: Returns the unwrapped `data` field
+- On error: Parses `errors` array and returns appropriate `AppError`
+
+### 4. Making API Calls
 
 ```dart
 // Use the ApiClient for all HTTP requests
-final result = await ref.read(apiClientProvider).get<Map<String, dynamic>>(
-  '/users/profile',
+// The response is already unwrapped from { data, errors } format
+final result = await ref.read(apiClientProvider).post<Map<String, dynamic>>(
+  '/auth/register',
+  data: {'email': 'user@example.com', 'password': '...'},
 );
 
 result.when(
-  success: (data) => UserModel.fromJson(data),
-  failure: (error) => throw error,
+  success: (data) {
+    // 'data' is already the unwrapped content (e.g., { user: {...} })
+    final user = UserModel.fromJson(data['user']);
+    print(user.email);
+  },
+  failure: (error) {
+    // Error message is parsed from { errors: [...] }
+    print(error.message);
+  },
 );
 ```
 
-### 4. Using Result Type (Error Handling)
+### 5. Using Result Type (Error Handling)
 
 ```dart
 Future<Result<User, AppError>> getUser(String id) async {
-  try {
-    final data = await api.get('/users/$id');
-    return Success(User.fromJson(data));
-  } catch (e) {
-    return Failure(NetworkError(message: e.toString()));
-  }
+  final result = await apiClient.get<Map<String, dynamic>>('/users/$id');
+  
+  return result.when(
+    success: (data) => Success(User.fromJson(data['user'])),
+    failure: (error) => Failure(error),
+  );
 }
 
 // Consuming
@@ -190,7 +213,7 @@ result.when(
 );
 ```
 
-### 5. Database Operations (Drift)
+### 6. Database Operations (Drift)
 
 ```dart
 // Add table in app_database.dart
@@ -208,7 +231,7 @@ final db = ref.read(appDatabaseProvider);
 await db.into(db.workouts).insert(WorkoutsCompanion.insert(name: 'Leg Day'));
 ```
 
-### 6. Secure Storage (JWT Tokens)
+### 7. Secure Storage (JWT Tokens)
 
 ```dart
 final storage = ref.read(secureStorageServiceProvider);
@@ -224,7 +247,7 @@ await storage.saveTokens(
 // Token refresh handled automatically on 401
 ```
 
-### 7. Navigation
+### 8. Navigation
 
 ```dart
 // Navigate
