@@ -14,6 +14,7 @@
 | **Models** | freezed + json_serializable |
 | **Secure Storage** | flutter_secure_storage (JWT tokens) |
 | **Backend** | Express.js (separate repo) - JWT auth |
+| **FVM** | Flutter Version Management, Stable |
 
 ---
 
@@ -132,8 +133,9 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'user_model.freezed.dart';
 part 'user_model.g.dart';
 
+// NOTE: In freezed 3.x, classes MUST be declared as 'abstract'
 @freezed
-class UserModel with _$UserModel {
+abstract class UserModel with _$UserModel {
   const factory UserModel({
     required String id,
     required String email,
@@ -143,6 +145,14 @@ class UserModel with _$UserModel {
   
   factory UserModel.fromJson(Map<String, dynamic> json) => 
       _$UserModelFromJson(json);
+}
+
+// For custom factory methods, use static extension methods:
+extension UserModelX on UserModel {
+  static UserModel fromApiResponse(Map<String, dynamic> json) {
+    final data = json['data'] as Map<String, dynamic>;
+    return UserModel.fromJson(data);
+  }
 }
 ```
 
@@ -379,13 +389,15 @@ drift_dev: ^2.29.0
    - Any file with `@riverpod`, `@freezed`, or `@JsonSerializable`
    - Drift table definitions
 
-2. **Provider scope**: Use `keepAlive: true` for singleton services (database, storage, api client)
+2. **Freezed 3.x requires abstract classes**: All freezed model classes must be declared as `abstract class`. Custom factory methods should be moved to static extension methods (e.g., `MyModelX.fromApiResponse()`).
 
-3. **Token refresh**: Handled automatically by `AuthInterceptor` - don't implement manually
+3. **Provider scope**: Use `keepAlive: true` for singleton services (database, storage, api client)
 
-4. **Result type**: Use `when()` for exhaustive handling, `valueOrNull` for quick access
+4. **Token refresh**: Handled automatically by `AuthInterceptor` - don't implement manually
 
-5. **Database migrations**: Increment `schemaVersion` and add migration logic before deploying
+5. **Result type**: Use `when()` for exhaustive handling, `valueOrNull` for quick access
+
+6. **Database migrations**: Increment `schemaVersion` and add migration logic before deploying
 
 ---
 
