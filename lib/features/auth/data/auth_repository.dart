@@ -70,12 +70,12 @@ class AuthRepository {
   /// - User profile in database
   ///
   /// On success:
-  /// - Stores JWT tokens in secure storage
-  /// - Caches user data in preferences
-  /// - Returns complete AuthResponse
+  /// - Returns RegisterResponse with user data
+  /// - User must verify email before logging in
+  /// - NO tokens are returned (email verification required)
   ///
   /// Server endpoint: POST /auth/register
-  Future<Result<AuthResponse, AppError>> registerWithEmailPassword({
+  Future<Result<RegisterResponse, AppError>> registerWithEmailPassword({
     required String email,
     required String password,
     required String name,
@@ -98,24 +98,30 @@ class AuthRepository {
     return result.when(
       success: (data) async {
         try {
-          final response = AuthResponseX.fromApiResponse(data);
-
-          // Store tokens securely
-          await _secureStorage.saveTokens(
-            accessToken: response.accessToken,
-            refreshToken: response.refreshToken,
+          // ApiClient already unwraps { data, errors } format
+          // So 'data' here is the inner data object with 'user' field
+          final response = RegisterResponse(
+            user: UserModel.fromJson(data['user'] as Map<String, dynamic>),
           );
 
-          // Store user info
-          await _secureStorage.saveUserId(response.user.id);
-          await _secureStorage.saveUserEmail(response.user.email);
+          // Cache user preferences (non-critical, don't fail registration)
+          try {
+            await _userPreferences.setLastLoginMethod(
+              LoginMethod.emailPassword,
+            );
+            await _userPreferences.setIsGoogleUser(false);
+          } catch (prefsError) {
+            AppLogger.warning(
+              'Failed to cache user preferences (non-critical)',
+              tag: 'AuthRepo',
+              error: prefsError,
+            );
+          }
 
-          // Cache user for offline access
-          await _userPreferences.cacheUser(response.user);
-          await _userPreferences.setLastLoginMethod(LoginMethod.emailPassword);
-          await _userPreferences.setIsGoogleUser(false);
-
-          AppLogger.info('User registered successfully', tag: 'AuthRepo');
+          AppLogger.info(
+            'User registered successfully - email verification required',
+            tag: 'AuthRepo',
+          );
           return Success(response);
         } catch (e) {
           AppLogger.error(
@@ -170,7 +176,14 @@ class AuthRepository {
         return result.when(
           success: (data) async {
             try {
-              final response = GoogleSignInResponseX.fromApiResponse(data);
+              // ApiClient already unwraps { data, errors } format
+              final response = GoogleSignInResponse(
+                accessToken: data['accessToken'] as String,
+                refreshToken: data['refreshToken'] as String,
+                user: PartialUserModel.fromJson(
+                  data['user'] as Map<String, dynamic>,
+                ),
+              );
 
               // Save pending profile for completion
               await _userPreferences.savePendingGoogleProfile(
@@ -268,10 +281,9 @@ class AuthRepository {
     return result.when(
       success: (data) async {
         try {
-          // The response from /google/link returns the created user
-          // We need to construct AuthResponse using existing tokens
-          final userData = (data['data'] as Map<String, dynamic>);
-          final user = UserModel.fromJson(userData);
+          // ApiClient already unwraps { data, errors } format
+          // The 'data' here contains the user object directly
+          final user = UserModel.fromJson(data['user'] as Map<String, dynamic>);
 
           final response = AuthResponse(
             accessToken: pendingProfile.accessToken,
@@ -332,8 +344,8 @@ class AuthRepository {
   }
 
   /// Check if there's a pending Google profile to complete
-  Future<bool> hasPendingGoogleProfile() async {
-    return await _userPreferences.hasPendingGoogleProfile();
+  bool hasPendingGoogleProfile() {
+    return _userPreferences.hasPendingGoogleProfile();
   }
 
   /// Get pending Google profile data

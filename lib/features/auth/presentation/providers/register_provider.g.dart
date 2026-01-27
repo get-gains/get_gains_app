@@ -134,7 +134,7 @@ final class RegisterNotifierProvider
   }
 }
 
-String _$registerNotifierHash() => r'c4b0f7f86eb8a20a40f5b70f5d461a07484e23f2';
+String _$registerNotifierHash() => r'08d928a68ec094170f7e5b4b17d0251a55e79e6e';
 
 /// Register Provider
 ///
