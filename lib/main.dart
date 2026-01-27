@@ -22,7 +22,12 @@ Future<void> main() async {
   await dotenv.load(fileName: '.env');
 
   // Initialize Hive for user preferences
-  final userPrefsBox = await UserPreferencesService.init();
+  // Retry logic handles hot restart channel disconnection issues
+  final userPrefsBox = await _initWithRetry(
+    () => UserPreferencesService.init(),
+    maxRetries: 3,
+    delay: const Duration(milliseconds: 100),
+  );
 
   AppLogger.info('Starting Get Gains App', tag: 'Main');
 
@@ -58,4 +63,26 @@ class GetGainsApp extends ConsumerWidget {
       routerConfig: router,
     );
   }
+}
+
+/// Retry helper for platform channel initialization during hot restart.
+/// Platform channels can become disconnected during hot restart, requiring a retry.
+Future<T> _initWithRetry<T>(
+  Future<T> Function() init, {
+  int maxRetries = 3,
+  Duration delay = const Duration(milliseconds: 100),
+}) async {
+  for (var i = 0; i < maxRetries; i++) {
+    try {
+      return await init();
+    } on PlatformException catch (e) {
+      if (i == maxRetries - 1) rethrow;
+      AppLogger.warning(
+        'Platform channel init failed (attempt ${i + 1}/$maxRetries): ${e.message}',
+        tag: 'Main',
+      );
+      await Future.delayed(delay);
+    }
+  }
+  throw StateError('Failed to initialize after $maxRetries attempts');
 }
