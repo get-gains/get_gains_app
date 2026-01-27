@@ -13,6 +13,12 @@ part of 'router_provider.dart';
 /// Centralized routing with go_router.
 /// Handles auth-based redirects automatically.
 ///
+/// Route Guard Logic:
+/// - Unauthenticated users can only access: login, register, forgot-password
+/// - reset-password is an authenticated route (user comes from email link with token)
+/// - complete-profile is for Google sign-up flow (has temp tokens)
+/// - All other routes require full authentication
+///
 /// Usage:
 /// ```dart
 /// // In MaterialApp
@@ -32,6 +38,12 @@ const routerProvider = RouterProvider._();
 ///
 /// Centralized routing with go_router.
 /// Handles auth-based redirects automatically.
+///
+/// Route Guard Logic:
+/// - Unauthenticated users can only access: login, register, forgot-password
+/// - reset-password is an authenticated route (user comes from email link with token)
+/// - complete-profile is for Google sign-up flow (has temp tokens)
+/// - All other routes require full authentication
 ///
 /// Usage:
 /// ```dart
@@ -53,6 +65,12 @@ final class RouterProvider
   /// Centralized routing with go_router.
   /// Handles auth-based redirects automatically.
   ///
+  /// Route Guard Logic:
+  /// - Unauthenticated users can only access: login, register, forgot-password
+  /// - reset-password is an authenticated route (user comes from email link with token)
+  /// - complete-profile is for Google sign-up flow (has temp tokens)
+  /// - All other routes require full authentication
+  ///
   /// Usage:
   /// ```dart
   /// // In MaterialApp
@@ -70,7 +88,7 @@ final class RouterProvider
         argument: null,
         retry: null,
         name: r'routerProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -97,4 +115,4 @@ final class RouterProvider
   }
 }
 
-String _$routerHash() => r'ec799ccac348537a2c7a3c21d3020f0468dd5b67';
+String _$routerHash() => r'd9ccc6da76d3fefba3ad44e82c4a38fc0a6925c1';

@@ -107,7 +107,7 @@ final class AuthStateNotifierProvider
   }
 }
 
-String _$authStateNotifierHash() => r'7e8332c358e253d4d45abf9db76d2c9313f8a2ec';
+String _$authStateNotifierHash() => r'621b9332b20fe9be975d97fef40d1469ad0f4a18';
 
 /// Auth State Provider
 ///
