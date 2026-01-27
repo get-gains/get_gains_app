@@ -259,19 +259,9 @@ class _LoginScreenState extends State<LoginScreen>
           label: 'Sign In',
           onPressed: () {
             // Show placeholder message
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text(
-                  'Login not implemented yet. Try registering!',
-                ),
-                behavior: SnackBarBehavior.floating,
-                backgroundColor: isDark
-                    ? AppColors.surface2Dark
-                    : AppColors.gray700,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                ),
-              ),
+            AppToast.info(
+              context,
+              'Login not implemented yet. Try registering!',
             );
           },
           isFullWidth: true,
@@ -337,18 +327,7 @@ class _LoginScreenState extends State<LoginScreen>
       label: 'Continue with Google',
       icon: Icons.g_mobiledata_rounded,
       onPressed: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Login not implemented yet. Try registering!'),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: isDark
-                ? AppColors.surface2Dark
-                : AppColors.gray700,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-            ),
-          ),
-        );
+        AppToast.info(context, 'Login not implemented yet. Try registering!');
       },
       isFullWidth: true,
       size: AppButtonSize.lg,

@@ -143,8 +143,8 @@ Visual indicators for progress, loading, and multi-step flows.
 | `skeleton` | Loading placeholder with shimmer |
 
 ---
-### [AppToast](./components/TOAST.md)
-Non-intrusive notifications for brief feedback.
+### [AppToast](./components/TOAST.md) ⭐ Preferred
+Non-intrusive notifications for brief feedback. **Use this for all feedback messages.**
 
 | Variant | Purpose |
 |---------|----------|
@@ -153,14 +153,18 @@ Non-intrusive notifications for brief feedback.
 | `warning` | Caution messages |
 | `error` | Error messages |
 
-**Position**: `top` · `bottom`
+**Position**: `top` (default, preferred) · `bottom`
 
 **Helpers**: `AppToast.show` · `AppToast.success` · `AppToast.error` · `AppToast.warning` · `AppToast.info`
 
+> **Design Decision**: AppToast is the preferred feedback component. It appears from the top of the screen, providing non-intrusive notifications that don't block content. Use AppToast instead of AppSnackbar for all user feedback.
+
 ---
 
-### [AppSnackbar](./components/SNACKBAR.md)
+### [AppSnackbar](./components/SNACKBAR.md) ⚠️ Deprecated
 Brief feedback messages with optional actions.
+
+> **Note**: Prefer `AppToast` for all feedback notifications. AppSnackbar is kept for compatibility but should not be used in new code.
 
 | Variant | Purpose |
 |---------|----------|

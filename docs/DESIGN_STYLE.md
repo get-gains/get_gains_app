@@ -391,6 +391,37 @@ Container(
 - Subtle grid lines or none
 - Labels below x-axis
 
+### Feedback & Notifications
+
+**Preferred: AppToast (Top Overlay)**
+
+For all user feedback messages (errors, success, warnings, info), use `AppToast` with top positioning. This provides:
+- Non-intrusive notification that doesn't block content
+- Slides down from top of screen
+- Auto-dismisses after duration
+- Supports swipe-to-dismiss
+- Consistent cross-platform behavior
+
+```dart
+// ✅ Preferred - Use AppToast
+AppToast.error(context, 'Failed to save changes');
+AppToast.success(context, 'Workout completed!');
+AppToast.warning(context, 'Connection unstable');
+AppToast.info(context, 'New features available');
+
+// ❌ Avoid - Don't use Snackbar
+ScaffoldMessenger.of(context).showSnackBar(...);
+```
+
+**Toast Position**: Always use top position (default)
+
+| Variant | Use Case |
+|---------|----------|
+| `error` | API failures, validation errors |
+| `success` | Completed actions, saved data |
+| `warning` | Degraded states, caution |
+| `info` | Neutral information, tips |
+
 ---
 
 ## Variant Naming Conventions

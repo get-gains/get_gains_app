@@ -29,6 +29,7 @@ class AppSnackbarConfig {
     this.dismissible = true,
     this.margin = const EdgeInsets.all(16),
     this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    this.showFromTop = true,
   });
 
   /// How long the snackbar is visible
@@ -48,6 +49,9 @@ class AppSnackbarConfig {
 
   /// Internal padding
   final EdgeInsets padding;
+
+  /// Whether to show from top (true) or bottom (false)
+  final bool showFromTop;
 
   /// Default configuration
   static const AppSnackbarConfig defaults = AppSnackbarConfig();

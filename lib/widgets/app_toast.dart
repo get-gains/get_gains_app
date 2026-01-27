@@ -34,7 +34,7 @@ enum AppToastPosition {
 class AppToastConfig {
   const AppToastConfig({
     this.duration = const Duration(seconds: 3),
-    this.position = AppToastPosition.bottom,
+    this.position = AppToastPosition.top,
     this.showIcon = true,
     this.dismissible = true,
     this.margin = const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
