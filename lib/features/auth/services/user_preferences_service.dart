@@ -1,13 +1,16 @@
 import 'dart:convert';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/logger.dart';
-import '../../../main.dart';
 import '../data/models/user_model.dart';
 
 part 'user_preferences_service.g.dart';
+
+/// Hive box name for user preferences
+const String _userPrefsBoxName = 'user_preferences';
 
 /// Storage keys for user preferences
 class UserPrefsKeys {
@@ -62,7 +65,7 @@ class PendingGoogleProfile {
 
 /// User Preferences Service
 ///
-/// Manages user data persistence using SharedPreferences.
+/// Manages user data persistence using Hive (fast, lightweight NoSQL database).
 /// Used for:
 /// - Caching user data for offline access
 /// - Storing login method preferences
@@ -82,20 +85,27 @@ class PendingGoogleProfile {
 /// final cachedUser = await prefs.getCachedUser();
 /// ```
 class UserPreferencesService {
-  UserPreferencesService({required SharedPreferences prefs}) : _prefs = prefs;
+  UserPreferencesService({required Box<dynamic> box}) : _box = box;
 
-  final SharedPreferences _prefs;
+  final Box<dynamic> _box;
+
+  /// Initialize Hive and open the user preferences box
+  /// Call this in main() before runApp()
+  static Future<Box<dynamic>> init() async {
+    await Hive.initFlutter();
+    return Hive.openBox(_userPrefsBoxName);
+  }
 
   // ============== User Caching ==============
 
   /// Cache user data for offline access
   ///
-  /// Stores the complete user model in SharedPreferences.
+  /// Stores the complete user model in Hive.
   /// This allows showing user info even when offline.
   Future<void> cacheUser(UserModel user) async {
     try {
       final jsonString = jsonEncode(user.toJson());
-      await _prefs.setString(UserPrefsKeys.cachedUser, jsonString);
+      await _box.put(UserPrefsKeys.cachedUser, jsonString);
       AppLogger.debug('User cached successfully', tag: 'UserPrefs');
     } catch (e) {
       AppLogger.error('Failed to cache user', tag: 'UserPrefs', error: e);
@@ -107,7 +117,7 @@ class UserPreferencesService {
   /// Returns the cached user model or null if not found.
   Future<UserModel?> getCachedUser() async {
     try {
-      final jsonString = _prefs.getString(UserPrefsKeys.cachedUser);
+      final jsonString = _box.get(UserPrefsKeys.cachedUser) as String?;
       if (jsonString == null) return null;
 
       final json = jsonDecode(jsonString) as Map<String, dynamic>;
@@ -120,7 +130,7 @@ class UserPreferencesService {
 
   /// Clear cached user data
   Future<void> clearCachedUser() async {
-    await _prefs.remove(UserPrefsKeys.cachedUser);
+    await _box.delete(UserPrefsKeys.cachedUser);
     AppLogger.debug('Cached user cleared', tag: 'UserPrefs');
   }
 
@@ -133,7 +143,7 @@ class UserPreferencesService {
   Future<void> savePendingGoogleProfile(PendingGoogleProfile profile) async {
     try {
       final jsonString = jsonEncode(profile.toJson());
-      await _prefs.setString(UserPrefsKeys.pendingGoogleProfile, jsonString);
+      await _box.put(UserPrefsKeys.pendingGoogleProfile, jsonString);
       AppLogger.debug('Pending Google profile saved', tag: 'UserPrefs');
     } catch (e) {
       AppLogger.error(
@@ -149,7 +159,8 @@ class UserPreferencesService {
   /// Returns the pending profile or null if not found.
   Future<PendingGoogleProfile?> getPendingGoogleProfile() async {
     try {
-      final jsonString = _prefs.getString(UserPrefsKeys.pendingGoogleProfile);
+      final jsonString =
+          _box.get(UserPrefsKeys.pendingGoogleProfile) as String?;
       if (jsonString == null) return null;
 
       final json = jsonDecode(jsonString) as Map<String, dynamic>;
@@ -166,14 +177,14 @@ class UserPreferencesService {
 
   /// Check if there's a pending Google profile
   bool hasPendingGoogleProfile() {
-    return _prefs.containsKey(UserPrefsKeys.pendingGoogleProfile);
+    return _box.containsKey(UserPrefsKeys.pendingGoogleProfile);
   }
 
   /// Clear pending Google profile
   ///
   /// Called after profile completion or when user cancels.
   Future<void> clearPendingGoogleProfile() async {
-    await _prefs.remove(UserPrefsKeys.pendingGoogleProfile);
+    await _box.delete(UserPrefsKeys.pendingGoogleProfile);
     AppLogger.debug('Pending Google profile cleared', tag: 'UserPrefs');
   }
 
@@ -181,12 +192,12 @@ class UserPreferencesService {
 
   /// Save last login method
   Future<void> setLastLoginMethod(LoginMethod method) async {
-    await _prefs.setString(UserPrefsKeys.lastLoginMethod, method.name);
+    await _box.put(UserPrefsKeys.lastLoginMethod, method.name);
   }
 
   /// Get last login method
   LoginMethod? getLastLoginMethod() {
-    final value = _prefs.getString(UserPrefsKeys.lastLoginMethod);
+    final value = _box.get(UserPrefsKeys.lastLoginMethod) as String?;
     if (value == null) return null;
 
     return LoginMethod.values.firstWhere(
@@ -197,26 +208,26 @@ class UserPreferencesService {
 
   /// Set whether user logged in with Google
   Future<void> setIsGoogleUser(bool isGoogle) async {
-    await _prefs.setBool(UserPrefsKeys.isGoogleUser, isGoogle);
+    await _box.put(UserPrefsKeys.isGoogleUser, isGoogle);
   }
 
   /// Check if user logged in with Google
   bool isGoogleUser() {
-    return _prefs.getBool(UserPrefsKeys.isGoogleUser) ?? false;
+    return _box.get(UserPrefsKeys.isGoogleUser) as bool? ?? false;
   }
 
   /// Save remembered email for login
   Future<void> setRememberedEmail(String? email) async {
     if (email == null) {
-      await _prefs.remove(UserPrefsKeys.rememberEmail);
+      await _box.delete(UserPrefsKeys.rememberEmail);
     } else {
-      await _prefs.setString(UserPrefsKeys.rememberEmail, email);
+      await _box.put(UserPrefsKeys.rememberEmail, email);
     }
   }
 
   /// Get remembered email
   String? getRememberedEmail() {
-    return _prefs.getString(UserPrefsKeys.rememberEmail);
+    return _box.get(UserPrefsKeys.rememberEmail) as String?;
   }
 
   // ============== Clear All ==============
@@ -228,17 +239,25 @@ class UserPreferencesService {
     await Future.wait([
       clearCachedUser(),
       clearPendingGoogleProfile(),
-      _prefs.remove(UserPrefsKeys.isGoogleUser),
-      _prefs.remove(UserPrefsKeys.lastLoginMethod),
+      _box.delete(UserPrefsKeys.isGoogleUser),
+      _box.delete(UserPrefsKeys.lastLoginMethod),
       // Note: We keep remembered email as a convenience feature
     ]);
     AppLogger.info('All user preferences cleared', tag: 'UserPrefs');
   }
 }
 
+/// Provider for the Hive box used by UserPreferencesService
+/// Must be overridden in main() with the actual instance
+final userPrefsBoxProvider = Provider<Box<dynamic>>((ref) {
+  throw UnimplementedError(
+    'User preferences box must be initialized in main()',
+  );
+});
+
 /// Provider for UserPreferencesService
 @Riverpod(keepAlive: true)
 UserPreferencesService userPreferencesService(Ref ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return UserPreferencesService(prefs: prefs);
+  final box = ref.watch(userPrefsBoxProvider);
+  return UserPreferencesService(box: box);
 }

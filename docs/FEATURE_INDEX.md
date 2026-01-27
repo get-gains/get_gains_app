@@ -20,7 +20,8 @@
 | **go_router** | ^17.0.1 | Navigation |
 | **flutter_secure_storage** | ^10.0.0 | Secure token storage |
 | **google_sign_in** | ^6.2.2 | Google OAuth |
-| **shared_preferences** | ^2.5.3 | User preferences |
+| **hive** | ^2.2.3 | User preferences (NoSQL) |
+| **hive_flutter** | ^1.1.0 | Flutter Hive integration |
 
 ### Architecture Approach
 
