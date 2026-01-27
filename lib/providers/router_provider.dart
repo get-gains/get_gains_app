@@ -13,7 +13,9 @@ class AppRoutes {
   static const String splash = '/';
   static const String login = '/login';
   static const String register = '/register';
+  static const String completeProfile = '/complete-profile';
   static const String forgotPassword = '/forgot-password';
+  static const String resetPassword = '/reset-password';
   static const String home = '/home';
   static const String profile = '/profile';
   static const String settings = '/settings';
@@ -23,6 +25,12 @@ class AppRoutes {
 ///
 /// Centralized routing with go_router.
 /// Handles auth-based redirects automatically.
+///
+/// Route Guard Logic:
+/// - Unauthenticated users can only access: login, register, forgot-password
+/// - reset-password is an authenticated route (user comes from email link with token)
+/// - complete-profile is for Google sign-up flow (has temp tokens)
+/// - All other routes require full authentication
 ///
 /// Usage:
 /// ```dart
@@ -49,24 +57,34 @@ GoRouter router(Ref ref) {
       final isInitial = authState.status == AuthStatus.initial;
       final location = state.uri.path;
 
-      // Auth routes
-      final isAuthRoute =
+      // Public auth routes (accessible without authentication)
+      final isPublicAuthRoute =
           location == AppRoutes.login ||
           location == AppRoutes.register ||
           location == AppRoutes.forgotPassword;
+
+      // Semi-authenticated routes (require temp tokens but not full profile)
+      // - reset-password: User has token from email link
+      // - complete-profile: User has Google tokens but needs to complete profile
+      final isSemiAuthRoute =
+          location == AppRoutes.resetPassword ||
+          location == AppRoutes.completeProfile;
 
       // Still loading auth state
       if (isInitial) {
         return AppRoutes.splash;
       }
 
-      // Not authenticated and not on auth route
-      if (!isAuthenticated && !isAuthRoute && location != AppRoutes.splash) {
+      // Not authenticated and not on public auth route
+      if (!isAuthenticated &&
+          !isPublicAuthRoute &&
+          !isSemiAuthRoute &&
+          location != AppRoutes.splash) {
         return AppRoutes.login;
       }
 
-      // Authenticated but on auth route
-      if (isAuthenticated && isAuthRoute) {
+      // Authenticated but on public auth route (except semi-auth routes)
+      if (isAuthenticated && isPublicAuthRoute) {
         return AppRoutes.home;
       }
 
@@ -86,7 +104,7 @@ GoRouter router(Ref ref) {
             const _PlaceholderScreen(title: 'Loading...'),
       ),
 
-      // Auth Routes
+      // Auth Routes (Public)
       GoRoute(
         path: AppRoutes.login,
         builder: (context, state) => const _PlaceholderScreen(title: 'Login'),
@@ -102,7 +120,19 @@ GoRouter router(Ref ref) {
             const _PlaceholderScreen(title: 'Forgot Password'),
       ),
 
-      // Main App Routes
+      // Auth Routes (Semi-Authenticated)
+      GoRoute(
+        path: AppRoutes.resetPassword,
+        builder: (context, state) =>
+            const _PlaceholderScreen(title: 'Reset Password'),
+      ),
+      GoRoute(
+        path: AppRoutes.completeProfile,
+        builder: (context, state) =>
+            const _PlaceholderScreen(title: 'Complete Profile'),
+      ),
+
+      // Main App Routes (Fully Authenticated)
       GoRoute(
         path: AppRoutes.home,
         builder: (context, state) => const _PlaceholderScreen(title: 'Home'),
