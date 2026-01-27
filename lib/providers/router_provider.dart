@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../features/auth/auth.dart';
 import 'auth_state_provider.dart';
 
 part 'router_provider.g.dart';
@@ -13,7 +14,10 @@ class AppRoutes {
   static const String splash = '/';
   static const String login = '/login';
   static const String register = '/register';
+  static const String checkEmail = '/check-email';
+  static const String completeProfile = '/complete-profile';
   static const String forgotPassword = '/forgot-password';
+  static const String resetPassword = '/reset-password';
   static const String home = '/home';
   static const String profile = '/profile';
   static const String settings = '/settings';
@@ -23,6 +27,12 @@ class AppRoutes {
 ///
 /// Centralized routing with go_router.
 /// Handles auth-based redirects automatically.
+///
+/// Route Guard Logic:
+/// - Unauthenticated users can only access: login, register, forgot-password
+/// - reset-password is an authenticated route (user comes from email link with token)
+/// - complete-profile is for Google sign-up flow (has temp tokens)
+/// - All other routes require full authentication
 ///
 /// Usage:
 /// ```dart
@@ -35,38 +45,57 @@ class AppRoutes {
 /// context.go(AppRoutes.home);
 /// context.push(AppRoutes.profile);
 /// ```
-@riverpod
+@Riverpod(keepAlive: true)
 GoRouter router(Ref ref) {
-  final authState = ref.watch(authStateProvider);
+  // Create a notifier that listens to auth state changes
+  final refreshNotifier = _GoRouterRefreshStream(ref);
 
   return GoRouter(
     initialLocation: AppRoutes.splash,
     debugLogDiagnostics: true,
-    refreshListenable: _GoRouterRefreshStream(ref),
+    refreshListenable: refreshNotifier,
 
     redirect: (context, state) {
+      // Read auth state inside redirect so it's always current
+      final authState = ref.read(authStateProvider);
       final isAuthenticated = authState.isAuthenticated;
       final isInitial = authState.status == AuthStatus.initial;
       final location = state.uri.path;
 
-      // Auth routes
-      final isAuthRoute =
+      // Public auth routes (accessible without authentication)
+      final isPublicAuthRoute =
           location == AppRoutes.login ||
           location == AppRoutes.register ||
+          location == AppRoutes.checkEmail ||
           location == AppRoutes.forgotPassword;
+
+      // Semi-authenticated routes (require temp tokens but not full profile)
+      // - reset-password: User has token from email link
+      // - complete-profile: User has Google tokens but needs to complete profile
+      final isSemiAuthRoute =
+          location == AppRoutes.resetPassword ||
+          location == AppRoutes.completeProfile;
 
       // Still loading auth state
       if (isInitial) {
         return AppRoutes.splash;
       }
 
-      // Not authenticated and not on auth route
-      if (!isAuthenticated && !isAuthRoute && location != AppRoutes.splash) {
+      // Unauthenticated on splash, go to login
+      if (!isAuthenticated && location == AppRoutes.splash) {
         return AppRoutes.login;
       }
 
-      // Authenticated but on auth route
-      if (isAuthenticated && isAuthRoute) {
+      // Not authenticated and not on public auth route
+      if (!isAuthenticated &&
+          !isPublicAuthRoute &&
+          !isSemiAuthRoute &&
+          location != AppRoutes.splash) {
+        return AppRoutes.login;
+      }
+
+      // Authenticated but on public auth route (except semi-auth routes)
+      if (isAuthenticated && isPublicAuthRoute) {
         return AppRoutes.home;
       }
 
@@ -86,15 +115,21 @@ GoRouter router(Ref ref) {
             const _PlaceholderScreen(title: 'Loading...'),
       ),
 
-      // Auth Routes
+      // Auth Routes (Public)
       GoRoute(
         path: AppRoutes.login,
-        builder: (context, state) => const _PlaceholderScreen(title: 'Login'),
+        builder: (context, state) => const LoginScreen(),
       ),
       GoRoute(
         path: AppRoutes.register,
-        builder: (context, state) =>
-            const _PlaceholderScreen(title: 'Register'),
+        builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.checkEmail,
+        builder: (context, state) {
+          final email = state.uri.queryParameters['email'];
+          return CheckEmailScreen(email: email);
+        },
       ),
       GoRoute(
         path: AppRoutes.forgotPassword,
@@ -102,7 +137,18 @@ GoRouter router(Ref ref) {
             const _PlaceholderScreen(title: 'Forgot Password'),
       ),
 
-      // Main App Routes
+      // Auth Routes (Semi-Authenticated)
+      GoRoute(
+        path: AppRoutes.resetPassword,
+        builder: (context, state) =>
+            const _PlaceholderScreen(title: 'Reset Password'),
+      ),
+      GoRoute(
+        path: AppRoutes.completeProfile,
+        builder: (context, state) => const CompleteProfileScreen(),
+      ),
+
+      // Main App Routes (Fully Authenticated)
       GoRoute(
         path: AppRoutes.home,
         builder: (context, state) => const _PlaceholderScreen(title: 'Home'),
@@ -125,7 +171,11 @@ GoRouter router(Ref ref) {
 /// Refresh notifier for router when auth state changes
 class _GoRouterRefreshStream extends ChangeNotifier {
   _GoRouterRefreshStream(this._ref) {
-    _ref.listen(authStateProvider, (_, _) {
+    _ref.listen(authStateProvider, (previous, next) {
+      // ignore: avoid_print
+      print(
+        '[Router] Auth state changed: ${previous?.status} -> ${next.status}',
+      );
       notifyListeners();
     });
   }

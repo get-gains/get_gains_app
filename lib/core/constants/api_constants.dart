@@ -20,10 +20,13 @@ class ApiConstants {
 
   // Auth Endpoints
   static const String login = '/auth/login';
+  static const String loginGoogle = '/auth/login/google';
   static const String register = '/auth/register';
+  static const String googleSignIn = '/auth/google';
+  static const String googleLink = '/auth/google/link';
   static const String refreshToken = '/auth/refresh';
   static const String logout = '/auth/logout';
-  static const String forgotPassword = '/auth/forgot-password';
+  static const String sendRecoveryEmail = '/auth/send-recovery-email';
   static const String resetPassword = '/auth/reset-password';
 
   // User Endpoints

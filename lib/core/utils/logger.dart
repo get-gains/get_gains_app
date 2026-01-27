@@ -53,9 +53,15 @@ class AppLogger {
     final logTag = tag ?? _tag;
     final errorInfo = error != null ? '\nError: $error' : '';
     final stackInfo = stackTrace != null ? '\nStack: $stackTrace' : '';
+    final fullMessage = '$prefix $message$errorInfo$stackInfo';
 
+    // Print to terminal/console for visibility
+    // ignore: avoid_print
+    print('[$logTag] $fullMessage');
+
+    // Also log to DevTools
     developer.log(
-      '$prefix $message$errorInfo$stackInfo',
+      fullMessage,
       name: logTag,
       level: _getLevelValue(level),
       error: error,

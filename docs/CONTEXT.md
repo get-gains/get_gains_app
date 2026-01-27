@@ -9,11 +9,13 @@
 | **Framework** | Flutter 3.x with Dart SDK ^3.9.0 |
 | **State Management** | Riverpod 3.x (riverpod_annotation + riverpod_generator) |
 | **Local Database** | Drift 2.x (SQLite) |
+| **User Preferences** | Hive 2.x (NoSQL key-value storage) |
 | **HTTP Client** | Dio 5.x |
 | **Routing** | go_router 17.x |
 | **Models** | freezed + json_serializable |
 | **Secure Storage** | flutter_secure_storage (JWT tokens) |
 | **Backend** | Express.js (separate repo) - JWT auth |
+| **FVM** | Flutter Version Management, Stable |
 
 ---
 
@@ -132,8 +134,9 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'user_model.freezed.dart';
 part 'user_model.g.dart';
 
+// NOTE: In freezed 3.x, classes MUST be declared as 'abstract'
 @freezed
-class UserModel with _$UserModel {
+abstract class UserModel with _$UserModel {
   const factory UserModel({
     required String id,
     required String email,
@@ -146,30 +149,61 @@ class UserModel with _$UserModel {
 }
 ```
 
-### 3. Making API Calls
+### 3. Server Response Format
+
+The server always returns responses in a standard format:
+
+```json
+// Success response
+{
+  "data": { "user": { "id": "123", "email": "user@example.com" } },
+  "errors": []
+}
+
+// Error response  
+{
+  "data": null,
+  "errors": [{ "field": "email", "message": "Email already exists" }]
+}
+```
+
+**The ApiClient automatically handles this format:**
+- On success: Returns the unwrapped `data` field
+- On error: Parses `errors` array and returns appropriate `AppError`
+
+### 4. Making API Calls
 
 ```dart
 // Use the ApiClient for all HTTP requests
-final result = await ref.read(apiClientProvider).get<Map<String, dynamic>>(
-  '/users/profile',
+// The response is already unwrapped from { data, errors } format
+final result = await ref.read(apiClientProvider).post<Map<String, dynamic>>(
+  '/auth/register',
+  data: {'email': 'user@example.com', 'password': '...'},
 );
 
 result.when(
-  success: (data) => UserModel.fromJson(data),
-  failure: (error) => throw error,
+  success: (data) {
+    // 'data' is already the unwrapped content (e.g., { user: {...} })
+    final user = UserModel.fromJson(data['user']);
+    print(user.email);
+  },
+  failure: (error) {
+    // Error message is parsed from { errors: [...] }
+    print(error.message);
+  },
 );
 ```
 
-### 4. Using Result Type (Error Handling)
+### 5. Using Result Type (Error Handling)
 
 ```dart
 Future<Result<User, AppError>> getUser(String id) async {
-  try {
-    final data = await api.get('/users/$id');
-    return Success(User.fromJson(data));
-  } catch (e) {
-    return Failure(NetworkError(message: e.toString()));
-  }
+  final result = await apiClient.get<Map<String, dynamic>>('/users/$id');
+  
+  return result.when(
+    success: (data) => Success(User.fromJson(data['user'])),
+    failure: (error) => Failure(error),
+  );
 }
 
 // Consuming
@@ -180,7 +214,7 @@ result.when(
 );
 ```
 
-### 5. Database Operations (Drift)
+### 6. Database Operations (Drift)
 
 ```dart
 // Add table in app_database.dart
@@ -198,7 +232,7 @@ final db = ref.read(appDatabaseProvider);
 await db.into(db.workouts).insert(WorkoutsCompanion.insert(name: 'Leg Day'));
 ```
 
-### 6. Secure Storage (JWT Tokens)
+### 7. Secure Storage (JWT Tokens)
 
 ```dart
 final storage = ref.read(secureStorageServiceProvider);
@@ -214,7 +248,33 @@ await storage.saveTokens(
 // Token refresh handled automatically on 401
 ```
 
-### 7. Navigation
+### 8. User Preferences (Hive)
+
+Hive is used for non-sensitive user data caching (faster than SharedPreferences).
+
+```dart
+// Initialization in main.dart
+final userPrefsBox = await UserPreferencesService.init();
+runApp(
+  ProviderScope(
+    overrides: [userPrefsBoxProvider.overrideWithValue(userPrefsBox)],
+    child: const GetGainsApp(),
+  ),
+);
+
+// Usage via UserPreferencesService
+final prefs = ref.read(userPreferencesServiceProvider);
+
+// Cache user for offline access
+await prefs.cacheUser(user);
+final cachedUser = await prefs.getCachedUser();
+
+// Login preferences
+await prefs.setLastLoginMethod(LoginMethod.google);
+final method = prefs.getLastLoginMethod();
+```
+
+### 9. Navigation
 
 ```dart
 // Navigate
@@ -354,6 +414,10 @@ drift: ^2.29.0
 sqlite3_flutter_libs: ^0.5.41
 path_provider: ^2.1.5
 
+# User Preferences (NoSQL)
+hive: ^2.2.3
+hive_flutter: ^1.1.0
+
 # Routing
 go_router: ^17.0.1
 
@@ -379,13 +443,15 @@ drift_dev: ^2.29.0
    - Any file with `@riverpod`, `@freezed`, or `@JsonSerializable`
    - Drift table definitions
 
-2. **Provider scope**: Use `keepAlive: true` for singleton services (database, storage, api client)
+2. **Freezed 3.x requires abstract classes**: All freezed model classes must be declared as `abstract class`. Custom factory methods should be moved to static extension methods (e.g., `MyModelX.fromApiResponse()`).
 
-3. **Token refresh**: Handled automatically by `AuthInterceptor` - don't implement manually
+3. **Provider scope**: Use `keepAlive: true` for singleton services (database, storage, api client)
 
-4. **Result type**: Use `when()` for exhaustive handling, `valueOrNull` for quick access
+4. **Token refresh**: Handled automatically by `AuthInterceptor` - don't implement manually
 
-5. **Database migrations**: Increment `schemaVersion` and add migration logic before deploying
+5. **Result type**: Use `when()` for exhaustive handling, `valueOrNull` for quick access
+
+6. **Database migrations**: Increment `schemaVersion` and add migration logic before deploying
 
 ---
 

@@ -1,5 +1,6 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../core/utils/logger.dart';
 import '../services/storage/secure_storage_service.dart';
 
 part 'auth_state_provider.g.dart';
@@ -85,18 +86,23 @@ class AuthStateNotifier extends _$AuthStateNotifier {
   AuthState build() {
     _storage = ref.watch(secureStorageServiceProvider);
 
-    // Check for existing auth on startup
-    _checkAuthStatus();
+    // Schedule auth check after build completes
+    // Using Future.microtask to ensure state is initialized first
+    // ignore: avoid_print
+    print('[AuthState] build() called, scheduling _checkAuthStatus');
+    Future.microtask(() => _checkAuthStatus());
 
-    return const AuthState();
+    return const AuthState(isLoading: true);
   }
 
   /// Check if user has valid stored credentials
   Future<void> _checkAuthStatus() async {
-    state = state.copyWith(isLoading: true);
-
+    // ignore: avoid_print
+    print('[AuthState] _checkAuthStatus started');
     try {
       final isAuthenticated = await _storage.isAuthenticated();
+      // ignore: avoid_print
+      print('[AuthState] isAuthenticated: $isAuthenticated');
 
       if (isAuthenticated) {
         final userId = await _storage.getUserId();
@@ -108,13 +114,19 @@ class AuthStateNotifier extends _$AuthStateNotifier {
           email: email,
           isLoading: false,
         );
+        // ignore: avoid_print
+        print('[AuthState] Set to authenticated');
       } else {
         state = state.copyWith(
           status: AuthStatus.unauthenticated,
           isLoading: false,
         );
+        // ignore: avoid_print
+        print('[AuthState] Set to unauthenticated');
       }
     } catch (e) {
+      // ignore: avoid_print
+      print('[AuthState] Error: $e');
       state = state.copyWith(
         status: AuthStatus.unauthenticated,
         isLoading: false,

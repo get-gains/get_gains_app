@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../core/constants/api_constants.dart';
+import '../../core/utils/api_response.dart';
 import '../../core/utils/app_error.dart';
 import '../../core/utils/logger.dart';
 import '../../core/utils/result.dart';
@@ -16,12 +17,25 @@ part 'api_client.g.dart';
 /// Centralized HTTP client using Dio with automatic token management.
 /// All API calls should go through this client.
 ///
+/// **Server Response Format:**
+/// The server always returns responses in this format:
+/// ```json
+/// {
+///   "data": { ... } | null,
+///   "errors": [{ "field": "email", "message": "Invalid" }]
+/// }
+/// ```
+///
+/// This client automatically:
+/// - Unwraps the `data` field from successful responses
+/// - Parses `errors` array and returns appropriate `AppError` on failure
+///
 /// Usage:
 /// ```dart
 /// final apiClient = ref.read(apiClientProvider);
 /// final result = await apiClient.get<Map<String, dynamic>>('/users/profile');
 /// result.when(
-///   success: (data) => print(data),
+///   success: (data) => print(data), // Already unwrapped from { data: ... }
 ///   failure: (error) => print(error.message),
 /// );
 /// ```
@@ -115,18 +129,21 @@ class ApiClient {
   // ============== HTTP Methods ==============
 
   /// GET request
+  ///
+  /// Returns the unwrapped `data` field from the server response.
+  /// If the server returns errors, returns a `Failure` with the error message.
   Future<Result<T, AppError>> get<T>(
     String path, {
     Map<String, dynamic>? queryParameters,
     Options? options,
   }) async {
     try {
-      final response = await _dio.get<T>(
+      final response = await _dio.get<Map<String, dynamic>>(
         path,
         queryParameters: queryParameters,
         options: options,
       );
-      return Success(response.data as T);
+      return _parseResponse<T>(response.data);
     } on DioException catch (e) {
       return Failure(_mapDioError(e));
     } catch (e) {
@@ -135,6 +152,9 @@ class ApiClient {
   }
 
   /// POST request
+  ///
+  /// Returns the unwrapped `data` field from the server response.
+  /// If the server returns errors, returns a `Failure` with the error message.
   Future<Result<T, AppError>> post<T>(
     String path, {
     Object? data,
@@ -142,13 +162,13 @@ class ApiClient {
     Options? options,
   }) async {
     try {
-      final response = await _dio.post<T>(
+      final response = await _dio.post<Map<String, dynamic>>(
         path,
         data: data,
         queryParameters: queryParameters,
         options: options,
       );
-      return Success(response.data as T);
+      return _parseResponse<T>(response.data);
     } on DioException catch (e) {
       return Failure(_mapDioError(e));
     } catch (e) {
@@ -157,6 +177,9 @@ class ApiClient {
   }
 
   /// PUT request
+  ///
+  /// Returns the unwrapped `data` field from the server response.
+  /// If the server returns errors, returns a `Failure` with the error message.
   Future<Result<T, AppError>> put<T>(
     String path, {
     Object? data,
@@ -164,13 +187,13 @@ class ApiClient {
     Options? options,
   }) async {
     try {
-      final response = await _dio.put<T>(
+      final response = await _dio.put<Map<String, dynamic>>(
         path,
         data: data,
         queryParameters: queryParameters,
         options: options,
       );
-      return Success(response.data as T);
+      return _parseResponse<T>(response.data);
     } on DioException catch (e) {
       return Failure(_mapDioError(e));
     } catch (e) {
@@ -179,6 +202,9 @@ class ApiClient {
   }
 
   /// PATCH request
+  ///
+  /// Returns the unwrapped `data` field from the server response.
+  /// If the server returns errors, returns a `Failure` with the error message.
   Future<Result<T, AppError>> patch<T>(
     String path, {
     Object? data,
@@ -186,13 +212,13 @@ class ApiClient {
     Options? options,
   }) async {
     try {
-      final response = await _dio.patch<T>(
+      final response = await _dio.patch<Map<String, dynamic>>(
         path,
         data: data,
         queryParameters: queryParameters,
         options: options,
       );
-      return Success(response.data as T);
+      return _parseResponse<T>(response.data);
     } on DioException catch (e) {
       return Failure(_mapDioError(e));
     } catch (e) {
@@ -201,6 +227,9 @@ class ApiClient {
   }
 
   /// DELETE request
+  ///
+  /// Returns the unwrapped `data` field from the server response.
+  /// If the server returns errors, returns a `Failure` with the error message.
   Future<Result<T, AppError>> delete<T>(
     String path, {
     Object? data,
@@ -208,13 +237,13 @@ class ApiClient {
     Options? options,
   }) async {
     try {
-      final response = await _dio.delete<T>(
+      final response = await _dio.delete<Map<String, dynamic>>(
         path,
         data: data,
         queryParameters: queryParameters,
         options: options,
       );
-      return Success(response.data as T);
+      return _parseResponse<T>(response.data);
     } on DioException catch (e) {
       return Failure(_mapDioError(e));
     } catch (e) {
@@ -223,6 +252,8 @@ class ApiClient {
   }
 
   /// Upload file with multipart form data
+  ///
+  /// Returns the unwrapped `data` field from the server response.
   Future<Result<T, AppError>> uploadFile<T>(
     String path, {
     required String filePath,
@@ -236,12 +267,12 @@ class ApiClient {
         ...?extraFields,
       });
 
-      final response = await _dio.post<T>(
+      final response = await _dio.post<Map<String, dynamic>>(
         path,
         data: formData,
         onSendProgress: onSendProgress,
       );
-      return Success(response.data as T);
+      return _parseResponse<T>(response.data);
     } on DioException catch (e) {
       return Failure(_mapDioError(e));
     } catch (e) {
@@ -249,7 +280,51 @@ class ApiClient {
     }
   }
 
-  /// Map Dio exceptions to AppError
+  // ============== Response Parsing ==============
+
+  /// Parse the standard API response format { data, errors }
+  ///
+  /// - If `errors` is empty, returns Success with unwrapped `data`
+  /// - If `errors` has items, returns Failure with combined error messages
+  Result<T, AppError> _parseResponse<T>(Map<String, dynamic>? responseData) {
+    if (responseData == null) {
+      return Failure(const NetworkError(message: 'Empty response from server'));
+    }
+
+    // Check if this follows the standard { data, errors } format
+    if (!responseData.containsKey('errors')) {
+      // Non-standard response, return as-is (for backwards compatibility)
+      AppLogger.warning(
+        'Response does not follow standard format: $responseData',
+        tag: 'ApiClient',
+      );
+      return Success(responseData as T);
+    }
+
+    final errors = responseData['errors'] as List<dynamic>?;
+
+    // Check for errors
+    if (errors != null && errors.isNotEmpty) {
+      final errorMessage = responseData.allErrorMessages;
+      final firstError = errors.first as Map<String, dynamic>;
+      final field = firstError['field'] as String?;
+
+      AppLogger.debug('API returned errors: $errorMessage', tag: 'ApiClient');
+
+      return Failure(ValidationError(message: errorMessage, field: field));
+    }
+
+    // Success - return unwrapped data
+    final data = responseData['data'];
+    if (data == null && T != Null) {
+      // data is null but caller expects non-null
+      return Success(null as T);
+    }
+
+    return Success(data as T);
+  }
+
+  // ============== Error Mapping ==============
   AppError _mapDioError(DioException e) {
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
