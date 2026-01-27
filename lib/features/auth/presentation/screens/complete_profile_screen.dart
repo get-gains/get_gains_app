@@ -89,7 +89,8 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen>
       if (next is RegisterSuccess) {
         context.go(AppRoutes.home);
       } else if (next is RegisterError) {
-        _showErrorSnackbar(next.error.message);
+        // Show error toast
+        AppToast.error(context, next.error.message);
       }
     });
 
@@ -403,27 +404,5 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen>
   void _handleCancel() {
     ref.read(registerProvider.notifier).cancelGoogleSignUp();
     context.go(AppRoutes.login);
-  }
-
-  void _showErrorSnackbar(String message) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.error_outline_rounded, color: AppColors.error, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(message, style: const TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: isDark ? AppColors.surface2Dark : AppColors.gray800,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        ),
-      ),
-    );
   }
 }

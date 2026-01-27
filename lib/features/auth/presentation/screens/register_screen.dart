@@ -106,14 +106,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
     // Listen for state changes
     ref.listen<RegisterState>(registerProvider, (previous, next) {
       if (next is RegisterSuccess) {
-        // Navigate to home on success
-        context.go(AppRoutes.home);
+        // Navigate to check email for email confirmation
+        final email = _emailController.text.trim();
+        context.go(
+          '${AppRoutes.checkEmail}?email=${Uri.encodeComponent(email)}',
+        );
       } else if (next is RegisterGooglePendingProfile) {
         // Navigate to complete profile
         context.go(AppRoutes.completeProfile);
       } else if (next is RegisterError) {
-        // Show error snackbar
-        _showErrorSnackbar(next.error.message);
+        // Show error toast
+        AppToast.error(context, next.error.message);
       }
     });
 
@@ -599,6 +602,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
     if (value.length < 8) {
       return 'Password must be at least 8 characters';
     }
+    if (!value.contains(RegExp(r'[A-Z]'))) {
+      return 'Password must contain an uppercase letter';
+    }
+    if (!value.contains(RegExp(r'[a-z]'))) {
+      return 'Password must contain a lowercase letter';
+    }
+    if (!value.contains(RegExp(r'[0-9]'))) {
+      return 'Password must contain a number';
+    }
+    if (!value.contains(RegExp(r'[!@#\$%^&*(),.?":{}|<>]'))) {
+      return 'Password must contain a special character';
+    }
     return null;
   }
 
@@ -608,6 +623,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
     }
     if (value != _passwordController.text) {
       return 'Passwords do not match';
+    }
+    // Also validate the confirm password has special character
+    if (!value.contains(RegExp(r'[!@#\$%^&*(),.?":{}|<>]'))) {
+      return 'Password must contain a special character';
     }
     return null;
   }
@@ -619,7 +638,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
     }
 
     if (!_acceptedTerms) {
-      _showErrorSnackbar('Please accept the Terms of Service');
+      AppToast.error(context, 'Please accept the Terms of Service');
       return;
     }
 
@@ -635,28 +654,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
 
   void _handleGoogleSignUp() {
     ref.read(registerProvider.notifier).signInWithGoogle();
-  }
-
-  void _showErrorSnackbar(String message) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.error_outline_rounded, color: AppColors.error, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(message, style: const TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: isDark ? AppColors.surface2Dark : AppColors.gray800,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        ),
-      ),
-    );
   }
 }
 
@@ -822,6 +819,10 @@ class _PasswordRequirements extends StatelessWidget {
         password.contains(RegExp(r'[a-z]')),
       ),
       _Requirement('Contains number', password.contains(RegExp(r'[0-9]'))),
+      _Requirement(
+        'Contains special character',
+        password.contains(RegExp(r'[!@#\$%^&*(),.?":{}|<>]')),
+      ),
     ];
 
     return Wrap(

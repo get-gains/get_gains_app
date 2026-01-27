@@ -53,7 +53,11 @@ class GoogleSignInService {
     : _googleSignIn =
           googleSignIn ??
           GoogleSignIn(
-            clientId: dotenv.env['GOOGLE_CLIENT_ID'],
+            // For Android: Uses serverClientId (Web Client ID) to get idToken
+            // The SHA-1 fingerprint must be registered in Google Cloud Console
+            // For iOS: Uses clientId from GoogleService-Info.plist
+            // For Web: Uses clientId
+            serverClientId: dotenv.env['GOOGLE_CLIENT_ID'],
             scopes: ['email', 'profile'],
           );
 

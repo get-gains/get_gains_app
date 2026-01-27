@@ -14,6 +14,7 @@ class AppRoutes {
   static const String splash = '/';
   static const String login = '/login';
   static const String register = '/register';
+  static const String checkEmail = '/check-email';
   static const String completeProfile = '/complete-profile';
   static const String forgotPassword = '/forgot-password';
   static const String resetPassword = '/reset-password';
@@ -65,6 +66,7 @@ GoRouter router(Ref ref) {
       final isPublicAuthRoute =
           location == AppRoutes.login ||
           location == AppRoutes.register ||
+          location == AppRoutes.checkEmail ||
           location == AppRoutes.forgotPassword;
 
       // Semi-authenticated routes (require temp tokens but not full profile)
@@ -121,6 +123,13 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: AppRoutes.register,
         builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.checkEmail,
+        builder: (context, state) {
+          final email = state.uri.queryParameters['email'];
+          return CheckEmailScreen(email: email);
+        },
       ),
       GoRoute(
         path: AppRoutes.forgotPassword,
