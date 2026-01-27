@@ -36,7 +36,7 @@ class GetGainsApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
 
       // Theme configuration
-      theme: AppTheme.light,
+      theme: AppTheme.dark,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.system,
 
