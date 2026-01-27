@@ -25,7 +25,17 @@ class RegisterLoading extends RegisterState {
   const RegisterLoading();
 }
 
-/// Success state - registration completed
+/// Success state - email verification required
+///
+/// User registered but needs to verify email before logging in.
+class RegisterEmailVerificationPending extends RegisterState {
+  const RegisterEmailVerificationPending({required this.email});
+  final String email;
+}
+
+/// Success state - registration fully completed (with tokens)
+///
+/// Used for flows that don't require email verification (e.g., Google OAuth).
 class RegisterSuccess extends RegisterState {
   const RegisterSuccess(this.response);
   final AuthResponse response;
@@ -111,7 +121,7 @@ class RegisterNotifier extends _$RegisterNotifier {
   /// Register with email and password
   ///
   /// Creates a new user account with email/password authentication.
-  /// On success, updates app-wide auth state.
+  /// On success, navigates to check email screen for verification.
   Future<void> registerWithEmailPassword({
     required String email,
     required String password,
@@ -129,14 +139,9 @@ class RegisterNotifier extends _$RegisterNotifier {
 
     result.when(
       success: (response) {
-        // Update app-wide auth state
-        _authStateNotifier.setAuthenticated(
-          accessToken: response.accessToken,
-          refreshToken: response.refreshToken,
-          userId: response.user.id,
-          email: response.user.email,
-        );
-        state = RegisterSuccess(response);
+        // Registration successful - email verification required
+        // User will need to verify email before logging in
+        state = RegisterEmailVerificationPending(email: response.user.email);
       },
       failure: (error) {
         state = RegisterError(error);

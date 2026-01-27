@@ -59,4 +59,4 @@ final class UserPreferencesServiceProvider
 }
 
 String _$userPreferencesServiceHash() =>
-    r'8959779a89160e9dc3dcb0ac2cc943aeda33357c';
+    r'0e8fbf560f47a42225d849092c9054ebcc6e27f5';

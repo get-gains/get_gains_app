@@ -105,12 +105,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
 
     // Listen for state changes
     ref.listen<RegisterState>(registerProvider, (previous, next) {
-      if (next is RegisterSuccess) {
+      if (next is RegisterEmailVerificationPending) {
         // Navigate to check email for email confirmation
-        final email = _emailController.text.trim();
         context.go(
-          '${AppRoutes.checkEmail}?email=${Uri.encodeComponent(email)}',
+          '${AppRoutes.checkEmail}?email=${Uri.encodeComponent(next.email)}',
         );
+      } else if (next is RegisterSuccess) {
+        // Direct success (e.g., Google OAuth with auto-verified email)
+        context.go(AppRoutes.home);
       } else if (next is RegisterGooglePendingProfile) {
         // Navigate to complete profile
         context.go(AppRoutes.completeProfile);

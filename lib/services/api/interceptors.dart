@@ -99,21 +99,42 @@ class AuthInterceptor extends Interceptor {
 /// Logging Interceptor
 ///
 /// Logs all HTTP requests and responses for debugging.
+/// Includes full request/response bodies for easier debugging.
 /// Only active in debug mode.
 class LoggingInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    AppLogger.debug('→ ${options.method} ${options.uri}', tag: 'HTTP');
-    if (options.data != null) {
-      AppLogger.debug('   Body: ${options.data}', tag: 'HTTP');
+    AppLogger.debug(
+      '┌─────────────────────────────────────────────────────────────────',
+      tag: 'HTTP',
+    );
+    AppLogger.debug('│ → ${options.method} ${options.uri}', tag: 'HTTP');
+    if (options.headers.isNotEmpty) {
+      AppLogger.debug('│ Headers: ${options.headers}', tag: 'HTTP');
     }
+    if (options.data != null) {
+      AppLogger.debug('│ Body: ${options.data}', tag: 'HTTP');
+    }
+    AppLogger.debug(
+      '└─────────────────────────────────────────────────────────────────',
+      tag: 'HTTP',
+    );
     handler.next(options);
   }
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
     AppLogger.debug(
-      '← ${response.statusCode} ${response.requestOptions.uri}',
+      '┌─────────────────────────────────────────────────────────────────',
+      tag: 'HTTP',
+    );
+    AppLogger.debug(
+      '│ ← ${response.statusCode} ${response.requestOptions.uri}',
+      tag: 'HTTP',
+    );
+    AppLogger.debug('│ Response: ${response.data}', tag: 'HTTP');
+    AppLogger.debug(
+      '└─────────────────────────────────────────────────────────────────',
       tag: 'HTTP',
     );
     handler.next(response);
@@ -122,9 +143,20 @@ class LoggingInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
     AppLogger.error(
-      '✕ ${err.response?.statusCode ?? 'NO STATUS'} ${err.requestOptions.uri}',
+      '┌─────────────────────────────────────────────────────────────────',
       tag: 'HTTP',
-      error: err.message,
+    );
+    AppLogger.error(
+      '│ ✕ ${err.response?.statusCode ?? 'NO STATUS'} ${err.requestOptions.uri}',
+      tag: 'HTTP',
+    );
+    AppLogger.error('│ Error: ${err.message}', tag: 'HTTP');
+    if (err.response?.data != null) {
+      AppLogger.error('│ Response: ${err.response?.data}', tag: 'HTTP');
+    }
+    AppLogger.error(
+      '└─────────────────────────────────────────────────────────────────',
+      tag: 'HTTP',
     );
     handler.next(err);
   }
@@ -133,6 +165,7 @@ class LoggingInterceptor extends Interceptor {
 /// Error Interceptor
 ///
 /// Transforms Dio errors into more consistent error responses.
+/// Parses the standard API error format: { data: null, errors: [{ field?, message }] }
 class ErrorInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
@@ -167,12 +200,33 @@ class ErrorInterceptor extends Interceptor {
     }
   }
 
+  /// Parse server error from the standard API response format
+  ///
+  /// Expected format: { data: null, errors: [{ field?, message }] }
   String _parseServerError(Response? response) {
     if (response == null) return 'Server error occurred.';
 
     try {
       final data = response.data;
       if (data is Map) {
+        // Check for standard API error format: { errors: [...] }
+        final errors = data['errors'] as List<dynamic>?;
+        if (errors != null && errors.isNotEmpty) {
+          // Combine all error messages
+          final messages = errors
+              .map((e) {
+                if (e is Map) {
+                  final field = e['field'] as String?;
+                  final message = e['message'] as String? ?? 'Unknown error';
+                  return field != null ? '$field: $message' : message;
+                }
+                return e.toString();
+              })
+              .join(', ');
+          return messages;
+        }
+
+        // Fallback to legacy formats
         return data['message'] ??
             data['error'] ??
             'Server error: ${response.statusCode}';

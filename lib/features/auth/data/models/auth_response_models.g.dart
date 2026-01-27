@@ -20,6 +20,14 @@ Map<String, dynamic> _$AuthResponseToJson(_AuthResponse instance) =>
       'user': instance.user,
     };
 
+_RegisterResponse _$RegisterResponseFromJson(Map<String, dynamic> json) =>
+    _RegisterResponse(
+      user: UserModel.fromJson(json['user'] as Map<String, dynamic>),
+    );
+
+Map<String, dynamic> _$RegisterResponseToJson(_RegisterResponse instance) =>
+    <String, dynamic>{'user': instance.user};
+
 _GoogleSignInResponse _$GoogleSignInResponseFromJson(
   Map<String, dynamic> json,
 ) => _GoogleSignInResponse(
@@ -48,24 +56,4 @@ Map<String, dynamic> _$TokenRefreshResponseToJson(
 ) => <String, dynamic>{
   'accessToken': instance.accessToken,
   'refreshToken': instance.refreshToken,
-};
-
-_ApiErrorResponse _$ApiErrorResponseFromJson(Map<String, dynamic> json) =>
-    _ApiErrorResponse(
-      errors: (json['errors'] as List<dynamic>)
-          .map((e) => ApiError.fromJson(e as Map<String, dynamic>))
-          .toList(),
-    );
-
-Map<String, dynamic> _$ApiErrorResponseToJson(_ApiErrorResponse instance) =>
-    <String, dynamic>{'errors': instance.errors};
-
-_ApiError _$ApiErrorFromJson(Map<String, dynamic> json) => _ApiError(
-  message: json['message'] as String,
-  field: json['field'] as String?,
-);
-
-Map<String, dynamic> _$ApiErrorToJson(_ApiError instance) => <String, dynamic>{
-  'message': instance.message,
-  'field': instance.field,
 };

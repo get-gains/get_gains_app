@@ -7,7 +7,7 @@ part 'auth_response_models.g.dart';
 
 /// Auth Response Model (Full User)
 ///
-/// Returned from register and login endpoints.
+/// Returned from login endpoints.
 /// Contains JWT tokens and complete user data.
 @freezed
 abstract class AuthResponse with _$AuthResponse {
@@ -23,12 +23,46 @@ abstract class AuthResponse with _$AuthResponse {
 
 /// Extension for AuthResponse custom factories
 extension AuthResponseX on AuthResponse {
-  /// Create from API response which wraps data in 'data' field
+  /// Create from raw API response data
+  ///
+  /// Note: ApiClient now automatically unwraps { data, errors } format,
+  /// so you typically just need `fromJson` on the already-unwrapped data.
+  /// This method is kept for backwards compatibility.
+  @Deprecated('Use AuthResponse.fromJson on unwrapped data instead')
   static AuthResponse fromApiResponse(Map<String, dynamic> json) {
     final data = json['data'] as Map<String, dynamic>;
     return AuthResponse(
       accessToken: data['accessToken'] as String,
       refreshToken: data['refreshToken'] as String,
+      user: UserModel.fromJson(data['user'] as Map<String, dynamic>),
+    );
+  }
+}
+
+/// Register Response Model
+///
+/// Returned from register endpoint.
+/// Does NOT contain tokens because email verification is required.
+/// User must verify email before logging in.
+@freezed
+abstract class RegisterResponse with _$RegisterResponse {
+  const factory RegisterResponse({required UserModel user}) = _RegisterResponse;
+
+  factory RegisterResponse.fromJson(Map<String, dynamic> json) =>
+      _$RegisterResponseFromJson(json);
+}
+
+/// Extension for RegisterResponse custom factories
+extension RegisterResponseX on RegisterResponse {
+  /// Create from raw API response data
+  ///
+  /// Note: ApiClient now automatically unwraps { data, errors } format,
+  /// so you typically just need `fromJson` on the already-unwrapped data.
+  /// This method is kept for backwards compatibility.
+  @Deprecated('Use RegisterResponse.fromJson on unwrapped data instead')
+  static RegisterResponse fromApiResponse(Map<String, dynamic> json) {
+    final data = json['data'] as Map<String, dynamic>;
+    return RegisterResponse(
       user: UserModel.fromJson(data['user'] as Map<String, dynamic>),
     );
   }
@@ -53,7 +87,12 @@ abstract class GoogleSignInResponse with _$GoogleSignInResponse {
 
 /// Extension for GoogleSignInResponse custom factories
 extension GoogleSignInResponseX on GoogleSignInResponse {
-  /// Create from API response which wraps data in 'data' field
+  /// Create from raw API response data
+  ///
+  /// Note: ApiClient now automatically unwraps { data, errors } format,
+  /// so you typically just need `fromJson` on the already-unwrapped data.
+  /// This method is kept for backwards compatibility.
+  @Deprecated('Use GoogleSignInResponse.fromJson on unwrapped data instead')
   static GoogleSignInResponse fromApiResponse(Map<String, dynamic> json) {
     final data = json['data'] as Map<String, dynamic>;
     return GoogleSignInResponse(
@@ -80,7 +119,12 @@ abstract class TokenRefreshResponse with _$TokenRefreshResponse {
 
 /// Extension for TokenRefreshResponse custom factories
 extension TokenRefreshResponseX on TokenRefreshResponse {
-  /// Create from API response which wraps data in 'data' field
+  /// Create from raw API response data
+  ///
+  /// Note: ApiClient now automatically unwraps { data, errors } format,
+  /// so you typically just need `fromJson` on the already-unwrapped data.
+  /// This method is kept for backwards compatibility.
+  @Deprecated('Use TokenRefreshResponse.fromJson on unwrapped data instead')
   static TokenRefreshResponse fromApiResponse(Map<String, dynamic> json) {
     final data = json['data'] as Map<String, dynamic>;
     return TokenRefreshResponse(
@@ -90,24 +134,6 @@ extension TokenRefreshResponseX on TokenRefreshResponse {
   }
 }
 
-/// API Error Response Model
-///
-/// Represents error responses from the API.
-/// All API errors follow this structure: { data: null, errors: [...] }
-@freezed
-abstract class ApiErrorResponse with _$ApiErrorResponse {
-  const factory ApiErrorResponse({required List<ApiError> errors}) =
-      _ApiErrorResponse;
-
-  factory ApiErrorResponse.fromJson(Map<String, dynamic> json) =>
-      _$ApiErrorResponseFromJson(json);
-}
-
-/// Individual API Error
-@freezed
-abstract class ApiError with _$ApiError {
-  const factory ApiError({required String message, String? field}) = _ApiError;
-
-  factory ApiError.fromJson(Map<String, dynamic> json) =>
-      _$ApiErrorFromJson(json);
-}
+// Note: ApiError and ApiErrorResponse are now defined in
+// lib/core/utils/api_response.dart for app-wide use.
+// Import from there: import '../../../../core/utils/api_response.dart';
