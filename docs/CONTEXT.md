@@ -9,6 +9,7 @@
 | **Framework** | Flutter 3.x with Dart SDK ^3.9.0 |
 | **State Management** | Riverpod 3.x (riverpod_annotation + riverpod_generator) |
 | **Local Database** | Drift 2.x (SQLite) |
+| **User Preferences** | Hive 2.x (NoSQL key-value storage) |
 | **HTTP Client** | Dio 5.x |
 | **Routing** | go_router 17.x |
 | **Models** | freezed + json_serializable |
@@ -247,7 +248,33 @@ await storage.saveTokens(
 // Token refresh handled automatically on 401
 ```
 
-### 8. Navigation
+### 8. User Preferences (Hive)
+
+Hive is used for non-sensitive user data caching (faster than SharedPreferences).
+
+```dart
+// Initialization in main.dart
+final userPrefsBox = await UserPreferencesService.init();
+runApp(
+  ProviderScope(
+    overrides: [userPrefsBoxProvider.overrideWithValue(userPrefsBox)],
+    child: const GetGainsApp(),
+  ),
+);
+
+// Usage via UserPreferencesService
+final prefs = ref.read(userPreferencesServiceProvider);
+
+// Cache user for offline access
+await prefs.cacheUser(user);
+final cachedUser = await prefs.getCachedUser();
+
+// Login preferences
+await prefs.setLastLoginMethod(LoginMethod.google);
+final method = prefs.getLastLoginMethod();
+```
+
+### 9. Navigation
 
 ```dart
 // Navigate
@@ -386,6 +413,10 @@ dio: ^5.9.0
 drift: ^2.29.0
 sqlite3_flutter_libs: ^0.5.41
 path_provider: ^2.1.5
+
+# User Preferences (NoSQL)
+hive: ^2.2.3
+hive_flutter: ^1.1.0
 
 # Routing
 go_router: ^17.0.1

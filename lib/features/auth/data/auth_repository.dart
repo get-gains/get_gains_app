@@ -18,11 +18,11 @@ part 'auth_repository.g.dart';
 /// Coordinates between:
 /// - API client (server communication)
 /// - Secure storage (JWT tokens)
-/// - User preferences (cached user data)
+/// - User preferences (cached user data via Hive)
 /// - Google Sign-In service
 ///
 /// Implements offline-compatible patterns:
-/// - Caches user data in SharedPreferences
+/// - Caches user data in Hive
 /// - Stores tokens securely
 /// - Manages pending Google profile completion
 ///

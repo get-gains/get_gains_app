@@ -23,7 +23,7 @@ The Registration feature provides user account creation for the Get Gains applic
 - Email/password registration flow
 - Google OAuth sign-up flow (2-step process)
 - JWT token management (secure storage)
-- User data caching (SharedPreferences)
+- User data caching (Hive)
 - Route guard configuration
 - Password recovery email sending
 
@@ -38,7 +38,8 @@ The Registration feature provides user account creation for the Get Gains applic
 | Package | Version | Purpose |
 |---------|---------|---------|
 | `google_sign_in` | ^6.2.2 | Google OAuth client |
-| `shared_preferences` | ^2.5.3 | User data caching |
+| `hive` | ^2.2.3 | User data caching (NoSQL) |
+| `hive_flutter` | ^1.1.0 | Flutter Hive integration |
 | `flutter_secure_storage` | ^10.0.0 | JWT token storage |
 | `dio` | ^5.9.0 | HTTP client |
 | `riverpod_annotation` | ^3.0.3 | State management |
@@ -86,7 +87,7 @@ The Registration feature provides user account creation for the Get Gains applic
 └─────────┼──────────────────────────────────────────┼────────────────────┘
           ▼                                          ▼
 ┌─────────────────┐                        ┌─────────────────┐
-│  Express Server │                        │ SharedPrefs     │
+│  Express Server │                        │ Hive            │
 │  (Backend API)  │                        │ (Local Storage) │
 └─────────────────┘                        └─────────────────┘
 ```
@@ -98,7 +99,7 @@ The Registration feature provides user account creation for the Get Gains applic
 | `RegisterNotifier` | AuthRepository, AuthStateNotifier | Presentation screens |
 | `AuthRepository` | ApiClient, SecureStorage, UserPrefs, GoogleSignIn | RegisterNotifier |
 | `GoogleSignInService` | google_sign_in package | AuthRepository |
-| `UserPreferencesService` | shared_preferences package | AuthRepository |
+| `UserPreferencesService` | hive package | AuthRepository |
 | `SecureStorageService` | flutter_secure_storage | AuthRepository, AuthInterceptor |
 
 ---
@@ -461,9 +462,9 @@ redirect: (context, state) {
 | Data | Storage | Purpose |
 |------|---------|---------|
 | JWT Tokens | SecureStorage | API authentication |
-| User Profile | SharedPreferences | Display offline |
-| Pending Google Profile | SharedPreferences | Resume incomplete sign-up |
-| Login Method | SharedPreferences | Remember user preference |
+| User Profile | Hive | Display offline |
+| Pending Google Profile | Hive | Resume incomplete sign-up |
+| Login Method | Hive | Remember user preference |
 
 ### UserPreferencesService Methods
 

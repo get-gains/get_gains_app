@@ -2,17 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 import 'core/core.dart';
+import 'features/auth/services/user_preferences_service.dart';
 import 'providers/providers.dart';
 import 'widgets/widgets.dart';
-
-/// Provider for SharedPreferences instance
-/// Must be overridden in main() with the actual instance
-final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
-  throw UnimplementedError('SharedPreferences must be initialized in main()');
-});
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,14 +21,14 @@ Future<void> main() async {
   // Load environment variables
   await dotenv.load(fileName: '.env');
 
-  // Initialize SharedPreferences early to avoid channel errors
-  final sharedPrefs = await SharedPreferences.getInstance();
+  // Initialize Hive for user preferences
+  final userPrefsBox = await UserPreferencesService.init();
 
   AppLogger.info('Starting Get Gains App', tag: 'Main');
 
   runApp(
     ProviderScope(
-      overrides: [sharedPreferencesProvider.overrideWithValue(sharedPrefs)],
+      overrides: [userPrefsBoxProvider.overrideWithValue(userPrefsBox)],
       child: const GetGainsApp(),
     ),
   );
