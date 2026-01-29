@@ -53,4 +53,7 @@ app.*.map.json
 
 # FVM Version Cache
 .fvm/
-/android
+
+# Unity export: large generated native libs + assets — add via export from Unity (see docs/unity/SETUP.md)
+/android/unityLibrary
+android/google-services.json
