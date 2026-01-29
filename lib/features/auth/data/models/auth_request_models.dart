@@ -50,6 +50,21 @@ abstract class CreateUserFromGoogleRequest with _$CreateUserFromGoogleRequest {
       _$CreateUserFromGoogleRequestFromJson(json);
 }
 
+/// Login Request Model (Email/Password)
+///
+/// Used to login an existing user with email and password.
+/// Matches server's LoginSchema validation.
+@freezed
+abstract class LoginRequest with _$LoginRequest {
+  const factory LoginRequest({
+    required String email,
+    required String password,
+  }) = _LoginRequest;
+
+  factory LoginRequest.fromJson(Map<String, dynamic> json) =>
+      _$LoginRequestFromJson(json);
+}
+
 /// Send Recovery Email Request Model
 ///
 /// Used to request password recovery email.
