@@ -353,6 +353,160 @@ class AuthRepository {
     return await _userPreferences.getPendingGoogleProfile();
   }
 
+  // ============== Email/Password Login ==============
+
+  /// Login with email and password
+  ///
+  /// Authenticates an existing user with:
+  /// - Email/password via Supabase
+  /// - Returns JWT tokens and full user data
+  ///
+  /// On success:
+  /// - Stores tokens securely
+  /// - Caches user data
+  /// - Updates auth state
+  ///
+  /// Server endpoint: POST /auth/login
+  Future<Result<AuthResponse, AppError>> loginWithEmailPassword({
+    required String email,
+    required String password,
+  }) async {
+    AppLogger.debug('Logging in user with email: $email', tag: 'AuthRepo');
+
+    final request = LoginRequest(email: email, password: password);
+
+    final result = await _apiClient.post<Map<String, dynamic>>(
+      ApiConstants.login,
+      data: request.toJson(),
+    );
+
+    return result.when(
+      success: (data) async {
+        try {
+          final response = AuthResponse(
+            accessToken: data['accessToken'] as String,
+            refreshToken: data['refreshToken'] as String,
+            user: UserModel.fromJson(data['user'] as Map<String, dynamic>),
+          );
+
+          // Store tokens securely
+          await _secureStorage.saveTokens(
+            accessToken: response.accessToken,
+            refreshToken: response.refreshToken,
+          );
+
+          // Store user info
+          await _secureStorage.saveUserId(response.user.id);
+          await _secureStorage.saveUserEmail(response.user.email);
+
+          // Cache user for offline access
+          await _userPreferences.cacheUser(response.user);
+          await _userPreferences.setLastLoginMethod(LoginMethod.emailPassword);
+          await _userPreferences.setIsGoogleUser(false);
+
+          AppLogger.info('User logged in successfully', tag: 'AuthRepo');
+          return Success(response);
+        } catch (e) {
+          AppLogger.error(
+            'Failed to process login response',
+            tag: 'AuthRepo',
+            error: e,
+          );
+          return Failure(
+            UnknownError(message: 'Failed to process login', originalError: e),
+          );
+        }
+      },
+      failure: (error) {
+        AppLogger.error('Login failed', tag: 'AuthRepo', error: error);
+        return Failure(_mapToAuthError(error));
+      },
+    );
+  }
+
+  // ============== Google Login (Existing User) ==============
+
+  /// Login with Google (for existing users)
+  ///
+  /// Authenticates an existing Google user:
+  /// 1. Opens Google sign-in flow
+  /// 2. Gets Google ID token
+  /// 3. Sends to server for authentication
+  /// 4. Returns full user data (user must already exist)
+  ///
+  /// Server endpoint: POST /auth/login/google
+  Future<Result<AuthResponse, AppError>> loginWithGoogle() async {
+    AppLogger.debug('Starting Google login flow', tag: 'AuthRepo');
+
+    // Step 1: Get Google ID token
+    final googleResult = await _googleSignInService.signIn();
+
+    return googleResult.when(
+      success: (googleData) async {
+        // Step 2: Send ID token to server
+        final request = GoogleSignInRequest(idToken: googleData.idToken);
+
+        final result = await _apiClient.post<Map<String, dynamic>>(
+          ApiConstants.loginGoogle,
+          data: request.toJson(),
+        );
+
+        return result.when(
+          success: (data) async {
+            try {
+              final response = AuthResponse(
+                accessToken: data['accessToken'] as String,
+                refreshToken: data['refreshToken'] as String,
+                user: UserModel.fromJson(data['user'] as Map<String, dynamic>),
+              );
+
+              // Store tokens securely
+              await _secureStorage.saveTokens(
+                accessToken: response.accessToken,
+                refreshToken: response.refreshToken,
+              );
+
+              // Store user info
+              await _secureStorage.saveUserId(response.user.id);
+              await _secureStorage.saveUserEmail(response.user.email);
+
+              // Cache user for offline access
+              await _userPreferences.cacheUser(response.user);
+              await _userPreferences.setLastLoginMethod(LoginMethod.google);
+              await _userPreferences.setIsGoogleUser(true);
+
+              AppLogger.info('Google login successful', tag: 'AuthRepo');
+              return Success(response);
+            } catch (e) {
+              AppLogger.error(
+                'Failed to process Google login response',
+                tag: 'AuthRepo',
+                error: e,
+              );
+              return Failure(
+                UnknownError(
+                  message: 'Failed to process Google login',
+                  originalError: e,
+                ),
+              );
+            }
+          },
+          failure: (error) {
+            AppLogger.error(
+              'Google login API call failed',
+              tag: 'AuthRepo',
+              error: error,
+            );
+            return Failure(_mapToAuthError(error));
+          },
+        );
+      },
+      failure: (error) {
+        return Failure(error);
+      },
+    );
+  }
+
   // ============== Password Recovery ==============
 
   /// Send password recovery email
