@@ -3,8 +3,8 @@ import 'package:flutter_embed_unity/flutter_embed_unity.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_theme.dart';
 import '../../../../providers/router_provider.dart';
+import '../../data/unity_message_contract.dart';
 
 /// Unity Test Screen
 ///
@@ -19,6 +19,8 @@ class UnityTestScreen extends StatefulWidget {
 
 class _UnityTestScreenState extends State<UnityTestScreen> {
   final List<String> _messagesFromUnity = [];
+  final TextEditingController _sendController = TextEditingController();
+  final FocusNode _sendFocusNode = FocusNode();
   bool _isUnityLoaded = false;
 
   @override
@@ -51,17 +53,7 @@ class _UnityTestScreenState extends State<UnityTestScreen> {
                 ),
               ),
               child: _isUnityLoaded
-                  ? EmbedUnity(
-                      onMessageFromUnity: (String message) {
-                        setState(() {
-                          _messagesFromUnity.insert(0, message);
-                          // Keep only last 10 messages
-                          if (_messagesFromUnity.length > 10) {
-                            _messagesFromUnity.removeLast();
-                          }
-                        });
-                      },
-                    )
+                  ? EmbedUnity(onMessageFromUnity: _onMessageFromUnity)
                   : Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -106,43 +98,55 @@ class _UnityTestScreenState extends State<UnityTestScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Send custom message to Unity
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _sendController,
+                        focusNode: _sendFocusNode,
+                        enabled: _isUnityLoaded,
+                        decoration: InputDecoration(
+                          hintText: 'Type message for Unity...',
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                        ),
+                        onSubmitted: (_) => _sendCustomMessage(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filled(
+                      onPressed: _isUnityLoaded ? _sendCustomMessage : null,
+                      icon: const Icon(Icons.send),
+                      tooltip: 'Send to Unity',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
                 // Test Buttons
                 Row(
                   children: [
                     Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _isUnityLoaded
-                            ? () {
-                                sendToUnity(
-                                  'FlutterLogo', // Game object name
-                                  'SetRotationSpeed', // Function name
-                                  '50', // Message
-                                );
-                              }
-                            : null,
-                        icon: const Icon(Icons.send),
-                        label: const Text('Send Test Message'),
+                      child: FilledButton.tonalIcon(
+                        onPressed: _isUnityLoaded ? _sendRotationSpeed : null,
+                        icon: const Icon(Icons.rotate_right, size: 20),
+                        label: const Text('Set rotation 50'),
                       ),
                     ),
                     const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: _isUnityLoaded
-                          ? () {
-                              pauseUnity();
-                            }
-                          : null,
+                    IconButton.outlined(
+                      onPressed: _isUnityLoaded ? () => pauseUnity() : null,
                       icon: const Icon(Icons.pause),
-                      label: const Text('Pause'),
+                      tooltip: 'Pause Unity',
                     ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: _isUnityLoaded
-                          ? () {
-                              resumeUnity();
-                            }
-                          : null,
+                    IconButton.outlined(
+                      onPressed: _isUnityLoaded ? () => resumeUnity() : null,
                       icon: const Icon(Icons.play_arrow),
-                      label: const Text('Resume'),
+                      tooltip: 'Resume Unity',
                     ),
                   ],
                 ),
@@ -216,15 +220,56 @@ class _UnityTestScreenState extends State<UnityTestScreen> {
   }
 
   @override
+  void dispose() {
+    _sendController.dispose();
+    _sendFocusNode.dispose();
+    super.dispose();
+  }
+
+  @override
   void initState() {
     super.initState();
-    // Set Unity as loaded after a delay (in real app, wait for scene_loaded message)
+    // Fallback: enable UI after 3s if Unity never sends scene_loaded
     Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() {
-          _isUnityLoaded = true;
-        });
+      if (mounted && !_isUnityLoaded) {
+        setState(() => _isUnityLoaded = true);
       }
     });
+  }
+
+  void _onMessageFromUnity(String message) {
+    if (!mounted) return;
+    setState(() {
+      if (message == UnityMessageContract.unityEventSceneLoaded) {
+        _isUnityLoaded = true;
+        _messagesFromUnity.insert(0, '[Scene ready]');
+      } else {
+        _messagesFromUnity.insert(0, message);
+      }
+      if (_messagesFromUnity.length > 20) {
+        _messagesFromUnity.removeLast();
+      }
+    });
+  }
+
+  void _sendCustomMessage() {
+    final text = _sendController.text.trim();
+    if (text.isEmpty || !_isUnityLoaded) return;
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodOnMessageFromFlutter,
+      text,
+    );
+    _sendController.clear();
+    _sendFocusNode.requestFocus();
+  }
+
+  void _sendRotationSpeed() {
+    if (!_isUnityLoaded) return;
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodSetRotationSpeed,
+      '50',
+    );
   }
 }
