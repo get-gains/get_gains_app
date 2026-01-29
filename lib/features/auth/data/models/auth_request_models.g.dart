@@ -47,6 +47,15 @@ Map<String, dynamic> _$CreateUserFromGoogleRequestToJson(
   'supabaseId': instance.supabaseId,
 };
 
+_LoginRequest _$LoginRequestFromJson(Map<String, dynamic> json) =>
+    _LoginRequest(
+      email: json['email'] as String,
+      password: json['password'] as String,
+    );
+
+Map<String, dynamic> _$LoginRequestToJson(_LoginRequest instance) =>
+    <String, dynamic>{'email': instance.email, 'password': instance.password};
+
 _SendRecoveryEmailRequest _$SendRecoveryEmailRequestFromJson(
   Map<String, dynamic> json,
 ) => _SendRecoveryEmailRequest(email: json['email'] as String);
