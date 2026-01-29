@@ -36,6 +36,9 @@ class ApiConstants {
   // Workout Endpoints
   static const String workouts = '/workouts';
   static const String exercises = '/exercises';
+  static const String routines = '/routines';
+  static const String workoutSessions = '/workout-sessions';
+  static const String performedSets = '/performed-sets';
 
   // Sync Endpoints
   static const String sync = '/sync';
