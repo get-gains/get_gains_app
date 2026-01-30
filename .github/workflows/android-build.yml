@@ -1,0 +1,126 @@
+# GitHub Actions workflow for Android build verification
+# Triggers on PRs to dev or main branches
+
+name: Android Build Verification
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - main
+
+env:
+  FLUTTER_VERSION: stable
+
+jobs:
+  # build-android:
+  #   name: Build Android APK
+  #   runs-on: ubuntu-latest
+
+  #   steps:
+  #     - name: Free up disk space
+  #       run: |
+  #         sudo rm -rf /usr/share/dotnet
+  #         sudo rm -rf /opt/ghc
+  #         sudo rm -rf "/usr/local/share/boost"
+  #         sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+  #         sudo docker image prune --all --force
+  #         df -h
+
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v3
+
+  #     - name: Cache Docker layers
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: /tmp/.buildx-cache
+  #         key: ${{ runner.os }}-buildx-${{ github.sha }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-buildx-
+
+  #     - name: Build Docker image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: .
+  #         file: ./Dockerfile
+  #         push: false
+  #         load: true
+  #         tags: get-gains-app:build
+  #         cache-from: type=local,src=/tmp/.buildx-cache
+  #         cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+  #     - name: Run Android build in Docker
+  #       run: |
+  #         docker run --rm get-gains-app:build fvm flutter build apk --debug
+
+  #     - name: Move cache
+  #       run: |
+  #         rm -rf /tmp/.buildx-cache
+  #         mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+  # Alternative job without Docker (faster for simple builds)
+  build-android-native:
+    name: Build Android APK (Native)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Flutter (to get Dart for FVM)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install FVM
+        run: |
+          dart pub global activate fvm
+          echo "$HOME/.pub-cache/bin" >> $GITHUB_PATH
+
+      - name: Install Flutter via FVM
+        run: |
+          fvm install stable
+          fvm use stable --force
+
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            .dart_tool
+          key: ${{ runner.os }}-flutter-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-
+
+      - name: Create .env file
+        run: touch .env
+
+      - name: Get dependencies
+        run: fvm flutter pub get
+
+      - name: Run code generation
+        run: fvm flutter pub run build_runner build --delete-conflicting-outputs
+
+      - name: Analyze code
+        run: fvm flutter analyze --no-fatal-infos
+        continue-on-error: true
+
+      - name: Build Android APK
+        run: fvm flutter build apk --debug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 7
+

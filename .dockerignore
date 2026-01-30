@@ -1,0 +1,45 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Build outputs
+build/
+.dart_tool/
+.packages
+
+# Generated files (will be regenerated in Docker)
+*.g.dart
+*.freezed.dart
+
+# Test and documentation
+test/
+docs/
+*.md
+!README.md
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# CI/CD
+.github/
+
+# iOS (not needed for Android builds)
+ios/
+
+# Web (not needed for Android builds)
+web/
+
+# Windows (not needed for Android builds)
+windows/
+
+# Linux (not needed for Android builds)
+linux/
+
+# macOS (not needed for Android builds)
+macos/
