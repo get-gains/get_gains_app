@@ -2,9 +2,11 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        // Unity library flatDir repository
-        flatDir {
-            dirs(file("${project(":unityLibrary").projectDir}/libs"))
+        // Unity library flatDir repository (only when unityLibrary is present)
+        findProject(":unityLibrary")?.let { unityLib ->
+            flatDir {
+                dirs(file("${unityLib.projectDir}/libs"))
+            }
         }
     }
 }

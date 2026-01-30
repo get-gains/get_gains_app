@@ -24,4 +24,7 @@ plugins {
 }
 
 include(":app")
-include(":unityLibrary")
+// Unity export is optional (not in repo); include only when present so CI/fresh clones can build.
+if (file("unityLibrary/build.gradle").exists() || file("unityLibrary/build.gradle.kts").exists()) {
+    include(":unityLibrary")
+}

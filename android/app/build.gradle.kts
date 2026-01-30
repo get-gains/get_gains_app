@@ -53,16 +53,20 @@ android {
 }
 
 dependencies {
-    // Unity library dependency
-    implementation(project(":unityLibrary"))
+    // Unity library dependency (optional; only when unityLibrary is exported to android/unityLibrary)
+    if (findProject(":unityLibrary") != null) {
+        implementation(project(":unityLibrary"))
+    }
 }
 
-// Ensure Unity library's native libs are built and merged before packaging
+// Ensure Unity library's native libs are built and merged before packaging (only when present)
 afterEvaluate {
-    tasks.findByName("mergeDebugJniLibFolders")?.dependsOn(":unityLibrary:buildIl2Cpp")
-    tasks.findByName("mergeDebugJniLibFolders")?.dependsOn(":unityLibrary:mergeDebugJniLibFolders")
-    tasks.findByName("mergeReleaseJniLibFolders")?.dependsOn(":unityLibrary:buildIl2Cpp")
-    tasks.findByName("mergeReleaseJniLibFolders")?.dependsOn(":unityLibrary:mergeReleaseJniLibFolders")
+    if (findProject(":unityLibrary") != null) {
+        tasks.findByName("mergeDebugJniLibFolders")?.dependsOn(":unityLibrary:buildIl2Cpp")
+        tasks.findByName("mergeDebugJniLibFolders")?.dependsOn(":unityLibrary:mergeDebugJniLibFolders")
+        tasks.findByName("mergeReleaseJniLibFolders")?.dependsOn(":unityLibrary:buildIl2Cpp")
+        tasks.findByName("mergeReleaseJniLibFolders")?.dependsOn(":unityLibrary:mergeReleaseJniLibFolders")
+    }
 }
 
 flutter {
