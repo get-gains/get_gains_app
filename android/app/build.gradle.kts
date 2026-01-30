@@ -55,6 +55,11 @@ android {
     }
 }
 
+dependencies {
+    val billingVersion = "8.3.0"
+    implementation("com.android.billingclient:billing:$billingVersion")
+}
+
 flutter {
     source = "../.."
 }
