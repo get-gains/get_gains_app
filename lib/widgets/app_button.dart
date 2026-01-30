@@ -170,19 +170,11 @@ class _AppButtonState extends State<AppButton>
           child: AnimatedOpacity(
             opacity: _isDisabled ? 0.5 : 1.0,
             duration: AppTheme.durationFast,
-            child: AnimatedContainer(
-              duration: AppTheme.durationFast,
-              curve: AppTheme.curveDefault,
+            child: Container(
               height: _getHeight(),
               padding: _getPadding(),
               decoration: _getDecoration(isDark),
-              child: Row(
-                mainAxisSize: widget.isFullWidth
-                    ? MainAxisSize.max
-                    : MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [_buildContent(isDark)],
-              ),
+              child: Center(child: _buildContent(isDark)),
             ),
           ),
         ),
