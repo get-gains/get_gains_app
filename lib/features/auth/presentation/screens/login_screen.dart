@@ -1,33 +1,34 @@
 // lib/features/auth/presentation/screens/login_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/app_error.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
+import '../providers/login_provider.dart';
 
 /// Login Screen
 ///
-/// Placeholder login screen that demonstrates design system usage
-/// and provides navigation to the registration screen.
-///
-/// **Note**: Login functionality is not implemented - this is for
-/// navigation demonstration and design showcase only.
-class LoginScreen extends StatefulWidget {
+/// Login screen connected to the backend server.
+/// Supports email/password and Google sign-in for existing users.
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
+class _LoginScreenState extends ConsumerState<LoginScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
+  final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
@@ -67,10 +68,56 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
+  void _handleLoginState(LoginState? previous, LoginState next) {
+    if (next is LoginSuccess) {
+      // Navigate to home on successful login
+      context.go(AppRoutes.home);
+    } else if (next is LoginError) {
+      // Show error toast
+      final message = _getErrorMessage(next.error);
+      AppToast.error(context, message);
+    }
+  }
+
+  String _getErrorMessage(AppError error) {
+    if (error is AuthError) {
+      return error.message;
+    } else if (error is NetworkError) {
+      if (error.statusCode == 401) {
+        return 'Invalid email or password';
+      } else if (error.statusCode == 404) {
+        return 'User not found. Please sign up first.';
+      }
+      return error.message;
+    }
+    return 'Login failed. Please try again.';
+  }
+
+  Future<void> _handleEmailPasswordLogin() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    await ref
+        .read(loginProvider.notifier)
+        .loginWithEmailPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
+  }
+
+  Future<void> _handleGoogleLogin() async {
+    await ref.read(loginProvider.notifier).loginWithGoogle();
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final size = MediaQuery.of(context).size;
+
+    // Listen to login state changes
+    ref.listen<LoginState>(loginProvider, _handleLoginState);
+
+    final loginState = ref.watch(loginProvider);
+    final isLoading = loginState is LoginLoading;
 
     return Scaffold(
       backgroundColor: isDark
@@ -106,7 +153,7 @@ class _LoginScreenState extends State<LoginScreen>
                     position: _slideAnimation,
                     child: FadeTransition(
                       opacity: _fadeAnimation,
-                      child: _buildLoginForm(isDark),
+                      child: _buildLoginForm(isDark, isLoading),
                     ),
                   ),
 
@@ -128,7 +175,7 @@ class _LoginScreenState extends State<LoginScreen>
                     position: _slideAnimation,
                     child: FadeTransition(
                       opacity: _fadeAnimation,
-                      child: _buildSocialLogin(isDark),
+                      child: _buildSocialLogin(isDark, isLoading),
                     ),
                   ),
 
@@ -226,69 +273,91 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _buildLoginForm(bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Email Field
-        AppTextField(
-          controller: _emailController,
-          label: 'Email',
-          hint: 'Enter your email',
-          prefixIcon: Icons.email_outlined,
-          keyboardType: TextInputType.emailAddress,
-          textInputAction: TextInputAction.next,
-        ),
+  Widget _buildLoginForm(bool isDark, bool isLoading) {
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Email Field
+          AppTextField(
+            controller: _emailController,
+            label: 'Email',
+            hint: 'Enter your email',
+            prefixIcon: Icons.email_outlined,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            enabled: !isLoading,
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Email is required';
+              }
+              if (!RegExp(
+                r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+              ).hasMatch(value)) {
+                return 'Enter a valid email';
+              }
+              return null;
+            },
+          ),
 
-        const SizedBox(height: 16),
+          const SizedBox(height: 16),
 
-        // Password Field
-        AppTextField.password(
-          controller: _passwordController,
-          label: 'Password',
-          hint: 'Enter your password',
-          textInputAction: TextInputAction.done,
-        ),
+          // Password Field
+          AppTextField.password(
+            controller: _passwordController,
+            label: 'Password',
+            hint: 'Enter your password',
+            textInputAction: TextInputAction.done,
+            enabled: !isLoading,
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Password is required';
+              }
+              return null;
+            },
+            onSubmitted: (_) => _handleEmailPasswordLogin(),
+          ),
 
-        const SizedBox(height: 12),
+          const SizedBox(height: 12),
 
-        // Forgot Password Link
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(
-            onPressed: () => context.push(AppRoutes.forgotPassword),
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: Text(
-              'Forgot password?',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+          // Forgot Password Link
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: isLoading
+                  ? null
+                  : () => context.push(AppRoutes.forgotPassword),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                'Forgot password?',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: isDark
+                      ? AppColors.primaryDark
+                      : AppColors.primaryLight,
+                ),
               ),
             ),
           ),
-        ),
 
-        const SizedBox(height: 24),
+          const SizedBox(height: 24),
 
-        // Login Button (Placeholder - shows message)
-        AppButton.primary(
-          label: 'Sign In',
-          onPressed: () {
-            // Show placeholder message
-            AppToast.info(
-              context,
-              'Login not implemented yet. Try registering!',
-            );
-          },
-          isFullWidth: true,
-          size: AppButtonSize.lg,
-        ),
-      ],
+          // Login Button
+          AppButton.primary(
+            label: 'Sign In',
+            onPressed: isLoading ? null : _handleEmailPasswordLogin,
+            isFullWidth: true,
+            size: AppButtonSize.lg,
+            isLoading: isLoading,
+          ),
+        ],
+      ),
     );
   }
 
@@ -343,13 +412,11 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _buildSocialLogin(bool isDark) {
+  Widget _buildSocialLogin(bool isDark, bool isLoading) {
     return AppButton.outline(
       label: 'Continue with Google',
       icon: Icons.g_mobiledata_rounded,
-      onPressed: () {
-        AppToast.info(context, 'Login not implemented yet. Try registering!');
-      },
+      onPressed: isLoading ? null : _handleGoogleLogin,
       isFullWidth: true,
       size: AppButtonSize.lg,
     );
