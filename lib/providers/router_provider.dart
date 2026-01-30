@@ -24,7 +24,7 @@ class AppRoutes {
   static const String home = '/home';
   static const String profile = '/profile';
   static const String settings = '/settings';
-  
+
   // Workout routes
   static const String routines = '/routines';
   static const String workoutSession = '/workout-session';
@@ -183,11 +183,10 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: AppRoutes.workoutSession,
         builder: (context, state) => const WorkoutSessionScreen(),
-
+      ),
       GoRoute(
         path: AppRoutes.unityTest,
         builder: (context, state) => const UnityTestScreen(),
-
       ),
     ],
 
