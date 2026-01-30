@@ -11,7 +11,6 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
-.fvm/flutter_sdk
 !.fvm/fvm_config.json
 
 # Environment variables
@@ -51,3 +50,10 @@ app.*.map.json
 /android/app/release
 
 /android/app/google-services.json
+
+# FVM Version Cache
+.fvm/
+
+# Unity export: large generated native libs + assets — add via export from Unity (see docs/unity/SETUP.md)
+/android/unityLibrary
+android/google-services.json
