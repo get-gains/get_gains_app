@@ -176,9 +176,13 @@ class _AppButtonState extends State<AppButton>
               height: _getHeight(),
               padding: _getPadding(),
               decoration: _getDecoration(isDark),
-              child: widget.isFullWidth
-                  ? Center(child: _buildContent(isDark))
-                  : IntrinsicWidth(child: Center(child: _buildContent(isDark))),
+              child: Row(
+                mainAxisSize: widget.isFullWidth
+                    ? MainAxisSize.max
+                    : MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [_buildContent(isDark)],
+              ),
             ),
           ),
         ),
