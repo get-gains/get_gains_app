@@ -178,7 +178,7 @@ class _AppButtonState extends State<AppButton>
               decoration: _getDecoration(isDark),
               child: widget.isFullWidth
                   ? Center(child: _buildContent(isDark))
-                  : _buildContent(isDark),
+                  : IntrinsicWidth(child: Center(child: _buildContent(isDark))),
             ),
           ),
         ),

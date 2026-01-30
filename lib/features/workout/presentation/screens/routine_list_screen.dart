@@ -29,18 +29,19 @@ class _RoutineListScreenState extends ConsumerState<RoutineListScreen> {
   }
 
   void _loadRoutines() {
-    _routinesFuture = ref.read(workoutRepositoryProvider).getRoutines().then(
-          (result) => result.valueOrNull ?? [],
-        );
+    _routinesFuture = ref
+        .read(workoutRepositoryProvider)
+        .getRoutines()
+        .then((result) => result.valueOrNull ?? []);
   }
 
   Future<void> _startWorkout(RoutineModel routine) async {
     final routineId = int.tryParse(routine.id);
     if (routineId == null) return;
 
-    await ref.read(workoutSessionProvider.notifier).startSession(
-          routineId: routineId,
-        );
+    await ref
+        .read(workoutSessionProvider.notifier)
+        .startSession(routineId: routineId);
 
     if (mounted) {
       context.go(AppRoutes.workoutSession);
@@ -52,12 +53,10 @@ class _RoutineListScreenState extends ConsumerState<RoutineListScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor:
-          isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
-      appBar: AppBar(
-        title: const Text('Routines'),
-        centerTitle: true,
-      ),
+      backgroundColor: isDark
+          ? AppColors.backgroundDark
+          : AppColors.backgroundLight,
+      appBar: AppBar(title: const Text('Routines'), centerTitle: true),
       body: FutureBuilder<List<RoutineModel>>(
         future: _routinesFuture,
         builder: (context, snapshot) {
@@ -68,17 +67,20 @@ class _RoutineListScreenState extends ConsumerState<RoutineListScreen> {
           final routines = snapshot.data ?? [];
 
           if (routines.isEmpty) {
-            return AppEmptyState(
-              icon: Icons.fitness_center,
-              title: 'No Routines',
-              description: 'You don\'t have any routines yet.\n'
-                  'Routines will appear here when assigned by your coach.',
-              actionLabel: 'Refresh',
-              onAction: () {
-                setState(() {
-                  _loadRoutines();
-                });
-              },
+            return Center(
+              child: AppEmptyState(
+                icon: Icons.fitness_center,
+                title: 'No Routines',
+                description:
+                    'You don\'t have any routines yet.\n'
+                    'Routines will appear here when assigned by your coach.',
+                actionLabel: 'Refresh',
+                onAction: () {
+                  setState(() {
+                    _loadRoutines();
+                  });
+                },
+              ),
             );
           }
 
@@ -107,10 +109,7 @@ class _RoutineListScreenState extends ConsumerState<RoutineListScreen> {
 }
 
 class _RoutineCard extends StatelessWidget {
-  const _RoutineCard({
-    required this.routine,
-    required this.onStart,
-  });
+  const _RoutineCard({required this.routine, required this.onStart});
 
   final RoutineModel routine;
   final VoidCallback onStart;
@@ -132,8 +131,8 @@ class _RoutineCard extends StatelessWidget {
                   child: Text(
                     routine.name,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 AppBadge(
@@ -146,8 +145,10 @@ class _RoutineCard extends StatelessWidget {
             Text(
               routine.description,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                  ),
+                color: isDark
+                    ? AppColors.textSecondaryDark
+                    : AppColors.textSecondaryLight,
+              ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -157,27 +158,35 @@ class _RoutineCard extends StatelessWidget {
                 Icon(
                   Icons.fitness_center,
                   size: 16,
-                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
                 ),
                 const SizedBox(width: 4),
                 Text(
                   '${routine.totalExercises} exercises',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                      ),
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                  ),
                 ),
                 const SizedBox(width: 16),
                 Icon(
                   Icons.repeat,
                   size: 16,
-                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
                 ),
                 const SizedBox(width: 4),
                 Text(
                   '${routine.totalSets} sets',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                      ),
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                  ),
                 ),
               ],
             ),
@@ -187,10 +196,12 @@ class _RoutineCard extends StatelessWidget {
               runSpacing: 4,
               children: routine.muscleGroupsTargeted
                   .take(4)
-                  .map((muscle) => AppBadge(
-                        label: muscle.displayName,
-                        variant: AppBadgeVariant.outline,
-                      ))
+                  .map(
+                    (muscle) => AppBadge(
+                      label: muscle.displayName,
+                      variant: AppBadgeVariant.outline,
+                    ),
+                  )
                   .toList(),
             ),
             const SizedBox(height: 16),
