@@ -41,6 +41,95 @@ class SyncQueue extends Table {
   IntColumn get retryCount => integer().withDefault(const Constant(0))();
 }
 
+// ============== Workout Tables ==============
+
+/// Exercises table - Exercise library
+class Exercises extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get remoteId => text().nullable()();
+  TextColumn get name => text()();
+  TextColumn get description => text()();
+  TextColumn get primaryMuscleGroup => text()();
+  TextColumn get equipmentNeeded => text().withDefault(const Constant('[]'))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  BoolColumn get isSynced => boolean().withDefault(const Constant(false))();
+}
+
+/// Routines table - Workout routines
+class Routines extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get remoteId => text().nullable()();
+  TextColumn get name => text()();
+  TextColumn get description => text()();
+  IntColumn get estimatedDurationMinutes => integer()();
+  TextColumn get muscleGroupsTargeted =>
+      text().withDefault(const Constant('[]'))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  BoolColumn get isSynced => boolean().withDefault(const Constant(false))();
+}
+
+/// Routine Exercises table - Junction table for routine-exercise relationship
+class RoutineExercises extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get remoteId => text().nullable()();
+  IntColumn get routineId =>
+      integer().references(Routines, #id, onDelete: KeyAction.cascade)();
+  IntColumn get exerciseId =>
+      integer().references(Exercises, #id, onDelete: KeyAction.cascade)();
+  IntColumn get sets => integer()();
+  IntColumn get repsMin => integer()();
+  IntColumn get repsMax => integer()();
+  IntColumn get restSeconds => integer()();
+  IntColumn get orderInRoutine => integer()();
+  TextColumn get notes => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  BoolColumn get isSynced => boolean().withDefault(const Constant(false))();
+}
+
+/// Workout Sessions table - User workout sessions
+class WorkoutSessions extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get remoteId => text().nullable()();
+  TextColumn get userId => text()();
+  TextColumn get assignedProgramId => text().nullable()();
+  IntColumn get routineId => integer().nullable().references(
+    Routines,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+  DateTimeColumn get startedAt => dateTime()();
+  DateTimeColumn get completedAt => dateTime().nullable()();
+  TextColumn get notes => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  BoolColumn get isSynced => boolean().withDefault(const Constant(false))();
+}
+
+/// Performed Sets table - Individual sets logged by user
+class PerformedSets extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get remoteId => text().nullable()();
+  IntColumn get workoutSessionId =>
+      integer().references(WorkoutSessions, #id, onDelete: KeyAction.cascade)();
+  IntColumn get routineExerciseId => integer().references(
+    RoutineExercises,
+    #id,
+    onDelete: KeyAction.cascade,
+  )();
+  IntColumn get setNumber => integer()();
+  IntColumn get repsCompleted => integer()();
+  RealColumn get weightKg => real().nullable()();
+  IntColumn get rpe => integer().nullable()();
+  TextColumn get notes => text().nullable()();
+  BoolColumn get isCompleted => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  BoolColumn get isSynced => boolean().withDefault(const Constant(false))();
+}
+
 // ============== Database Class ==============
 
 /// Application Database
@@ -52,7 +141,17 @@ class SyncQueue extends Table {
 /// ```bash
 /// dart run build_runner build --delete-conflicting-outputs
 /// ```
-@DriftDatabase(tables: [Users, SyncQueue])
+@DriftDatabase(
+  tables: [
+    Users,
+    SyncQueue,
+    Exercises,
+    Routines,
+    RoutineExercises,
+    WorkoutSessions,
+    PerformedSets,
+  ],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
@@ -172,6 +271,204 @@ class AppDatabase extends _$AppDatabase {
   /// Clear sync queue
   Future<int> clearSyncQueue() {
     return delete(syncQueue).go();
+  }
+
+  // ============== Exercise Operations ==============
+
+  /// Get all exercises
+  Future<List<Exercise>> getAllExercises() => select(exercises).get();
+
+  /// Get exercise by ID
+  Future<Exercise?> getExerciseById(int id) {
+    return (select(exercises)..where((e) => e.id.equals(id))).getSingleOrNull();
+  }
+
+  /// Insert or update exercise
+  Future<int> upsertExercise(ExercisesCompanion exercise) {
+    return into(exercises).insertOnConflictUpdate(exercise);
+  }
+
+  /// Insert multiple exercises
+  Future<void> insertExercises(List<ExercisesCompanion> exercisesList) async {
+    await batch((batch) {
+      batch.insertAll(
+        exercises,
+        exercisesList,
+        mode: InsertMode.insertOrReplace,
+      );
+    });
+  }
+
+  // ============== Routine Operations ==============
+
+  /// Get all routines
+  Future<List<Routine>> getAllRoutines() => select(routines).get();
+
+  /// Get routine by ID
+  Future<Routine?> getRoutineById(int id) {
+    return (select(routines)..where((r) => r.id.equals(id))).getSingleOrNull();
+  }
+
+  /// Insert or update routine
+  Future<int> upsertRoutine(RoutinesCompanion routine) {
+    return into(routines).insertOnConflictUpdate(routine);
+  }
+
+  // ============== Routine Exercise Operations ==============
+
+  /// Get routine exercises for a routine
+  Future<List<RoutineExercise>> getRoutineExercises(int routineId) {
+    return (select(routineExercises)
+          ..where((re) => re.routineId.equals(routineId))
+          ..orderBy([(re) => OrderingTerm.asc(re.orderInRoutine)]))
+        .get();
+  }
+
+  /// Get routine exercise by ID
+  Future<RoutineExercise?> getRoutineExerciseById(int id) {
+    return (select(
+      routineExercises,
+    )..where((re) => re.id.equals(id))).getSingleOrNull();
+  }
+
+  /// Insert or update routine exercise
+  Future<int> upsertRoutineExercise(RoutineExercisesCompanion routineExercise) {
+    return into(routineExercises).insertOnConflictUpdate(routineExercise);
+  }
+
+  // ============== Workout Session Operations ==============
+
+  /// Get all workout sessions for a user
+  Future<List<WorkoutSession>> getWorkoutSessions(String userId) {
+    return (select(workoutSessions)
+          ..where((ws) => ws.userId.equals(userId))
+          ..orderBy([(ws) => OrderingTerm.desc(ws.startedAt)]))
+        .get();
+  }
+
+  /// Get active (in-progress) workout session
+  Future<WorkoutSession?> getActiveWorkoutSession(String userId) {
+    return (select(workoutSessions)
+          ..where((ws) => ws.userId.equals(userId) & ws.completedAt.isNull()))
+        .getSingleOrNull();
+  }
+
+  /// Get workout session by ID
+  Future<WorkoutSession?> getWorkoutSessionById(int id) {
+    return (select(
+      workoutSessions,
+    )..where((ws) => ws.id.equals(id))).getSingleOrNull();
+  }
+
+  /// Start a new workout session
+  Future<int> startWorkoutSession(WorkoutSessionsCompanion session) {
+    return into(workoutSessions).insert(session);
+  }
+
+  /// Update workout session
+  Future<bool> updateWorkoutSession(int id, WorkoutSessionsCompanion session) {
+    return (update(
+      workoutSessions,
+    )..where((ws) => ws.id.equals(id))).write(session).then((rows) => rows > 0);
+  }
+
+  /// Complete a workout session
+  Future<bool> completeWorkoutSession(int id, {String? notes}) {
+    return (update(workoutSessions)..where((ws) => ws.id.equals(id)))
+        .write(
+          WorkoutSessionsCompanion(
+            completedAt: Value(DateTime.now()),
+            notes: notes != null ? Value(notes) : const Value.absent(),
+            updatedAt: Value(DateTime.now()),
+          ),
+        )
+        .then((rows) => rows > 0);
+  }
+
+  /// Delete workout session
+  Future<int> deleteWorkoutSession(int id) {
+    return (delete(workoutSessions)..where((ws) => ws.id.equals(id))).go();
+  }
+
+  // ============== Performed Set Operations ==============
+
+  /// Get performed sets for a workout session
+  Future<List<PerformedSet>> getPerformedSets(int workoutSessionId) {
+    return (select(performedSets)
+          ..where((ps) => ps.workoutSessionId.equals(workoutSessionId))
+          ..orderBy([
+            (ps) => OrderingTerm.asc(ps.routineExerciseId),
+            (ps) => OrderingTerm.asc(ps.setNumber),
+          ]))
+        .get();
+  }
+
+  /// Get performed sets for a specific exercise in a session
+  Future<List<PerformedSet>> getPerformedSetsForExercise(
+    int workoutSessionId,
+    int routineExerciseId,
+  ) {
+    return (select(performedSets)
+          ..where(
+            (ps) =>
+                ps.workoutSessionId.equals(workoutSessionId) &
+                ps.routineExerciseId.equals(routineExerciseId),
+          )
+          ..orderBy([(ps) => OrderingTerm.asc(ps.setNumber)]))
+        .get();
+  }
+
+  /// Insert or update performed set
+  Future<int> upsertPerformedSet(PerformedSetsCompanion performedSet) {
+    return into(performedSets).insertOnConflictUpdate(performedSet);
+  }
+
+  /// Log a completed set
+  Future<int> logSet({
+    required int workoutSessionId,
+    required int routineExerciseId,
+    required int setNumber,
+    required int repsCompleted,
+    double? weightKg,
+    int? rpe,
+    String? notes,
+  }) {
+    return into(performedSets).insert(
+      PerformedSetsCompanion.insert(
+        workoutSessionId: workoutSessionId,
+        routineExerciseId: routineExerciseId,
+        setNumber: setNumber,
+        repsCompleted: repsCompleted,
+        weightKg: Value(weightKg),
+        rpe: Value(rpe),
+        notes: Value(notes),
+        isCompleted: const Value(true),
+      ),
+    );
+  }
+
+  /// Update a performed set
+  Future<bool> updatePerformedSet(int id, PerformedSetsCompanion performedSet) {
+    return (update(performedSets)..where((ps) => ps.id.equals(id)))
+        .write(performedSet)
+        .then((rows) => rows > 0);
+  }
+
+  /// Delete performed set
+  Future<int> deletePerformedSet(int id) {
+    return (delete(performedSets)..where((ps) => ps.id.equals(id))).go();
+  }
+
+  /// Get completed sets count for a session
+  Future<int> getCompletedSetsCount(int workoutSessionId) async {
+    final result =
+        await (select(performedSets)..where(
+              (ps) =>
+                  ps.workoutSessionId.equals(workoutSessionId) &
+                  ps.isCompleted.equals(true),
+            ))
+            .get();
+    return result.length;
   }
 
   // ============== Utility Methods ==============

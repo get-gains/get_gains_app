@@ -3,6 +3,9 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../features/auth/auth.dart';
+import '../features/home/home.dart';
+import '../features/workout/workout.dart';
+import '../features/unity/unity.dart';
 import 'auth_state_provider.dart';
 
 part 'router_provider.g.dart';
@@ -21,6 +24,11 @@ class AppRoutes {
   static const String home = '/home';
   static const String profile = '/profile';
   static const String settings = '/settings';
+
+  // Workout routes
+  static const String routines = '/routines';
+  static const String workoutSession = '/workout-session';
+  static const String unityTest = '/unity-test';
 }
 
 /// Router Provider
@@ -63,11 +71,15 @@ GoRouter router(Ref ref) {
       final location = state.uri.path;
 
       // Public auth routes (accessible without authentication)
+      // TODO: Remove unityTest from public routes when auth is required for Unity screen
       final isPublicAuthRoute =
           location == AppRoutes.login ||
           location == AppRoutes.register ||
           location == AppRoutes.checkEmail ||
-          location == AppRoutes.forgotPassword;
+          location == AppRoutes.forgotPassword ||
+          location ==
+              AppRoutes
+                  .unityTest; // Temporary: no auth required for dev/testing
 
       // Semi-authenticated routes (require temp tokens but not full profile)
       // - reset-password: User has token from email link
@@ -151,7 +163,7 @@ GoRouter router(Ref ref) {
       // Main App Routes (Fully Authenticated)
       GoRoute(
         path: AppRoutes.home,
-        builder: (context, state) => const _PlaceholderScreen(title: 'Home'),
+        builder: (context, state) => const HomeScreen(),
       ),
       GoRoute(
         path: AppRoutes.profile,
@@ -161,6 +173,20 @@ GoRouter router(Ref ref) {
         path: AppRoutes.settings,
         builder: (context, state) =>
             const _PlaceholderScreen(title: 'Settings'),
+      ),
+
+      // Workout Routes
+      GoRoute(
+        path: AppRoutes.routines,
+        builder: (context, state) => const RoutineListScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.workoutSession,
+        builder: (context, state) => const WorkoutSessionScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.unityTest,
+        builder: (context, state) => const UnityTestScreen(),
       ),
     ],
 
