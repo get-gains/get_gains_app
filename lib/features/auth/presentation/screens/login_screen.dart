@@ -32,6 +32,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
+  // Hidden dev bypass: tap logo 5 times to go to Unity screen
+  int _logoTapCount = 0;
+  DateTime? _lastTapTime;
+
   @override
   void initState() {
     super.initState();
@@ -199,26 +203,41 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   Widget _buildHeader(bool isDark) {
     return Column(
       children: [
-        Container(
-          width: 90,
-          height: 80,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.primaryDark.withOpacity(0.4),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-            child: Image.asset(
-              'assets/images/logo.jpg',
-              width: 80,
-              height: 80,
-              fit: BoxFit.cover,
+        // App Logo — hidden dev bypass: tap 5 times to go to Unity screen
+        GestureDetector(
+          onTap: () {
+            final now = DateTime.now();
+            if (_lastTapTime != null &&
+                now.difference(_lastTapTime!).inSeconds > 2) {
+              _logoTapCount = 0;
+            }
+            setState(() {
+              _logoTapCount++;
+              _lastTapTime = now;
+            });
+            if (_logoTapCount >= 5) {
+              _logoTapCount = 0;
+              context.push(AppRoutes.unityTest);
+            }
+          },
+          child: Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              gradient: AppColors.primaryGradient,
+              borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primaryDark.withOpacity(0.4),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.fitness_center_rounded,
+              size: 40,
+              color: Colors.white,
             ),
           ),
         ),
