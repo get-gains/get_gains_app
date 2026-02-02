@@ -143,18 +143,30 @@ class SubscriptionNotifier extends _$SubscriptionNotifier {
     final status = statusResult.value as SubscriptionStatusModel;
     final plans = plansResult.value as List<PlanModel>;
 
-    // Initialize IAP service with product IDs
-    if (!_iapService.isInitialized) {
-      final productIds = plans.map((p) => p.productId).toList();
-      await _iapService.initialize(productIds);
-    }
-
+    // Set state first so UI is not stuck on loading
     state = SubscriptionLoaded(status: status, plans: plans);
 
     AppLogger.info(
       'Subscription loaded: isSubscribed=${status.isSubscribed}, tier=${status.tierLevel}',
       tag: 'SubProvider',
     );
+
+    // Initialize IAP service with product IDs (non-blocking)
+    if (!_iapService.isInitialized && plans.isNotEmpty) {
+      final productIds = plans.map((p) => p.productId).toList();
+      // Don't await - let it initialize in the background
+      _iapService
+          .initialize(productIds)
+          .then((_) {
+            AppLogger.debug('IAP service initialized', tag: 'SubProvider');
+          })
+          .catchError((e) {
+            AppLogger.warning(
+              'IAP initialization failed: $e',
+              tag: 'SubProvider',
+            );
+          });
+    }
   }
 
   /// Refresh subscription status only (faster than full load)
@@ -207,6 +219,21 @@ class SubscriptionNotifier extends _$SubscriptionNotifier {
     );
 
     AppLogger.debug('Starting purchase for: $productId', tag: 'SubProvider');
+
+    // Ensure IAP service is initialized with products before purchasing
+    if (!_iapService.isInitialized) {
+      AppLogger.debug(
+        'IAP service not initialized, initializing now...',
+        tag: 'SubProvider',
+      );
+      final productIds = currentState.plans.map((p) => p.productId).toList();
+      await _iapService.initialize(productIds);
+    } else if (_iapService.products.isEmpty && currentState.plans.isNotEmpty) {
+      // Initialized but no products loaded - try loading again
+      AppLogger.debug('No products loaded, reloading...', tag: 'SubProvider');
+      final productIds = currentState.plans.map((p) => p.productId).toList();
+      await _iapService.loadProducts(productIds);
+    }
 
     final result = await _iapService.purchaseProduct(productId);
 
