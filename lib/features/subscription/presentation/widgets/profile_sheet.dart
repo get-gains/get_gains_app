@@ -33,6 +33,7 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
     final subscriptionState = ref.watch(subscriptionProvider);
+    final isSubscribed = ref.watch(isSubscribedProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final email = authState.email ?? '';
@@ -50,14 +51,21 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
 
             // Subscription status
             if (subscriptionState is SubscriptionLoaded) ...[
-              SubscriptionStatusCard(
-                onTap: () => setState(() => _showPlans = !_showPlans),
-              ),
-              const SizedBox(height: 16),
+              // Show status card for subscribed users, or upgrade prompt for free users
+              if (isSubscribed) ...[
+                SubscriptionStatusCard(
+                  onTap: () => setState(() => _showPlans = !_showPlans),
+                ),
+                const SizedBox(height: 16),
 
-              // Plans section
-              if (_showPlans) ...[
-                _buildPlansSection(context, subscriptionState, isDark),
+                // Plans section (for managing subscription)
+                if (_showPlans) ...[
+                  _buildPlansSection(context, subscriptionState, isDark),
+                  const SizedBox(height: 16),
+                ],
+              ] else ...[
+                // Free user - show upgrade button prominently
+                _buildFreeUserSection(context, subscriptionState, isDark),
                 const SizedBox(height: 16),
               ],
             ] else if (subscriptionState is SubscriptionLoading) ...[
@@ -108,6 +116,124 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildFreeUserSection(
+    BuildContext context,
+    SubscriptionLoaded state,
+    bool isDark,
+  ) {
+    final plans = state.plans;
+    final hasPlans = plans.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Free tier badge
+        AppCard(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? AppColors.secondaryDark
+                        : AppColors.secondaryLight,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.person_outline,
+                    color: isDark
+                        ? AppColors.mutedForegroundDark
+                        : AppColors.mutedForegroundLight,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Free Plan',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(width: 8),
+                          AppBadge(
+                            label: 'Current',
+                            variant: AppBadgeVariant.secondary,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Basic features included',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isDark
+                              ? AppColors.mutedForegroundDark
+                              : AppColors.mutedForegroundLight,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Upgrade button
+        if (hasPlans) ...[
+          AppButton.primary(
+            label: 'Upgrade to Premium',
+            icon: Icons.workspace_premium,
+            isFullWidth: true,
+            onPressed: () => setState(() => _showPlans = true),
+          ),
+
+          // Show plans if expanded
+          if (_showPlans) ...[
+            const SizedBox(height: 16),
+            _buildPlansSection(context, state, isDark),
+          ],
+        ] else ...[
+          // No plans available
+          AppCard(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: isDark
+                        ? AppColors.mutedForegroundDark
+                        : AppColors.mutedForegroundLight,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Premium plans coming soon!',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: isDark
+                            ? AppColors.mutedForegroundDark
+                            : AppColors.mutedForegroundLight,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
