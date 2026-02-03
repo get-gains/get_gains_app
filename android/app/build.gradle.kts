@@ -36,7 +36,7 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // Unity 6000.0 requires minSdk 34
         minSdk = 34
-        targetSdk = 34
+        targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         // Unity only ships ARM native libs (libmain.so etc). Use an ARM64 emulator or a real device.
