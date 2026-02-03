@@ -214,6 +214,28 @@ class InAppPurchaseService {
 
       _products.clear();
       for (final product in response.productDetails) {
+        // For subscriptions, store by composite key (subscriptionId:basePlanId)
+        // This allows matching with server's productId format
+        if (product is GooglePlayProductDetails &&
+            product.subscriptionIndex != null) {
+          final subscriptionOfferDetails =
+              product.productDetails.subscriptionOfferDetails;
+          if (subscriptionOfferDetails != null &&
+              product.subscriptionIndex! < subscriptionOfferDetails.length) {
+            final basePlanId =
+                subscriptionOfferDetails[product.subscriptionIndex!].basePlanId;
+            final compositeKey = '${product.id}:$basePlanId';
+            _products[compositeKey] = product;
+            // Also store by simple ID for fallback (last one wins)
+            _products[product.id] = product;
+            AppLogger.debug(
+              'Loaded subscription: $compositeKey (basePlan: $basePlanId, offerToken: ${product.offerToken})',
+              tag: 'IAP',
+            );
+            continue;
+          }
+        }
+        // Non-subscription products or fallback
         _products[product.id] = product;
         AppLogger.debug(
           'Loaded product: ${product.id} - ${product.title}',
@@ -296,11 +318,16 @@ class InAppPurchaseService {
 
       // Handle Android subscriptions with GooglePlayPurchaseParam
       if (Platform.isAndroid && product is GooglePlayProductDetails) {
+        // For subscriptions, we must pass the offerToken to specify which base plan/offer
+        final offerToken = product.offerToken;
         AppLogger.debug(
-          'Using GooglePlayPurchaseParam for Android subscription',
+          'Using GooglePlayPurchaseParam for Android subscription (offerToken: $offerToken)',
           tag: 'IAP',
         );
-        purchaseParam = GooglePlayPurchaseParam(productDetails: product);
+        purchaseParam = GooglePlayPurchaseParam(
+          productDetails: product,
+          offerToken: offerToken,
+        );
       } else {
         // Non-Android or non-Google Play product
         purchaseParam = PurchaseParam(productDetails: product);
