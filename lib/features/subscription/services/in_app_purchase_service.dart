@@ -121,10 +121,18 @@ class InAppPurchaseService {
     // Check store availability
     _isAvailable = await _inAppPurchase.isAvailable();
     if (!_isAvailable) {
-      AppLogger.warning('Store is not available', tag: 'IAP');
+      AppLogger.warning(
+        'Store is not available. This can happen if:\n'
+        '  1. Google Play Store is not installed\n'
+        '  2. Device is an emulator without Play Store\n'
+        '  3. Play Store needs to be updated\n'
+        '  4. Network connectivity issues',
+        tag: 'IAP',
+      );
       _isInitialized = true;
       return false;
     }
+    AppLogger.info('Store is available', tag: 'IAP');
 
     // Start listening to purchase updates
     _subscription = _purchaseStream.listen(
@@ -179,13 +187,20 @@ class InAppPurchaseService {
 
     try {
       // Add timeout to prevent hanging indefinitely
+      // Note: Timeout usually means Google Play can't find products, not a network issue
       final response = await _inAppPurchase
           .queryProductDetails(storeProductIds)
           .timeout(
-            const Duration(seconds: 10),
+            const Duration(seconds: 15),
             onTimeout: () {
               AppLogger.error(
-                'Product query timed out after 10 seconds',
+                'Product query timed out after 15 seconds.\n'
+                'Common causes:\n'
+                '  1. App not uploaded to Google Play Console (internal test track)\n'
+                '  2. Product "$storeProductIds" not created in Play Console\n'
+                '  3. App signed with different key than Play Console upload\n'
+                '  4. License tester not configured in Play Console\n'
+                '  5. Running debug build instead of release build',
                 tag: 'IAP',
               );
               throw TimeoutException('Product query timed out');
