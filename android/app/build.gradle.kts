@@ -69,8 +69,6 @@ android {
 }
 
 dependencies {
-    val billingVersion = "8.3.0"
-    implementation("com.android.billingclient:billing:$billingVersion")
     // Unity library dependency (optional; only when unityLibrary is exported to android/unityLibrary)
     if (findProject(":unityLibrary") != null) {
         implementation(project(":unityLibrary"))
