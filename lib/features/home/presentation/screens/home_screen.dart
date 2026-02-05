@@ -8,6 +8,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/auth_state_provider.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../subscription/subscription.dart';
 import '../widgets/widgets.dart';
 
 /// Main home screen / dashboard
@@ -70,9 +71,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       // TODO: Navigate to notifications
                     },
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.settings_outlined),
-                    onPressed: () => context.push(AppRoutes.settings),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: GestureDetector(
+                      onTap: () => showProfileSheet(context),
+                      child: AppAvatar(name: userName, size: AppAvatarSize.sm),
+                    ),
                   ),
                 ],
               ),

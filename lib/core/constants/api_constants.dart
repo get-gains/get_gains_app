@@ -43,4 +43,10 @@ class ApiConstants {
   // Sync Endpoints
   static const String sync = '/sync';
   static const String syncStatus = '/sync/status';
+
+  // Subscription Endpoints
+  static const String subscriptionPlans = '/subscriptions/plans';
+  static const String subscriptionStatus = '/subscriptions/status';
+  static const String subscriptionHistory = '/subscriptions/history';
+  static const String subscriptionVerify = '/subscriptions/verify';
 }
