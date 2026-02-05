@@ -8,6 +8,7 @@ import '../../../../core/utils/app_error.dart';
 import '../../../../core/utils/logger.dart';
 import '../../data/models/models.dart';
 import '../../data/subscription_repository.dart';
+import '../../services/billing_error_parser.dart';
 import '../../services/in_app_purchase_service.dart';
 
 part 'subscription_provider.g.dart';
@@ -310,13 +311,37 @@ class SubscriptionNotifier extends _$SubscriptionNotifier {
         break;
 
       case PurchaseState.error:
-        AppLogger.error(
-          'Purchase error: ${result.errorMessage}',
-          tag: 'SubProvider',
-        );
+        final errorMsg = result.errorMessage;
+
+        // Don't show error for user cancellation (already handled above,
+        // but some platforms report it as error)
+        if (BillingErrorParser.isUserCanceled(errorMsg)) {
+          AppLogger.info(
+            'Purchase canceled by user (via error)',
+            tag: 'SubProvider',
+          );
+          state = currentState.copyWith(purchaseInProgress: false);
+          break;
+        }
+
+        // For already owned items, suggest restore
+        if (BillingErrorParser.isAlreadyOwned(errorMsg)) {
+          AppLogger.info(
+            'Item already owned, prompting restore',
+            tag: 'SubProvider',
+          );
+          state = currentState.copyWith(
+            purchaseInProgress: false,
+            purchaseError:
+                'You already own this subscription. Tap "Restore Purchases" to restore it.',
+          );
+          break;
+        }
+
+        AppLogger.error('Purchase error: $errorMsg', tag: 'SubProvider');
         state = currentState.copyWith(
           purchaseInProgress: false,
-          purchaseError: result.errorMessage,
+          purchaseError: errorMsg,
         );
         break;
 
