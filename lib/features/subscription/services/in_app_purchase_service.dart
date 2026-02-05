@@ -9,6 +9,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/utils/logger.dart';
 import '../data/models/models.dart';
+import 'billing_error_parser.dart';
 
 part 'in_app_purchase_service.g.dart';
 
@@ -404,11 +405,22 @@ class InAppPurchaseService {
           break;
 
         case PurchaseStatus.error:
+          // Parse error message to user-friendly format
+          final rawError = purchase.error?.message ?? 'Purchase failed';
+          final userFriendlyError = BillingErrorParser.parseErrorMessage(
+            rawError,
+          );
+
+          AppLogger.warning(
+            'Purchase error: $rawError -> $userFriendlyError',
+            tag: 'IAP',
+          );
+
           _purchaseController.add(
             PurchaseResult(
               status: PurchaseState.error,
               purchaseDetails: purchase,
-              errorMessage: purchase.error?.message ?? 'Purchase failed',
+              errorMessage: userFriendlyError,
             ),
           );
           break;
