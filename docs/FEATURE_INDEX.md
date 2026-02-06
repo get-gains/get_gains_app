@@ -39,6 +39,7 @@
 | [CONTEXT.md](CONTEXT.md) | Core infrastructure, patterns, conventions |
 | [FEATURE_INDEX.md](FEATURE_INDEX.md) | This file - navigation hub |
 | [features/REGISTER.md](features/REGISTER.md) | Registration feature documentation |
+| [features/POSE_DETECTION.md](features/POSE_DETECTION.md) | Pose detection, form analysis, on-device ML |
 
 ---
 
@@ -74,6 +75,24 @@
 - `/lib/features/auth/presentation/providers/register_provider.dart` - Registration state
 - `/lib/providers/auth_state_provider.dart` - App-wide auth state
 - `/lib/providers/router_provider.dart` - Route guards
+
+### Pose Detection & Form Analysis *(Documented in [features/POSE_DETECTION.md](features/POSE_DETECTION.md))*
+
+| Feature | Description | Status | Documentation |
+|---------|-------------|--------|---------------|
+| Camera Setup Guidance | Lighting, distance, angle validation | 🔮 Not Implemented | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) |
+| MLKit Pose Detection | On-device landmark extraction | 🔮 Not Implemented | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) |
+| Limb Isolation | Per-exercise body segment filtering | 🔮 Not Implemented | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) |
+| DTW Comparison | On-device form similarity scoring | 🔮 Not Implemented | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) |
+| Correction Generation | Angle-specific feedback messages | 🔮 Not Implemented | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) |
+| Offline Form Caching | Download & cache coach forms in Drift | 🔮 Not Implemented | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) |
+| Result Upload | Persist comparison results to server | 🔮 Not Implemented | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) |
+
+**Primary Files (To Be Created):**
+- `/lib/features/pose_detection/` - Feature root
+- `/lib/features/pose_detection/data/` - Models, repository
+- `/lib/features/pose_detection/services/` - MLKit, DTW, feature extraction
+- `/lib/features/pose_detection/presentation/` - Screens, providers, widgets
 
 ### Future Domain Features *(Needs Implementation)*
 
