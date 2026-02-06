@@ -314,6 +314,11 @@ class AppDatabase extends _$AppDatabase {
     return into(routines).insertOnConflictUpdate(routine);
   }
 
+  /// Delete all routines (cascade deletes routine exercises)
+  Future<int> deleteAllRoutines() {
+    return delete(routines).go();
+  }
+
   // ============== Routine Exercise Operations ==============
 
   /// Get routine exercises for a routine

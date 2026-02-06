@@ -117,6 +117,137 @@ class WorkoutRepository {
 
   // ============== Routine Operations ==============
 
+  /// Sync routines from server (fetches user's assigned routines)
+  Future<Result<List<RoutineModel>, AppError>> syncRoutines() async {
+    AppLogger.debug('Syncing routines from server', tag: 'WorkoutRepo');
+
+    final result = await _apiClient.get<Map<String, dynamic>>(
+      ApiConstants.routines,
+    );
+
+    return result.when(
+      success: (data) async {
+        try {
+          final routinesList = <RoutineModel>[];
+          final routinesJson = data['routines'] as List;
+
+          for (final routineJson in routinesJson) {
+            try {
+              final routine = RoutineModel.fromJson(
+                routineJson as Map<String, dynamic>,
+              );
+              routinesList.add(routine);
+            } catch (e) {
+              AppLogger.error(
+                'Failed to parse individual routine',
+                tag: 'WorkoutRepo',
+                error: e,
+              );
+              AppLogger.debug('Routine JSON: $routineJson', tag: 'WorkoutRepo');
+              // Continue processing other routines
+              continue;
+            }
+          }
+
+          // Clear all existing routines before syncing new ones
+          // This ensures we don't keep old/unassigned routines
+          await _db.deleteAllRoutines();
+          AppLogger.debug(
+            'Cleared existing routines from local DB',
+            tag: 'WorkoutRepo',
+          );
+
+          // Save routines to local database
+          for (final routine in routinesList) {
+            final routineId = await _db.upsertRoutine(
+              RoutinesCompanion.insert(
+                remoteId: Value(routine.id),
+                name: routine.name,
+                description: routine.description,
+                estimatedDurationMinutes: routine.estimatedDurationMinutes,
+                muscleGroupsTargeted: Value(
+                  jsonEncode(
+                    routine.muscleGroupsTargeted.map((m) => m.name).toList(),
+                  ),
+                ),
+                isSynced: const Value(true),
+              ),
+            );
+
+            // Save routine exercises
+            for (final exercise in routine.exercises) {
+              // Ensure exercise exists locally
+              if (exercise.exercise != null) {
+                await _db.upsertExercise(
+                  ExercisesCompanion.insert(
+                    remoteId: Value(exercise.exercise!.id),
+                    name: exercise.exercise!.name,
+                    description: exercise.exercise!.description,
+                    primaryMuscleGroup:
+                        exercise.exercise!.primaryMuscleGroup.name,
+                    equipmentNeeded: Value(
+                      jsonEncode(exercise.exercise!.equipmentNeeded),
+                    ),
+                    isSynced: const Value(true),
+                  ),
+                );
+              }
+
+              // Find local exercise ID
+              final localExercise = exercise.exercise != null
+                  ? await _findExerciseByRemoteId(exercise.exercise!.id)
+                  : null;
+
+              if (localExercise != null) {
+                await _db.upsertRoutineExercise(
+                  RoutineExercisesCompanion.insert(
+                    remoteId: Value(exercise.id),
+                    routineId: routineId,
+                    exerciseId: localExercise.id,
+                    sets: exercise.sets,
+                    repsMin: exercise.repsMin,
+                    repsMax: exercise.repsMax,
+                    restSeconds: exercise.restSeconds,
+                    orderInRoutine: exercise.orderInRoutine,
+                    notes: Value(exercise.notes),
+                    isSynced: const Value(true),
+                  ),
+                );
+              }
+            }
+          }
+
+          AppLogger.info(
+            'Synced ${routinesList.length} routines',
+            tag: 'WorkoutRepo',
+          );
+          return Success(routinesList);
+        } catch (e, stackTrace) {
+          AppLogger.error(
+            'Failed to parse routines',
+            tag: 'WorkoutRepo',
+            error: e,
+          );
+          AppLogger.debug('Stack trace: $stackTrace', tag: 'WorkoutRepo');
+          return Failure(
+            DatabaseError(message: 'Failed to parse routines: $e'),
+          );
+        }
+      },
+      failure: (error) => Failure(error),
+    );
+  }
+
+  /// Find exercise by remote ID
+  Future<Exercise?> _findExerciseByRemoteId(String remoteId) async {
+    final exercises = await _db.getAllExercises();
+    try {
+      return exercises.firstWhere((e) => e.remoteId == remoteId);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Get all routines from local database
   Future<Result<List<RoutineModel>, AppError>> getRoutines() async {
     try {
