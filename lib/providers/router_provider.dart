@@ -5,6 +5,11 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../features/auth/auth.dart';
 import '../features/unity/unity.dart';
 import 'auth_state_provider.dart';
+import '../features/programs/screens/program_screen.dart';
+import '../features/programs/screens/program_details_screen.dart';
+import '../features/programs/screens/calendar_screen.dart';
+import '../features/programs/screens/create_program_screen.dart';
+
 
 part 'router_provider.g.dart';
 
@@ -23,6 +28,12 @@ class AppRoutes {
   static const String profile = '/profile';
   static const String settings = '/settings';
   static const String unityTest = '/unity-test';
+  static const String programs = '/programs';
+  static const String createProgram = '/create-program';
+  static const String programDetails = '/program-details';
+  static const String calendar = '/calendar';
+
+
 }
 
 /// Router Provider
@@ -159,6 +170,11 @@ GoRouter router(Ref ref) {
         path: AppRoutes.home,
         builder: (context, state) => const _PlaceholderScreen(title: 'Home'),
       ),
+      // GoRoute(
+      //   path: AppRoutes.home,
+      //   builder: (context, state) => const ProgramsScreen(),
+      // ),
+
       GoRoute(
         path: AppRoutes.profile,
         builder: (context, state) => const _PlaceholderScreen(title: 'Profile'),
@@ -172,6 +188,29 @@ GoRouter router(Ref ref) {
         path: AppRoutes.unityTest,
         builder: (context, state) => const UnityTestScreen(),
       ),
+      GoRoute(
+        path: AppRoutes.programs,
+        builder: (context, state) => const ProgramsScreen(),
+      ),
+
+      GoRoute(
+        path: AppRoutes.createProgram,
+        builder: (context, state) => const CreateProgramScreen(),
+      ),
+
+      GoRoute(
+        path: AppRoutes.programDetails,
+        builder: (context, state) {
+          final program = state.extra as Map;
+          return ProgramDetailsScreen(program: program);
+        },
+      ),
+
+      GoRoute(
+        path: AppRoutes.calendar,
+        builder: (context, state) => const CalendarScreen(),
+      ),
+
     ],
 
     errorBuilder: (context, state) => _ErrorScreen(error: state.error),
