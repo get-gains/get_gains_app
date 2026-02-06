@@ -29,10 +29,24 @@ class _RoutineListScreenState extends ConsumerState<RoutineListScreen> {
   }
 
   void _loadRoutines() {
-    _routinesFuture = ref
-        .read(workoutRepositoryProvider)
-        .getRoutines()
-        .then((result) => result.valueOrNull ?? []);
+    _routinesFuture = _syncAndLoadRoutines();
+  }
+
+  Future<List<RoutineModel>> _syncAndLoadRoutines() async {
+    final repo = ref.read(workoutRepositoryProvider);
+
+    // Try to sync from server first
+    final syncResult = await repo.syncRoutines();
+
+    // If sync succeeded, return server data
+    return syncResult.when(
+      success: (routines) => routines,
+      failure: (_) async {
+        // If sync failed (offline), fallback to local DB
+        final localResult = await repo.getRoutines();
+        return localResult.valueOrNull ?? [];
+      },
+    );
   }
 
   Future<void> _startWorkout(RoutineModel routine) async {
