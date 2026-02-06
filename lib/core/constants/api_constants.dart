@@ -34,11 +34,11 @@ class ApiConstants {
   static const String updateProfile = '/users/profile';
 
   // Workout Endpoints
-  static const String workouts = '/workouts';
-  static const String exercises = '/exercises';
-  static const String routines = '/routines';
-  static const String workoutSessions = '/workout-sessions';
-  static const String performedSets = '/performed-sets';
+  static const String workouts = '/workout';
+  static const String exercises = '/workout/exercises';
+  static const String routines = '/workout/routines';
+  static const String workoutSessions = '/workout/sessions';
+  static const String performedSets = '/workout/sets';
 
   // Sync Endpoints
   static const String sync = '/sync';
