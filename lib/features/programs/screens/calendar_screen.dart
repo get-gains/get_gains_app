@@ -5,7 +5,7 @@ class CalendarScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final week = {
+    const Map<String, String> week = {
       'Mon': 'Push',
       'Tue': 'Rest',
       'Wed': 'Pull',
@@ -15,16 +15,21 @@ class CalendarScreen extends StatelessWidget {
       'Sun': 'Rest',
     };
 
+    final entries = week.entries.toList();
+
     return Scaffold(
       appBar: AppBar(title: const Text('Weekly Calendar')),
-      body: ListView(
-        children: week.entries.map((entry) {
+      body: ListView.separated(
+        itemCount: entries.length,
+        itemBuilder: (context, index) {
+          final entry = entries[index];
           return ListTile(
-            leading: const Icon(Icons.fitness_center),
+            leading: const Icon(Icons.calendar_today),
             title: Text(entry.key),
             subtitle: Text(entry.value),
           );
-        }).toList(),
+        },
+        separatorBuilder: (context, index) => const Divider(height: 1),
       ),
     );
   }
