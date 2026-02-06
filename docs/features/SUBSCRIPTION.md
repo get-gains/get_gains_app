@@ -217,6 +217,96 @@ The feature uses these backend endpoints:
 └─────────┘     └─────────────┘     └──────────────┘     └─────────┘
 ```
 
+## In-App Purchase Service
+
+The `InAppPurchaseService` wraps Flutter's `in_app_purchase` package with comprehensive error handling:
+
+```dart
+// Located at: lib/features/subscription/services/in_app_purchase_service.dart
+final iapService = ref.read(inAppPurchaseServiceProvider);
+
+// Initialize and load products
+await iapService.initialize(['get_gains.premium']);
+
+// Listen to purchase results
+iapService.purchaseResults.listen((result) {
+  switch (result.status) {
+    case PurchaseState.completed:
+      // Verify with server
+      await verifyPurchase(result.purchaseDetails!);
+    case PurchaseState.error:
+      // Error message is already user-friendly
+      showError(result.errorMessage);
+    case PurchaseState.canceled:
+      // User canceled - no error needed
+    // ...
+  }
+});
+
+// Purchase
+await iapService.purchaseProduct('get_gains.premium');
+```
+
+## Billing Error Parser
+
+The `BillingErrorParser` class converts technical billing errors into user-friendly messages:
+
+```dart
+// Located at: lib/features/subscription/services/billing_error_parser.dart
+
+// Parse any error message
+final userMessage = BillingErrorParser.parseErrorMessage(rawError);
+
+// Check specific error types
+if (BillingErrorParser.isUserCanceled(error)) {
+  // Don't show error - user intentionally canceled
+}
+
+if (BillingErrorParser.isAlreadyOwned(error)) {
+  // Prompt user to restore purchases instead
+  showRestorePrompt();
+}
+
+if (BillingErrorParser.isNetworkError(error)) {
+  // Show connectivity message
+  showNetworkError();
+}
+```
+
+**Error Code Mapping:**
+
+| Code | User-Friendly Message |
+|------|----------------------|
+| `userCanceled (1)` | Purchase was canceled. |
+| `serviceUnavailable (2)` | Google Play is temporarily unavailable. Please try again later. |
+| `billingUnavailable (3)` | Google Play Billing is not available. Please update your device. |
+| `itemUnavailable (4)` | This subscription is not available for purchase at this time. |
+| `error (6)` | An error occurred during the purchase. Please try again. |
+| `itemAlreadyOwned (7)` | You already own this subscription. Please restore your purchase instead. |
+| `networkError (12)` | Network error. Please check your internet connection and try again. |
+
+## Server Verification Flow
+
+The complete flow for verifying a purchase with the backend:
+
+```dart
+// 1. Query available products
+final products = await InAppPurchase.instance.queryProductDetails({'premium_monthly'});
+
+// 2. Purchase
+await InAppPurchase.instance.buyNonConsumable(purchaseParam: PurchaseParam(productDetails: product));
+
+// 3. Verify with server
+final response = await api.post('/subscriptions/verify', {
+  'productId': purchase.productID,
+  'purchaseToken': purchase.purchaseID,
+  'provider': 'GOOGLE_PAY',
+});
+
+// 4. Complete purchase
+await InAppPurchase.instance.completePurchase(purchase);
+```
+
 ## Models
 
 ### PlanModel
