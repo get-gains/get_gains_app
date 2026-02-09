@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.getgains.app"
+    namespace = "com.getgains.get_gains_app"
     compileSdk = 36
     // Unity 6000.0 requires NDK r27c (27.2.12479018)
     ndkVersion = "27.2.12479018"
@@ -22,7 +22,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.getgains.app"
+        applicationId = "com.getgains.get_gains_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // Unity 6000.0 requires minSdk 34
