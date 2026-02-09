@@ -220,42 +220,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               context.push(AppRoutes.unityTest);
             }
           },
-          child: Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              gradient: AppColors.primaryGradient,
-              borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primaryDark.withOpacity(0.4),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.fitness_center_rounded,
-              size: 40,
-              color: Colors.white,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+            child: Image.asset(
+              'assets/images/logo.jpg',
+              width: 150,
+              height: 150,
+              fit: BoxFit.cover,
             ),
           ),
         ),
 
         const SizedBox(height: 24),
-
-        // App Name
-        Text(
-          'Get Gains',
-          style: TextStyle(
-            fontSize: 32,
-            fontWeight: FontWeight.w700,
-            color: isDark
-                ? AppColors.foregroundDark
-                : AppColors.foregroundLight,
-            letterSpacing: -0.5,
-          ),
-        ),
 
         const SizedBox(height: 8),
 
