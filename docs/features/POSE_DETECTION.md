@@ -1,7 +1,7 @@
 # Pose Detection - Flutter App Implementation Plan
 
 > **Status**: 🔮 Not Implemented  
-> **Last Updated**: February 6, 2026  
+> **Last Updated**: February 11, 2026  
 > **Covers**: Camera Recording, MLKit Pose Detection, Feature Extraction, DTW Comparison, Limb Isolation, Offline Caching, Score & Corrections Display  
 > **Depends On**: [CONTEXT.md](../CONTEXT.md), [Server POSE_DETECTION.md](../../get-gains-server/docs/features/POSE_DETECTION.md)
 
@@ -241,8 +241,8 @@ lib/features/pose_detection/
 @freezed
 abstract class LandmarkPoint with _$LandmarkPoint {
   const factory LandmarkPoint({
-    required double x,          // Normalized 0.0-1.0
-    required double y,          // Normalized 0.0-1.0
+    required double x,          // Normalized by image width  — usually 0.0-1.0 but can exceed for out-of-frame landmarks
+    required double y,          // Normalized by image height — usually 0.0-1.0 but can exceed for out-of-frame landmarks
     required double z,          // Depth estimate
     required double confidence, // 0.0-1.0
   }) = _LandmarkPoint;
@@ -250,6 +250,12 @@ abstract class LandmarkPoint with _$LandmarkPoint {
   factory LandmarkPoint.fromJson(Map<String, dynamic> json) =>
       _$LandmarkPointFromJson(json);
 }
+// NOTE: On Android, the camera sensor is landscape (e.g. 1920×1080) while
+// the phone is held portrait.  MLKit returns coordinates in the *rotated*
+// (upright) space.  PoseDetectionService._poseToLandmarkFrame() swaps
+// imageWidth/imageHeight for 90°/270° rotations so that normalization
+// produces correct 0–1 values.  The server schema allows [-1.0, 3.0] as a
+// safety net for edge cases.
 
 // landmark_frame_model.dart
 @freezed
@@ -397,41 +403,66 @@ abstract class Correction with _$Correction {
 
 ### 1. `PoseDetectionService` — MLKit Wrapper
 
-Wraps `google_mlkit_pose_detection` for batch processing of video frames.
+Wraps `google_mlkit_pose_detection` for **live** camera frame processing.
+
+> **Implementation Status**: ✅ Implemented in `/lib/features/coach_pose/services/pose_detection_service.dart`
 
 ```dart
 /// Responsibilities:
-/// - Initialize MLKit PoseDetector with appropriate settings
-/// - Process a single image and return landmark data
-/// - Batch process a list of video frames
-/// - Handle detection failures gracefully (retry or skip frame)
+/// - Initialize MLKit PoseDetector (mode=single, model=base)
+/// - Process live camera frames one at a time (skips if busy)
+/// - Warm up the detector with a synthetic image on startup
+/// - Convert MLKit Pose → LandmarkFrame with rotation-aware normalization
+/// - Auto-recreate detector on timeout (handles GPU deadlocks)
+/// - Resource cleanup
+///
+/// NOTE: Uses PoseDetectionMode.single intentionally. The `stream` mode
+/// enables GPU acceleration (MediaPipe GPU delegate) which deadlocks with
+/// CameraX on many Android devices (especially Mali GPUs). `single` mode
+/// uses CPU-only TFLite inference — slower per frame (~50-100ms) but reliable.
+/// Since we only process every 10th frame during setup and every 3rd during
+/// recording, this is fast enough.
 class PoseDetectionService {
-  late final PoseDetector _poseDetector;
+  PoseDetectionService() { _initDetector(); }
 
-  PoseDetectionService() {
+  late PoseDetector _poseDetector;
+
+  void _initDetector() {
     _poseDetector = PoseDetector(
       options: PoseDetectorOptions(
-        mode: PoseDetectionMode.single, // Single image mode for post-processing
-        model: PoseDetectionModel.accurate, // Accuracy over speed (post-recording)
+        mode: PoseDetectionMode.single,
+        model: PoseDetectionModel.base,
       ),
     );
   }
 
-  /// Process a single image frame → List<PoseLandmark>
-  Future<LandmarkFrame?> detectPose(InputImage image, int timestampMs);
+  /// Warm up the detector by processing a tiny synthetic image.
+  Future<void> warmUp();
 
-  /// Process batch of frames with progress callback
-  /// Returns only frames where detection succeeded
-  Future<List<LandmarkFrame>> detectPosesBatch(
-    List<VideoFrame> frames, {
-    required Function(double progress) onProgress,
-    int maxRetries = 2,
+  /// Process a single camera frame → LandmarkFrame?
+  /// Returns null if busy or no pose detected.
+  Future<LandmarkFrame?> processFrame(
+    CameraImage image,
+    InputImageRotation rotation,
+    int timestampMs,
+  );
+
+  /// Convert MLKit Pose → LandmarkFrame with rotation-aware normalization.
+  ///
+  /// IMPORTANT: MLKit returns pixel coordinates in the *rotated* (upright)
+  /// coordinate space.  On Android the camera sensor is typically landscape
+  /// (e.g. 1920×1080) while the phone is held portrait (rotation 90°/270°).
+  /// We swap imageWidth/imageHeight for these rotations so normalization
+  /// divides by the correct dimension, keeping x/y values in the ~0–1 range.
+  /// Without this swap, lower-body y-values exceed 1.5 (e.g. 1700/1080 ≈ 1.57)
+  /// and fail server-side validation.
+  LandmarkFrame _poseToLandmarkFrame(
+    Pose pose, int timestampMs,
+    double imageWidth, double imageHeight, {
+    InputImageRotation rotation = InputImageRotation.rotation0deg,
   });
 
-  /// Convert MLKit PoseLandmark list to our LandmarkFrame model
-  LandmarkFrame _convertToLandmarkFrame(List<PoseLandmark> mlkitLandmarks, int timestampMs);
-
-  void dispose() => _poseDetector.close();
+  Future<void> dispose() => _poseDetector.close();
 }
 ```
 
