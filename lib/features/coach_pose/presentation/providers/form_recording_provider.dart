@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/utils/logger.dart';
@@ -13,12 +15,23 @@ part 'form_recording_provider.g.dart';
 enum RecordingPhase {
   idle,
   setupGuidance,
+  countdown,
   recording,
   processing,
   uploading,
   complete,
   error,
 }
+
+/// Duration of the pre-recording countdown in seconds.
+const kCountdownDurationSeconds = 10;
+
+/// Maximum recording duration in seconds. Recording auto-stops after this.
+const kMaxRecordingDurationSeconds = 7;
+
+/// How many consecutive seconds all setup checks must pass before the
+/// countdown starts automatically.
+const kAutoStartDelaySeconds = 3;
 
 /// Full state for the form recording flow.
 class FormRecordingState {
@@ -34,6 +47,7 @@ class FormRecordingState {
     this.recordingDurationMs = 0,
     this.frameCount = 0,
     this.processingProgress = 0.0,
+    this.countdownSeconds = 0,
     this.errorMessage,
     this.uploadedForm,
   });
@@ -49,6 +63,7 @@ class FormRecordingState {
   final int recordingDurationMs;
   final int frameCount;
   final double processingProgress; // 0.0 to 1.0
+  final int countdownSeconds;
   final String? errorMessage;
   final ExerciseFormModel? uploadedForm;
 
@@ -57,6 +72,7 @@ class FormRecordingState {
       (setupValidation?.allPassed ?? false);
 
   bool get isRecording => phase == RecordingPhase.recording;
+  bool get isCountingDown => phase == RecordingPhase.countdown;
 
   FormRecordingState copyWith({
     RecordingPhase? phase,
@@ -70,6 +86,7 @@ class FormRecordingState {
     int? recordingDurationMs,
     int? frameCount,
     double? processingProgress,
+    int? countdownSeconds,
     String? errorMessage,
     bool clearError = false,
     ExerciseFormModel? uploadedForm,
@@ -86,6 +103,7 @@ class FormRecordingState {
       recordingDurationMs: recordingDurationMs ?? this.recordingDurationMs,
       frameCount: frameCount ?? this.frameCount,
       processingProgress: processingProgress ?? this.processingProgress,
+      countdownSeconds: countdownSeconds ?? this.countdownSeconds,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       uploadedForm: uploadedForm ?? this.uploadedForm,
     );
@@ -99,12 +117,23 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
   late LandmarkPreprocessor _preprocessor;
   late FeatureExtractor _featureExtractor;
   late SetupValidationService _setupValidator;
+  Timer? _countdownTimer;
+  Timer? _recordingTimer;
+
+  /// Tracks when all setup checks first started passing continuously.
+  /// Reset to `null` whenever a check fails.
+  DateTime? _setupStableSince;
 
   @override
   FormRecordingState build(String exerciseId) {
     _preprocessor = LandmarkPreprocessor();
     _featureExtractor = FeatureExtractor();
     _setupValidator = SetupValidationService();
+
+    ref.onDispose(() {
+      _countdownTimer?.cancel();
+      _recordingTimer?.cancel();
+    });
 
     return FormRecordingState(exerciseId: exerciseId);
   }
@@ -150,26 +179,107 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
     );
 
     state = state.copyWith(setupValidation: validation);
+
+    // --- Auto-start countdown after checks pass for kAutoStartDelaySeconds ---
+    if (state.phase == RecordingPhase.setupGuidance) {
+      if (validation.allPassed) {
+        _setupStableSince ??= DateTime.now();
+        final stableMs = DateTime.now()
+            .difference(_setupStableSince!)
+            .inMilliseconds;
+        if (stableMs >= kAutoStartDelaySeconds * 1000) {
+          AppLogger.info(
+            'All checks stable for ${kAutoStartDelaySeconds}s — auto-starting countdown',
+            tag: 'FormRecording',
+          );
+          startCountdown();
+        }
+      } else {
+        // Reset whenever any check fails
+        _setupStableSince = null;
+      }
+    }
   }
 
-  /// Transition from setup to active recording.
-  void startRecording() {
+  /// Start the pre-recording countdown (10 seconds by default).
+  ///
+  /// The countdown gives the coach time to get into position after
+  /// tapping the record button. When it reaches zero, recording begins
+  /// automatically.
+  void startCountdown() {
     if (!state.canStartRecording) {
       AppLogger.warning(
-        'Cannot start recording — setup checks not passed',
+        'Cannot start countdown — setup checks not passed',
         tag: 'FormRecording',
       );
       return;
     }
+
+    _countdownTimer?.cancel();
+
+    state = state.copyWith(
+      phase: RecordingPhase.countdown,
+      countdownSeconds: kCountdownDurationSeconds,
+      clearError: true,
+    );
+
+    AppLogger.info(
+      'Countdown started (${kCountdownDurationSeconds}s)',
+      tag: 'FormRecording',
+    );
+
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final remaining = state.countdownSeconds - 1;
+      if (remaining <= 0) {
+        _countdownTimer?.cancel();
+        _beginRecording();
+      } else {
+        state = state.copyWith(countdownSeconds: remaining);
+      }
+    });
+  }
+
+  /// Cancel the countdown and return to setup guidance.
+  void cancelCountdown() {
+    _countdownTimer?.cancel();
+    _setupStableSince = null;
+    state = state.copyWith(
+      phase: RecordingPhase.setupGuidance,
+      countdownSeconds: 0,
+    );
+    AppLogger.info('Countdown cancelled', tag: 'FormRecording');
+  }
+
+  /// Internal: transition from countdown to active recording.
+  void _beginRecording() {
+    _recordingTimer?.cancel();
 
     state = state.copyWith(
       phase: RecordingPhase.recording,
       rawFrames: [],
       recordingStartMs: DateTime.now().millisecondsSinceEpoch,
       frameCount: 0,
+      countdownSeconds: 0,
     );
 
-    AppLogger.info('Recording started', tag: 'FormRecording');
+    // Auto-stop after kMaxRecordingDurationSeconds
+    _recordingTimer = Timer(
+      Duration(seconds: kMaxRecordingDurationSeconds),
+      () {
+        if (state.phase == RecordingPhase.recording) {
+          AppLogger.info(
+            'Auto-stopping recording after ${kMaxRecordingDurationSeconds}s',
+            tag: 'FormRecording',
+          );
+          stopRecording();
+        }
+      },
+    );
+
+    AppLogger.info(
+      'Recording started (auto-stop in ${kMaxRecordingDurationSeconds}s)',
+      tag: 'FormRecording',
+    );
   }
 
   /// Add a frame captured during recording.
@@ -185,6 +295,7 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
   /// Stop recording and begin processing.
   Future<void> stopRecording() async {
     if (state.phase != RecordingPhase.recording) return;
+    _recordingTimer?.cancel();
 
     final endMs = DateTime.now().millisecondsSinceEpoch;
     final durationMs = endMs - (state.recordingStartMs ?? endMs);
@@ -203,35 +314,45 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
     await _processFrames();
   }
 
-  /// Process recorded frames: preprocess → extract features.
+  /// Process recorded frames: filter+smooth → extract features → normalize.
   Future<void> _processFrames() async {
     try {
-      // Step 1: Preprocess landmarks (filter, smooth, normalize)
-      state = state.copyWith(processingProgress: 0.2);
-      final processed = _preprocessor.processBatch(state.rawFrames);
+      // Step 1: Filter low-confidence landmarks + smooth
+      state = state.copyWith(processingProgress: 0.1);
+      final filtered = state.rawFrames
+          .map(_preprocessor.filterByConfidence)
+          .toList();
+      final smoothed = _preprocessor.smoothFrames(filtered);
 
       state = state.copyWith(
-        processedFrames: processed,
-        processingProgress: 0.5,
+        processedFrames: smoothed,
+        processingProgress: 0.3,
       );
 
-      // Step 2: Extract features (joint angles)
-      final features = _featureExtractor.extractBatch(processed);
+      // Step 2: Extract features (joint angles) from smoothed frames
+      final features = _featureExtractor.extractBatch(smoothed);
 
-      state = state.copyWith(featureFrames: features, processingProgress: 0.8);
+      state = state.copyWith(featureFrames: features, processingProgress: 0.5);
 
-      // Step 3: Move to upload phase
+      // Step 3: Normalize (Procrustes) for the normalizedFrames payload
+      final normalized = smoothed.map(_preprocessor.normalize).toList();
+
+      state = state.copyWith(processingProgress: 0.8);
+
+      // Step 4: Move to upload phase
       state = state.copyWith(
         phase: RecordingPhase.uploading,
         processingProgress: 1.0,
       );
 
       AppLogger.info(
-        'Processing complete: ${processed.length} frames, ${features.length} feature frames',
+        'Processing complete: ${smoothed.length} frames, '
+        '${features.length} feature frames, '
+        '${normalized.length} normalized frames',
         tag: 'FormRecording',
       );
 
-      await _uploadForm();
+      await _uploadForm(normalizedFrames: normalized);
     } catch (e) {
       AppLogger.error('Processing failed', tag: 'FormRecording', error: e);
       state = state.copyWith(
@@ -242,7 +363,7 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
   }
 
   /// Upload the processed form to the server.
-  Future<void> _uploadForm() async {
+  Future<void> _uploadForm({List<LandmarkFrame>? normalizedFrames}) async {
     try {
       final repo = ref.read(coachPoseRepositoryProvider);
 
@@ -274,7 +395,7 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
         totalFrames: state.rawFrames.length,
         landmarkFrames: state.processedFrames.map((f) => f.toJson()).toList(),
         featureFrames: state.featureFrames.map((f) => f.toJson()).toList(),
-        normalizedFrames: state.processedFrames.map((f) => f.toJson()).toList(),
+        normalizedFrames: normalizedFrames?.map((f) => f.toJson()).toList(),
         avgLandmarkConfidence: avgConfidence,
         recordingQuality: _assessQuality(avgConfidence),
       );
@@ -319,6 +440,9 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
 
   /// Reset to idle state for a fresh recording.
   void reset() {
+    _countdownTimer?.cancel();
+    _recordingTimer?.cancel();
+    _setupStableSince = null;
     state = FormRecordingState(exerciseId: state.exerciseId);
   }
 

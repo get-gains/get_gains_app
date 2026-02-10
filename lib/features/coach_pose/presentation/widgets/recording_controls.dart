@@ -10,11 +10,13 @@ class RecordingControls extends StatelessWidget {
     required this.state,
     required this.onStartRecording,
     required this.onStopRecording,
+    required this.onCancelCountdown,
   });
 
   final FormRecordingState state;
   final VoidCallback onStartRecording;
   final VoidCallback onStopRecording;
+  final VoidCallback onCancelCountdown;
 
   @override
   Widget build(BuildContext context) {
@@ -85,6 +87,14 @@ class RecordingControls extends StatelessWidget {
                     onPressed: onStartRecording,
                     isDark: isDark,
                   )
+                else if (state.isCountingDown)
+                  _RecordButton(
+                    enabled: true,
+                    isRecording: false,
+                    onPressed: onCancelCountdown,
+                    isDark: isDark,
+                    isCountdown: true,
+                  )
                 else if (state.isRecording)
                   _RecordButton(
                     enabled: true,
@@ -101,8 +111,10 @@ class RecordingControls extends StatelessWidget {
             Text(
               state.isRecording
                   ? 'Tap to stop recording'
+                  : state.isCountingDown
+                  ? 'Recording starts in ${state.countdownSeconds}s — tap to cancel'
                   : state.canStartRecording
-                  ? 'All checks passed — tap to start'
+                  ? 'All checks passed — starting soon...'
                   : 'Complete all setup checks to begin',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: isDark
@@ -131,12 +143,14 @@ class _RecordButton extends StatelessWidget {
     required this.isRecording,
     required this.onPressed,
     required this.isDark,
+    this.isCountdown = false,
   });
 
   final bool enabled;
   final bool isRecording;
   final VoidCallback onPressed;
   final bool isDark;
+  final bool isCountdown;
 
   @override
   Widget build(BuildContext context) {
@@ -156,11 +170,17 @@ class _RecordButton extends StatelessWidget {
         child: Center(
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            width: isRecording ? 28 : 56,
-            height: isRecording ? 28 : 56,
+            width: isRecording || isCountdown ? 28 : 56,
+            height: isRecording || isCountdown ? 28 : 56,
             decoration: BoxDecoration(
-              color: enabled ? Colors.red : Colors.red.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(isRecording ? 6 : 28),
+              color: isCountdown
+                  ? (enabled
+                        ? Colors.orange
+                        : Colors.orange.withValues(alpha: 0.3))
+                  : (enabled ? Colors.red : Colors.red.withValues(alpha: 0.3)),
+              borderRadius: BorderRadius.circular(
+                isRecording || isCountdown ? 6 : 28,
+              ),
             ),
           ),
         ),
