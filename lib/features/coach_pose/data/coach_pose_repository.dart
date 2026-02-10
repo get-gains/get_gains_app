@@ -291,8 +291,12 @@ class CoachPoseRepository {
     );
   }
 
-  /// Get pose config for an exercise
-  Future<Result<PoseConfigModel, AppError>> getPoseConfig(
+  /// Get pose config for an exercise.
+  ///
+  /// Returns `null` inside [Success] when the server responds with 404
+  /// (config doesn't exist yet). This is expected for newly-created
+  /// exercises that have never had a config set.
+  Future<Result<PoseConfigModel?, AppError>> getPoseConfig(
     String exerciseId,
   ) async {
     final result = await _apiClient.get<Map<String, dynamic>>(
@@ -315,7 +319,17 @@ class CoachPoseRepository {
           return Failure(UnknownError(message: 'Failed to parse config: $e'));
         }
       },
-      failure: (error) => Failure(error),
+      failure: (error) {
+        // 404 means no config exists yet — perfectly normal for new exercises
+        if (error is NetworkError && error.statusCode == 404) {
+          AppLogger.debug(
+            'No pose config exists yet for exercise $exerciseId',
+            tag: 'CoachPoseRepo',
+          );
+          return const Success(null);
+        }
+        return Failure(error);
+      },
     );
   }
 }
