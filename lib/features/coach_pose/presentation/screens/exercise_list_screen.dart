@@ -60,9 +60,7 @@ class _ExerciseListScreenState extends ConsumerState<ExerciseListScreen> {
                         icon: const Icon(Icons.clear),
                         onPressed: () {
                           _searchController.clear();
-                          ref
-                              .read(exerciseListProvider.notifier)
-                              .search('');
+                          ref.read(exerciseListProvider.notifier).search('');
                         },
                       )
                     : null,
@@ -80,9 +78,7 @@ class _ExerciseListScreenState extends ConsumerState<ExerciseListScreen> {
                 ),
               ),
               onChanged: (value) {
-                ref
-                    .read(exerciseListProvider.notifier)
-                    .search(value);
+                ref.read(exerciseListProvider.notifier).search(value);
               },
             ),
           ),
@@ -99,14 +95,14 @@ class _ExerciseListScreenState extends ConsumerState<ExerciseListScreen> {
           const SizedBox(height: 8),
 
           // Exercise list
-          Expanded(
-            child: _buildContent(state, isDark),
-          ),
+          Expanded(child: _buildContent(state, isDark)),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push(AppRoutes.createExercise),
-        backgroundColor: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+        backgroundColor: isDark
+            ? AppColors.primaryDark
+            : AppColors.primaryLight,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: const Text('New Exercise'),
@@ -137,9 +133,8 @@ class _ExerciseListScreenState extends ConsumerState<ExerciseListScreen> {
             ),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () => ref
-                  .read(exerciseListProvider.notifier)
-                  .refresh(),
+              onPressed: () =>
+                  ref.read(exerciseListProvider.notifier).refresh(),
               child: const Text('Retry'),
             ),
           ],
@@ -158,9 +153,7 @@ class _ExerciseListScreenState extends ConsumerState<ExerciseListScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: () => ref
-          .read(exerciseListProvider.notifier)
-          .refresh(),
+      onRefresh: () => ref.read(exerciseListProvider.notifier).refresh(),
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
         itemCount: state.exercises.length + (state.hasMore ? 1 : 0),
@@ -169,9 +162,9 @@ class _ExerciseListScreenState extends ConsumerState<ExerciseListScreen> {
           if (index >= state.exercises.length) {
             // Load more indicator
             if (!state.isLoading) {
-              Future.microtask(() => ref
-                  .read(exerciseListProvider.notifier)
-                  .loadMore());
+              Future.microtask(
+                () => ref.read(exerciseListProvider.notifier).loadMore(),
+              );
             }
             return const Center(
               child: Padding(
@@ -187,6 +180,7 @@ class _ExerciseListScreenState extends ConsumerState<ExerciseListScreen> {
             onTap: () {
               context.push(
                 AppRoutes.exerciseDetail.replaceFirst(':id', exercise.id),
+                extra: exercise,
               );
             },
           );
