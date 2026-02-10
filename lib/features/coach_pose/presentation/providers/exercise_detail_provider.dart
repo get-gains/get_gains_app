@@ -93,12 +93,19 @@ class ExerciseDetailNotifier extends _$ExerciseDetailNotifier {
 
     configResult.when(
       success: (config) {
-        state = state.copyWith(poseConfig: config);
+        if (config != null) {
+          state = state.copyWith(poseConfig: config);
+        } else {
+          state = state.copyWith(clearPoseConfig: true);
+          AppLogger.debug(
+            'No pose config for $exerciseId yet',
+            tag: 'ExerciseDetail',
+          );
+        }
       },
       failure: (error) {
-        // Config may not exist yet — that's OK
-        AppLogger.debug(
-          'No pose config for $exerciseId',
+        AppLogger.warning(
+          'Failed to load pose config for $exerciseId: ${error.message}',
           tag: 'ExerciseDetail',
         );
       },

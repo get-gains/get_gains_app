@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:camera/camera.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../../core/utils/logger.dart';
 import 'package:flutter/material.dart';
@@ -30,7 +31,9 @@ class FormRecordingScreen extends ConsumerStatefulWidget {
 
 class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
   CameraController? _cameraController;
+  List<CameraDescription> _cameras = [];
   bool _isCameraInitialized = false;
+  bool _isFlipping = false;
   int _frameCount = 0;
   bool _isStreamingImages = false;
   bool _isProcessingSetupFrame = false;
@@ -38,42 +41,25 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
   @override
   void initState() {
     super.initState();
+    WakelockPlus.enable();
     _initCamera();
   }
 
   Future<void> _initCamera() async {
     try {
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) {
+      _cameras = await availableCameras();
+      if (_cameras.isEmpty) {
         _showError('No cameras available');
         return;
       }
 
       // Prefer back camera for form recording
-      final camera = cameras.firstWhere(
+      final camera = _cameras.firstWhere(
         (c) => c.lensDirection == CameraLensDirection.back,
-        orElse: () => cameras.first,
+        orElse: () => _cameras.first,
       );
 
-      AppLogger.info(
-        'Initializing camera: ${camera.name}, lens=${camera.lensDirection}, '
-        'sensor=${camera.sensorOrientation}°',
-        tag: 'FormRecording',
-      );
-
-      _cameraController = CameraController(
-        camera,
-        ResolutionPreset.high,
-        enableAudio: false,
-        imageFormatGroup: ImageFormatGroup.nv21,
-      );
-
-      await _cameraController!.initialize();
-
-      AppLogger.info(
-        'Camera initialized: ${_cameraController!.value.previewSize}',
-        tag: 'FormRecording',
-      );
+      await _setupCameraController(camera);
 
       if (mounted) {
         setState(() => _isCameraInitialized = true);
@@ -96,7 +82,6 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
         );
 
         if (mounted) {
-          // Start a single continuous image stream for setup checks
           _startImageStream();
         }
       }
@@ -109,6 +94,80 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
       _showError('Camera initialization failed: $e');
     }
   }
+
+  /// Create and initialise a [CameraController] for the given [camera].
+  Future<void> _setupCameraController(CameraDescription camera) async {
+    AppLogger.info(
+      'Initializing camera: ${camera.name}, lens=${camera.lensDirection}, '
+      'sensor=${camera.sensorOrientation}°',
+      tag: 'FormRecording',
+    );
+
+    _cameraController = CameraController(
+      camera,
+      ResolutionPreset.high,
+      enableAudio: false,
+      imageFormatGroup: ImageFormatGroup.nv21,
+    );
+
+    await _cameraController!.initialize();
+
+    AppLogger.info(
+      'Camera initialized: ${_cameraController!.value.previewSize}',
+      tag: 'FormRecording',
+    );
+  }
+
+  /// Toggle between front and back cameras.
+  Future<void> _flipCamera() async {
+    if (_cameras.length < 2 || _isFlipping) return;
+
+    final state = ref.read(formRecordingProvider(widget.exerciseId));
+    // Only allow flipping during setup or idle
+    if (state.phase != RecordingPhase.setupGuidance &&
+        state.phase != RecordingPhase.idle) {
+      return;
+    }
+
+    _isFlipping = true;
+
+    final currentDirection = _cameraController?.description.lensDirection;
+    final targetDirection = currentDirection == CameraLensDirection.back
+        ? CameraLensDirection.front
+        : CameraLensDirection.back;
+
+    final targetCamera = _cameras.firstWhere(
+      (c) => c.lensDirection == targetDirection,
+      orElse: () => _cameras.first,
+    );
+
+    AppLogger.info(
+      'Flipping camera: $currentDirection → $targetDirection',
+      tag: 'FormRecording',
+    );
+
+    try {
+      await _stopImageStream();
+      await _cameraController?.dispose();
+
+      setState(() => _isCameraInitialized = false);
+
+      await _setupCameraController(targetCamera);
+
+      if (mounted) {
+        setState(() => _isCameraInitialized = true);
+        _startImageStream();
+      }
+    } catch (e) {
+      AppLogger.error('Flip camera failed', tag: 'FormRecording', error: e);
+      _showError('Failed to switch camera: $e');
+    } finally {
+      _isFlipping = false;
+    }
+  }
+
+  /// Whether more than one camera is available (front + back).
+  bool get _canFlipCamera => _cameras.length >= 2;
 
   /// Start a single continuous image stream.
   /// During setup: processes every ~10th frame for validation.
@@ -129,8 +188,9 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
 
       final state = ref.read(formRecordingProvider(widget.exerciseId));
 
-      if (state.phase == RecordingPhase.setupGuidance) {
-        // During setup: process every 10th frame (~3 checks/sec at 30fps)
+      if (state.phase == RecordingPhase.setupGuidance ||
+          state.phase == RecordingPhase.countdown) {
+        // During setup/countdown: process every 10th frame (~3 checks/sec at 30fps)
         if (_frameCount % 10 == 0) {
           _processSetupFrame(image);
         }
@@ -209,16 +269,22 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
   }
 
   void _startRecording() {
-    // Stream is already running — just transition the state machine.
-    // The stream callback checks state.phase and switches to recording mode.
+    // Stream is already running — start the countdown, which will
+    // auto-transition to recording once it reaches zero.
     ref
         .read(formRecordingProvider(widget.exerciseId).notifier)
-        .startRecording();
+        .startCountdown();
 
     AppLogger.info(
-      'Recording started — stream continues',
+      'Countdown started — stream continues',
       tag: 'FormRecording',
     );
+  }
+
+  void _cancelCountdown() {
+    ref
+        .read(formRecordingProvider(widget.exerciseId).notifier)
+        .cancelCountdown();
   }
 
   Future<void> _stopRecording() async {
@@ -256,6 +322,7 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
   void dispose() {
     _stopImageStream();
     _cameraController?.dispose();
+    WakelockPlus.disable();
     super.dispose();
   }
 
@@ -264,13 +331,19 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
     final state = ref.watch(formRecordingProvider(widget.exerciseId));
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Listen for completion/error
+    // Listen for phase transitions
     ref.listen<FormRecordingState>(formRecordingProvider(widget.exerciseId), (
       previous,
       next,
     ) {
       if (next.phase == RecordingPhase.complete) {
         _showSuccess(context, isDark);
+      }
+      // When the provider auto-stops recording (transitions to processing),
+      // we need to stop the camera image stream from the screen side.
+      if (previous?.phase == RecordingPhase.recording &&
+          next.phase == RecordingPhase.processing) {
+        _stopImageStream();
       }
     });
 
@@ -285,6 +358,15 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
           onPressed: () => _confirmExit(context),
         ),
         actions: [
+          // Flip camera (front/back)
+          if (_canFlipCamera &&
+              (state.phase == RecordingPhase.setupGuidance ||
+                  state.phase == RecordingPhase.idle))
+            IconButton(
+              icon: const Icon(Icons.flip_camera_ios, color: Colors.white),
+              tooltip: 'Flip camera',
+              onPressed: _flipCamera,
+            ),
           // Camera angle selector
           if (state.phase == RecordingPhase.setupGuidance)
             PopupMenuButton<CameraAngle>(
@@ -383,6 +465,15 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
             child: SetupChecklist(validation: state.setupValidation),
           ),
 
+        // Countdown overlay
+        if (state.isCountingDown)
+          Positioned.fill(
+            child: _CountdownOverlay(
+              seconds: state.countdownSeconds,
+              onCancel: _cancelCountdown,
+            ),
+          ),
+
         // Recording indicator
         if (state.isRecording)
           Positioned(
@@ -451,11 +542,13 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
 
   Widget _buildBottomSection(FormRecordingState state, bool isDark) {
     if (state.phase == RecordingPhase.setupGuidance ||
+        state.phase == RecordingPhase.countdown ||
         state.phase == RecordingPhase.recording) {
       return RecordingControls(
         state: state,
         onStartRecording: _startRecording,
         onStopRecording: _stopRecording,
+        onCancelCountdown: _cancelCountdown,
       );
     }
 
@@ -466,6 +559,7 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
     return switch (phase) {
       RecordingPhase.idle => 'Record Form',
       RecordingPhase.setupGuidance => 'Setup',
+      RecordingPhase.countdown => 'Get Ready',
       RecordingPhase.recording => 'Recording',
       RecordingPhase.processing => 'Processing...',
       RecordingPhase.uploading => 'Uploading...',
@@ -480,6 +574,13 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
     if (state.phase == RecordingPhase.idle ||
         state.phase == RecordingPhase.complete ||
         state.phase == RecordingPhase.error) {
+      context.pop();
+      return;
+    }
+
+    // If in countdown, just cancel and exit
+    if (state.phase == RecordingPhase.countdown) {
+      _cancelCountdown();
       context.pop();
       return;
     }
@@ -645,61 +746,134 @@ class _ErrorOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Truncate very long error messages (e.g. multi-field validation errors)
+    final displayMessage = message.length > 200
+        ? '${message.substring(0, 200)}…'
+        : message;
+
     return Container(
       color: Colors.black87,
       padding: const EdgeInsets.all(32),
       child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, color: AppColors.error, size: 64),
-            const SizedBox(height: 16),
-            Text(
-              'Something went wrong',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, color: AppColors.error, size: 64),
+              const SizedBox(height: 16),
+              Text(
+                'Something went wrong',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                displayMessage,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
+                textAlign: TextAlign.center,
+                maxLines: 6,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  OutlinedButton(
+                    onPressed: onReset,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: Colors.white54),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('Start Over'),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: onRetry,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryDark,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('Retry Upload'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Full-screen countdown overlay shown before recording begins.
+class _CountdownOverlay extends StatelessWidget {
+  const _CountdownOverlay({required this.seconds, required this.onCancel});
+
+  final int seconds;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.black.withValues(alpha: 0.5),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Large countdown number
+          TweenAnimationBuilder<double>(
+            key: ValueKey(seconds),
+            tween: Tween(begin: 1.2, end: 1.0),
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+            builder: (context, scale, child) =>
+                Transform.scale(scale: scale, child: child),
+            child: Text(
+              '$seconds',
+              style: const TextStyle(
                 color: Colors.white,
+                fontSize: 120,
                 fontWeight: FontWeight.bold,
+                height: 1,
+                shadows: [
+                  Shadow(
+                    color: Colors.black54,
+                    blurRadius: 20,
+                    offset: Offset(0, 4),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
-              textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Get into position',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: Colors.white.withValues(alpha: 0.9),
+              fontWeight: FontWeight.w500,
             ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                OutlinedButton(
-                  onPressed: onReset,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white54),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text('Start Over'),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: onRetry,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryDark,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text('Retry Upload'),
-                ),
-              ],
+          ),
+          const SizedBox(height: 32),
+          TextButton.icon(
+            onPressed: onCancel,
+            icon: const Icon(Icons.close, size: 18),
+            label: const Text('Cancel'),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white70,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
