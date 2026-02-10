@@ -60,6 +60,7 @@ dependencies:
   hive_flutter: ^1.1.0
   in_app_purchase: ^3.2.3
   sentry_flutter: ^9.11.0
+  wakelock_plus: ^1.4.0
 
 dev_dependencies:
   flutter_test:
