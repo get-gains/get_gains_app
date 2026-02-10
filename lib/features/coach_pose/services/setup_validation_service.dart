@@ -25,19 +25,18 @@ class SetupValidationResult {
 ///
 /// Validates:
 /// - Body visibility (key landmarks detected)
-/// - Distance estimation (body size within range)
 /// - Confidence quality (average landmark confidence)
+///
+/// Distance is intentionally NOT checked — as long as the full body is
+/// visible and landmark confidence is good, the normalisation step in
+/// [LandmarkPreprocessor] handles scale differences.
 class SetupValidationService {
   SetupValidationService({
     this.minConfidence = 0.5,
-    this.minBodyRatio = 0.3,
-    this.maxBodyRatio = 0.9,
     this.requiredLandmarks = _defaultRequiredLandmarks,
   });
 
   final double minConfidence;
-  final double minBodyRatio;
-  final double maxBodyRatio;
   final List<String> requiredLandmarks;
 
   static const List<String> _defaultRequiredLandmarks = [
@@ -67,11 +66,6 @@ class SetupValidationService {
             message: 'Waiting for body detection...',
           ),
           const SetupCheck(
-            name: 'Good Distance',
-            passed: false,
-            message: 'Waiting for body detection...',
-          ),
-          const SetupCheck(
             name: 'Detection Quality',
             passed: false,
             message: 'Waiting for body detection...',
@@ -84,7 +78,6 @@ class SetupValidationService {
       checks: [
         _checkBodyDetected(frame),
         _checkFullBodyVisible(frame),
-        _checkDistance(frame),
         _checkConfidence(frame),
       ],
     );
@@ -117,48 +110,6 @@ class SetupValidationService {
           ? 'Full body in frame'
           : 'Some body parts not visible. Adjust camera position.',
     );
-  }
-
-  /// Check if the person is at an appropriate distance from the camera.
-  ///
-  /// Estimates distance by the vertical span of the body
-  /// (shoulder to ankle ratio within the frame).
-  SetupCheck _checkDistance(LandmarkFrame frame) {
-    final leftShoulder = frame.landmarks['LEFT_SHOULDER'];
-    final rightShoulder = frame.landmarks['RIGHT_SHOULDER'];
-    final leftAnkle = frame.landmarks['LEFT_ANKLE'];
-    final rightAnkle = frame.landmarks['RIGHT_ANKLE'];
-
-    if (leftShoulder == null ||
-        rightShoulder == null ||
-        leftAnkle == null ||
-        rightAnkle == null) {
-      return const SetupCheck(
-        name: 'Good Distance',
-        passed: false,
-        message: 'Cannot determine distance. Ensure full body is visible.',
-      );
-    }
-
-    // Approximate body height ratio in frame (using normalized coords)
-    final shoulderY = (leftShoulder.y + rightShoulder.y) / 2;
-    final ankleY = (leftAnkle.y + rightAnkle.y) / 2;
-    final bodyRatio = (ankleY - shoulderY).abs();
-
-    String? message;
-    bool passed = true;
-
-    if (bodyRatio < minBodyRatio) {
-      passed = false;
-      message = 'Too far away. Move closer to the camera.';
-    } else if (bodyRatio > maxBodyRatio) {
-      passed = false;
-      message = 'Too close. Move further from the camera.';
-    } else {
-      message = 'Good distance from camera';
-    }
-
-    return SetupCheck(name: 'Good Distance', passed: passed, message: message);
   }
 
   /// Check average landmark confidence is above threshold.
