@@ -34,10 +34,19 @@ class ApiConstants {
   static const String updateProfile = '/users/profile';
 
   // Workout Endpoints
-  static const String workouts = '/workouts';
-  static const String exercises = '/exercises';
+  static const String workouts = '/workout';
+  static const String exercises = '/workout/exercises';
+  static const String routines = '/workout/routines';
+  static const String workoutSessions = '/workout/sessions';
+  static const String performedSets = '/workout/sets';
 
   // Sync Endpoints
   static const String sync = '/sync';
   static const String syncStatus = '/sync/status';
+
+  // Subscription Endpoints
+  static const String subscriptionPlans = '/subscriptions/plans';
+  static const String subscriptionStatus = '/subscriptions/status';
+  static const String subscriptionHistory = '/subscriptions/history';
+  static const String subscriptionVerify = '/subscriptions/verify';
 }
