@@ -4,6 +4,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../features/auth/auth.dart';
 import '../features/home/home.dart';
+import '../features/profile/profile.dart';
 import '../features/workout/workout.dart';
 import '../features/unity/unity.dart';
 import 'auth_state_provider.dart';
@@ -167,7 +168,7 @@ GoRouter router(Ref ref) {
       ),
       GoRoute(
         path: AppRoutes.profile,
-        builder: (context, state) => const _PlaceholderScreen(title: 'Profile'),
+        builder: (context, state) => const ProfileScreen(),
       ),
       GoRoute(
         path: AppRoutes.settings,
