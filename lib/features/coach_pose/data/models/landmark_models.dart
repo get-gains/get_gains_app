@@ -7,8 +7,10 @@ part 'landmark_models.g.dart';
 @freezed
 abstract class LandmarkPoint with _$LandmarkPoint {
   const factory LandmarkPoint({
-    required double x, // Normalized 0.0-1.0
-    required double y, // Normalized 0.0-1.0
+    required double
+    x, // Normalized by image width — usually 0.0-1.0 but can exceed when landmark is outside the visible frame
+    required double
+    y, // Normalized by image height — usually 0.0-1.0 but can exceed when landmark is outside the visible frame
     required double z, // Depth estimate
     required double confidence, // 0.0-1.0
   }) = _LandmarkPoint;
