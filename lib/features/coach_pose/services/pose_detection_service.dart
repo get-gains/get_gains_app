@@ -192,7 +192,13 @@ class PoseDetectionService {
 
       // Use the first (most confident) detected pose
       final pose = poses.first;
-      final frame = _poseToLandmarkFrame(pose, timestampMs);
+      final frame = _poseToLandmarkFrame(
+        pose,
+        timestampMs,
+        image.width.toDouble(),
+        image.height.toDouble(),
+        rotation: rotation,
+      );
 
       final avgConf =
           frame.landmarks.values
@@ -222,7 +228,30 @@ class PoseDetectionService {
   }
 
   /// Convert a single [Pose] to a [LandmarkFrame].
-  LandmarkFrame _poseToLandmarkFrame(Pose pose, int timestampMs) {
+  ///
+  /// MLKit returns landmark coordinates in pixel space relative to the
+  /// **rotated** image (i.e. the upright orientation after applying the
+  /// rotation metadata).  On Android the camera sensor is typically
+  /// landscape (e.g. 1920×1080) while the phone is held portrait, so
+  /// rotation is 90° or 270°.  In that case the effective coordinate
+  /// space is width=1080, height=1920 — we must swap the dimensions
+  /// before normalising, otherwise y-values for lower-body landmarks
+  /// can exceed 1.0 (e.g. 1700/1080 ≈ 1.57).
+  LandmarkFrame _poseToLandmarkFrame(
+    Pose pose,
+    int timestampMs,
+    double imageWidth,
+    double imageHeight, {
+    InputImageRotation rotation = InputImageRotation.rotation0deg,
+  }) {
+    // Swap dimensions for 90°/270° rotation so normalisation matches
+    // MLKit's rotated coordinate space.
+    final bool swapDims =
+        rotation == InputImageRotation.rotation90deg ||
+        rotation == InputImageRotation.rotation270deg;
+    final double normWidth = swapDims ? imageHeight : imageWidth;
+    final double normHeight = swapDims ? imageWidth : imageHeight;
+
     final landmarks = <String, LandmarkPoint>{};
 
     for (final entry in pose.landmarks.entries) {
@@ -230,8 +259,8 @@ class PoseDetectionService {
       final landmark = entry.value;
 
       landmarks[_landmarkTypeToString(type)] = LandmarkPoint(
-        x: landmark.x,
-        y: landmark.y,
+        x: normWidth > 0 ? landmark.x / normWidth : 0.0,
+        y: normHeight > 0 ? landmark.y / normHeight : 0.0,
         z: landmark.z,
         confidence: landmark.likelihood,
       );
