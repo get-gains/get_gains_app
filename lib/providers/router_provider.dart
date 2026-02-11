@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../features/auth/auth.dart';
+import '../features/coach_pose/coach_pose.dart';
 import '../features/home/home.dart';
 import '../features/workout/workout.dart';
 import '../features/unity/unity.dart';
@@ -29,6 +30,12 @@ class AppRoutes {
   static const String routines = '/routines';
   static const String workoutSession = '/workout-session';
   static const String unityTest = '/unity-test';
+
+  // Coach Pose routes
+  static const String coachExercises = '/coach/exercises';
+  static const String createExercise = '/coach/exercises/create';
+  static const String exerciseDetail = '/coach/exercises/:id';
+  static const String recordForm = '/coach/exercises/:id/record';
 }
 
 /// Router Provider
@@ -187,6 +194,31 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: AppRoutes.unityTest,
         builder: (context, state) => const UnityTestScreen(),
+      ),
+
+      // Coach Pose Routes
+      GoRoute(
+        path: AppRoutes.coachExercises,
+        builder: (context, state) => const ExerciseListScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.createExercise,
+        builder: (context, state) => const CreateExerciseScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.exerciseDetail,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          final exercise = state.extra as ExerciseModel?;
+          return ExerciseDetailScreen(exerciseId: id, exercise: exercise);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.recordForm,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return FormRecordingScreen(exerciseId: id);
+        },
       ),
     ],
 
