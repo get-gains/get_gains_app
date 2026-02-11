@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -153,10 +155,61 @@ class SecureStorageService {
   }
 
   /// Check if access token is expired
+  ///
+  /// Checks stored expiry first, then falls back to decoding the JWT
+  /// token's `exp` claim. Returns true only if we can confirm the token
+  /// is expired. If no expiry info is available, returns false
+  /// (assumes valid — the server will reject if truly expired).
   Future<bool> isTokenExpired() async {
+    // First try stored expiry
     final expiry = await getTokenExpiry();
-    if (expiry == null) return true;
-    return DateTime.now().isAfter(expiry);
+    if (expiry != null) {
+      return DateTime.now().isAfter(expiry);
+    }
+
+    // Fall back to decoding JWT exp claim
+    final token = await getAccessToken();
+    if (token != null) {
+      final jwtExpiry = getExpiryFromJwt(token);
+      if (jwtExpiry != null) {
+        // Persist it so future checks are fast
+        await saveTokenExpiry(jwtExpiry);
+        return DateTime.now().isAfter(jwtExpiry);
+      }
+    }
+
+    // No expiry info available — assume not expired
+    // (server will return 401 if it is, triggering refresh)
+    return false;
+  }
+
+  /// Extract the expiry [DateTime] from a JWT access token's `exp` claim.
+  /// Returns null if the token is malformed or has no `exp`.
+  static DateTime? getExpiryFromJwt(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return null;
+
+      // Base64-decode the payload (part[1])
+      final payload = parts[1];
+      final normalized = base64Url.normalize(payload);
+      final decoded = utf8.decode(base64Url.decode(normalized));
+      final Map<String, dynamic> claims =
+          json.decode(decoded) as Map<String, dynamic>;
+
+      final exp = claims['exp'];
+      if (exp is int) {
+        return DateTime.fromMillisecondsSinceEpoch(exp * 1000);
+      }
+      return null;
+    } catch (e) {
+      AppLogger.warning(
+        'Failed to decode JWT expiry',
+        tag: 'SecureStorage',
+        error: e,
+      );
+      return null;
+    }
   }
 
   /// Save both tokens at once (used after login/refresh)
@@ -233,13 +286,29 @@ class SecureStorageService {
     AppLogger.warning('All secure storage cleared', tag: 'SecureStorage');
   }
 
-  /// Check if user is authenticated (has valid access token)
+  /// Check if user is authenticated (has valid access token or refresh token)
+  ///
+  /// Returns true if:
+  /// - Access token exists and is not expired, OR
+  /// - Access token is expired but a refresh token exists (session recoverable)
   Future<bool> isAuthenticated() async {
     final token = await getAccessToken();
     if (token == null) return false;
 
     final isExpired = await isTokenExpired();
-    return !isExpired;
+    if (!isExpired) return true;
+
+    // Access token expired — check if we can recover via refresh
+    final refreshToken = await getRefreshToken();
+    if (refreshToken != null) {
+      AppLogger.debug(
+        'Access token expired but refresh token exists — session recoverable',
+        tag: 'SecureStorage',
+      );
+      return true;
+    }
+
+    return false;
   }
 }
 
