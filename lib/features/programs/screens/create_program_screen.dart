@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../services/program_service.dart';
 
-class CreateProgramScreen extends StatefulWidget {
+class CreateProgramScreen extends ConsumerStatefulWidget {
   const CreateProgramScreen({super.key});
 
   @override
-  State<CreateProgramScreen> createState() => _CreateProgramScreenState();
+  ConsumerState<CreateProgramScreen> createState() => _CreateProgramScreenState();
 }
 
-class _CreateProgramScreenState extends State<CreateProgramScreen> {
+class _CreateProgramScreenState extends ConsumerState<CreateProgramScreen> {
   final _formKey = GlobalKey<FormState>();
-
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -20,19 +22,36 @@ class _CreateProgramScreenState extends State<CreateProgramScreen> {
     super.dispose();
   }
 
-  void _createProgram() {
+  Future<void> _createProgram() async {
     if (_formKey.currentState!.validate()) {
-      final name = _nameController.text;
-      final description = _descriptionController.text;
+      setState(() => _isLoading = true);
 
-      // TODO: connect to backend later
-      print('Program Created: $name - $description');
+      try {
+        await ref.read(programServiceProvider).createProgram(
+          name: _nameController.text,
+          description: _descriptionController.text,
+        );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Program created (UI only for now)')),
-      );
+        // refresh programs list
+        ref.invalidate(programsProvider);
 
-      Navigator.pop(context);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Program created successfully!')),
+          );
+          Navigator.pop(context);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e')),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
+      }
     }
   }
 
@@ -66,8 +85,14 @@ class _CreateProgramScreenState extends State<CreateProgramScreen> {
               ),
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: _createProgram,
-                child: const Text('Create Program'),
+                onPressed: _isLoading ? null : _createProgram,
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Create Program'),
               ),
             ],
           ),
