@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -39,6 +40,13 @@ class GoogleSignInResult {
 /// 5. ID token is sent to server: POST /auth/google
 /// 6. Server verifies token and returns Supabase JWT
 ///
+/// Configuration requirements:
+/// - `.env` must contain `GOOGLE_CLIENT_ID` set to the **Web** OAuth client ID
+/// - Google Cloud Console must have an **Android** OAuth client with:
+///   - Package name: `com.getgains.app`
+///   - SHA-1 fingerprint of the signing certificate (debug & release)
+/// - Both client IDs must be in the same Google Cloud project
+///
 /// Usage:
 /// ```dart
 /// final googleService = ref.read(googleSignInServiceProvider);
@@ -50,16 +58,44 @@ class GoogleSignInResult {
 /// ```
 class GoogleSignInService {
   GoogleSignInService({GoogleSignIn? googleSignIn})
-    : _googleSignIn =
-          googleSignIn ??
-          GoogleSignIn(
-            // For Android: Uses serverClientId (Web Client ID) to get idToken
-            // The SHA-1 fingerprint must be registered in Google Cloud Console
-            // For iOS: Uses clientId from GoogleService-Info.plist
-            // For Web: Uses clientId
-            serverClientId: dotenv.env['GOOGLE_CLIENT_ID'],
-            scopes: ['email', 'profile'],
-          );
+    : _googleSignIn = googleSignIn ?? _createGoogleSignIn();
+
+  /// Creates [GoogleSignIn] with validated configuration.
+  ///
+  /// The `serverClientId` MUST be the **Web** OAuth client ID from Google
+  /// Cloud Console (NOT the Android client ID). The Android client ID is
+  /// resolved automatically by Google Play Services using the app's
+  /// package name + SHA-1 fingerprint.
+  static GoogleSignIn _createGoogleSignIn() {
+    final clientId = dotenv.env['GOOGLE_CLIENT_ID'];
+
+    if (clientId == null || clientId.isEmpty) {
+      AppLogger.error(
+        'GOOGLE_CLIENT_ID is not set in .env file. '
+        'Google sign-in will fail.',
+        tag: 'GoogleSignIn',
+      );
+    } else {
+      // Log masked client ID for debugging (show first 8 chars only)
+      final masked = clientId.length > 12
+          ? '${clientId.substring(0, 8)}...${clientId.substring(clientId.length - 4)}'
+          : '***';
+      AppLogger.debug(
+        'Initializing GoogleSignIn with serverClientId: $masked',
+        tag: 'GoogleSignIn',
+      );
+    }
+
+    return GoogleSignIn(
+      // For Android: Uses serverClientId (Web Client ID) to get idToken.
+      // The SHA-1 fingerprint must be registered in Google Cloud Console
+      // as an Android OAuth client in the SAME project.
+      // For iOS: Uses clientId from GoogleService-Info.plist
+      // For Web: Uses clientId
+      serverClientId: clientId,
+      scopes: ['email', 'profile'],
+    );
+  }
 
   final GoogleSignIn _googleSignIn;
 
@@ -70,6 +106,26 @@ class GoogleSignInService {
   Future<Result<GoogleSignInResult, AppError>> signIn() async {
     try {
       AppLogger.debug('Starting Google sign-in flow', tag: 'GoogleSignIn');
+
+      // Validate configuration before attempting sign-in
+      final clientId = dotenv.env['GOOGLE_CLIENT_ID'];
+      if (clientId == null || clientId.isEmpty) {
+        AppLogger.error(
+          'Cannot sign in: GOOGLE_CLIENT_ID not configured in .env',
+          tag: 'GoogleSignIn',
+        );
+        return const Failure(
+          AuthError(
+            message:
+                'Google sign-in is not configured. Please contact support.',
+            code: 'GOOGLE_NOT_CONFIGURED',
+          ),
+        );
+      }
+
+      // Sign out first to clear any cached account and force the
+      // account picker to show every time (e.g. after hot restart).
+      await _googleSignIn.signOut();
 
       // Start the sign-in flow
       final GoogleSignInAccount? account = await _googleSignIn.signIn();
@@ -92,7 +148,11 @@ class GoogleSignInService {
       final GoogleSignInAuthentication auth = await account.authentication;
 
       if (auth.idToken == null) {
-        AppLogger.error('Failed to get Google ID token', tag: 'GoogleSignIn');
+        AppLogger.error(
+          'Failed to get Google ID token. '
+          'Ensure serverClientId is the Web client ID (not Android).',
+          tag: 'GoogleSignIn',
+        );
         return const Failure(
           AuthError(
             message: 'Failed to authenticate with Google',
@@ -111,6 +171,21 @@ class GoogleSignInService {
           photoUrl: account.photoUrl,
         ),
       );
+    } on PlatformException catch (e) {
+      final errorMessage = _mapPlatformError(e);
+      AppLogger.error(
+        'Google sign-in PlatformException: '
+        'code=${e.code}, message=${e.message}',
+        tag: 'GoogleSignIn',
+        error: e,
+      );
+      return Failure(
+        AuthError(
+          message: errorMessage,
+          code: 'GOOGLE_SIGN_IN_ERROR',
+          originalError: e,
+        ),
+      );
     } catch (e) {
       AppLogger.error('Google sign-in failed', tag: 'GoogleSignIn', error: e);
       return Failure(
@@ -121,6 +196,45 @@ class GoogleSignInService {
         ),
       );
     }
+  }
+
+  /// Maps [PlatformException] from google_sign_in to user-friendly messages.
+  ///
+  /// Common Android error codes from `com.google.android.gms.common.api.ApiException`:
+  /// - 10: DEVELOPER_ERROR — SHA-1 / package name mismatch in Google Cloud Console
+  /// - 12501: SIGN_IN_CANCELLED — User cancelled the sign-in
+  /// - 12502: SIGN_IN_CURRENTLY_IN_PROGRESS — Another sign-in already running
+  /// - 7: NETWORK_ERROR — No internet connection
+  String _mapPlatformError(PlatformException e) {
+    final message = e.message ?? '';
+
+    if (message.contains('ApiException: 10')) {
+      AppLogger.error(
+        'DEVELOPER_ERROR (ApiException: 10): '
+        'The app\'s SHA-1 fingerprint or package name is not registered '
+        'in Google Cloud Console. Ensure an Android OAuth client exists with '
+        'package name "com.getgains.app" and the correct SHA-1 fingerprint. '
+        'Run: ./gradlew signingReport to get the SHA-1.',
+        tag: 'GoogleSignIn',
+      );
+      return 'Google sign-in configuration error. Please contact support.';
+    }
+
+    if (message.contains('ApiException: 12501') ||
+        e.code == 'sign_in_cancelled') {
+      return 'Sign-in cancelled';
+    }
+
+    if (message.contains('ApiException: 12502')) {
+      return 'Sign-in already in progress. Please wait.';
+    }
+
+    if (message.contains('ApiException: 7') ||
+        message.contains('NETWORK_ERROR')) {
+      return 'No internet connection. Please check your network.';
+    }
+
+    return 'Google sign-in failed. Please try again.';
   }
 
   /// Sign out from Google
