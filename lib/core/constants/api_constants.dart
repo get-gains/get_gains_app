@@ -28,6 +28,7 @@ class ApiConstants {
   static const String logout = '/auth/logout';
   static const String sendRecoveryEmail = '/auth/send-recovery-email';
   static const String resetPassword = '/auth/reset-password';
+  static const String checkEmailVerified = '/auth/check-email-verified';
 
   // User Endpoints
   static const String userProfile = '/users/profile';
