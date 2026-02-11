@@ -258,6 +258,75 @@ class SecureStorageService {
     return await _storage.read(key: StorageKeys.userEmail);
   }
 
+  // ============== Recovery Token Methods (Password Reset) ==============
+
+  /// Save recovery access token (from password reset deep link)
+  Future<void> saveRecoveryToken(String token) async {
+    try {
+      await _storage.write(key: StorageKeys.recoveryAccessToken, value: token);
+      AppLogger.debug('Recovery access token saved', tag: 'SecureStorage');
+    } catch (e) {
+      AppLogger.error(
+        'Failed to save recovery access token',
+        tag: 'SecureStorage',
+        error: e,
+      );
+      rethrow;
+    }
+  }
+
+  /// Get the stored recovery access token
+  Future<String?> getRecoveryToken() async {
+    try {
+      return await _storage.read(key: StorageKeys.recoveryAccessToken);
+    } catch (e) {
+      AppLogger.error(
+        'Failed to read recovery access token',
+        tag: 'SecureStorage',
+        error: e,
+      );
+      return null;
+    }
+  }
+
+  /// Save recovery refresh token
+  Future<void> saveRecoveryRefreshToken(String token) async {
+    try {
+      await _storage.write(key: StorageKeys.recoveryRefreshToken, value: token);
+      AppLogger.debug('Recovery refresh token saved', tag: 'SecureStorage');
+    } catch (e) {
+      AppLogger.error(
+        'Failed to save recovery refresh token',
+        tag: 'SecureStorage',
+        error: e,
+      );
+      rethrow;
+    }
+  }
+
+  /// Get recovery refresh token
+  Future<String?> getRecoveryRefreshToken() async {
+    try {
+      return await _storage.read(key: StorageKeys.recoveryRefreshToken);
+    } catch (e) {
+      AppLogger.error(
+        'Failed to read recovery refresh token',
+        tag: 'SecureStorage',
+        error: e,
+      );
+      return null;
+    }
+  }
+
+  /// Clear recovery tokens after password reset is complete
+  Future<void> clearRecoveryTokens() async {
+    await Future.wait([
+      _storage.delete(key: StorageKeys.recoveryAccessToken),
+      _storage.delete(key: StorageKeys.recoveryRefreshToken),
+    ]);
+    AppLogger.debug('Recovery tokens cleared', tag: 'SecureStorage');
+  }
+
   // ============== General Operations ==============
 
   /// Write a generic key-value pair
