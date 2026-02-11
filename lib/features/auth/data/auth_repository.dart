@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/constants/api_constants.dart';
@@ -538,6 +539,67 @@ class AuthRepository {
           tag: 'AuthRepo',
           error: error,
         );
+        return Failure(_mapToAuthError(error));
+      },
+    );
+  }
+
+  // ============== Password Reset ==============
+
+  /// Reset password using recovery access token
+  ///
+  /// Called after user receives deep link from password reset email.
+  /// The recovery access token is sent as Bearer token in the Authorization header.
+  ///
+  /// Server endpoint: POST /auth/reset-password
+  Future<Result<void, AppError>> resetPassword({
+    required String newPassword,
+    required String recoveryAccessToken,
+  }) async {
+    AppLogger.debug('Resetting password', tag: 'AuthRepo');
+
+    final result = await _apiClient.post<Map<String, dynamic>>(
+      ApiConstants.resetPassword,
+      data: {'newPassword': newPassword},
+      options: Options(
+        headers: {'Authorization': 'Bearer $recoveryAccessToken'},
+      ),
+    );
+
+    return result.when(
+      success: (_) {
+        AppLogger.info('Password reset successfully', tag: 'AuthRepo');
+        return const Success(null);
+      },
+      failure: (error) {
+        AppLogger.error('Password reset failed', tag: 'AuthRepo', error: error);
+        return Failure(_mapToAuthError(error));
+      },
+    );
+  }
+
+  // ============== Email Verification Status ==============
+
+  /// Check if user's email has been verified
+  ///
+  /// Polls the server to check Supabase email verification status.
+  /// Used on the "Check Email" screen for auto-detection.
+  ///
+  /// Server endpoint: POST /auth/check-email-verified
+  Future<Result<bool, AppError>> checkEmailVerified({
+    required String email,
+  }) async {
+    final result = await _apiClient.post<Map<String, dynamic>>(
+      ApiConstants.checkEmailVerified,
+      data: {'email': email},
+    );
+
+    return result.when(
+      success: (data) {
+        final verified = data['verified'] as bool? ?? false;
+        return Success(verified);
+      },
+      failure: (error) {
         return Failure(_mapToAuthError(error));
       },
     );
