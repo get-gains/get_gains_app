@@ -5,6 +5,35 @@ import 'user_model.dart';
 part 'auth_response_models.freezed.dart';
 part 'auth_response_models.g.dart';
 
+/// Result of a Google login attempt.
+///
+/// When the user taps "Sign in with Google" from the login screen:
+/// - [existingUser]: Login succeeded, user already has a profile.
+/// - [newUser]: User authenticated with Google but has no profile yet.
+///   The app should navigate to the profile completion screen.
+sealed class GoogleLoginResult {
+  const GoogleLoginResult._();
+
+  const factory GoogleLoginResult.existingUser(AuthResponse response) =
+      GoogleLoginExistingUser;
+
+  const factory GoogleLoginResult.newUser(
+    GoogleSignInResponse response, {
+    String? suggestedName,
+  }) = GoogleLoginNewUser;
+}
+
+class GoogleLoginExistingUser extends GoogleLoginResult {
+  const GoogleLoginExistingUser(this.response) : super._();
+  final AuthResponse response;
+}
+
+class GoogleLoginNewUser extends GoogleLoginResult {
+  const GoogleLoginNewUser(this.response, {this.suggestedName}) : super._();
+  final GoogleSignInResponse response;
+  final String? suggestedName;
+}
+
 /// Auth Response Model (Full User)
 ///
 /// Returned from login endpoints.
