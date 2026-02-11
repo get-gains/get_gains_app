@@ -1,0 +1,464 @@
+// lib/features/profile/presentation/screens/profile_screen.dart
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
+
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text_styles.dart';
+import '../../../../providers/auth_state_provider.dart';
+import '../../../../providers/router_provider.dart';
+import '../../../../widgets/widgets.dart';
+import '../../../auth/data/models/user_model.dart';
+import '../providers/profile_provider.dart';
+
+/// Placeholder achievement entry for the profile achievements grid.
+/// Replace with API-backed model when backend is ready.
+class _PlaceholderAchievement {
+  const _PlaceholderAchievement({
+    required this.id,
+    required this.icon,
+    required this.title,
+    required this.unlocked,
+  });
+
+  final String id;
+  final IconData icon;
+  final String title;
+  final bool unlocked;
+}
+
+const List<_PlaceholderAchievement> _placeholderAchievements = [
+  _PlaceholderAchievement(
+    id: '1',
+    icon: Icons.fitness_center,
+    title: 'First rep',
+    unlocked: false,
+  ),
+  _PlaceholderAchievement(
+    id: '2',
+    icon: Icons.repeat,
+    title: '10 workouts',
+    unlocked: false,
+  ),
+  _PlaceholderAchievement(
+    id: '3',
+    icon: Icons.calendar_today,
+    title: 'Week warrior',
+    unlocked: false,
+  ),
+  _PlaceholderAchievement(
+    id: '4',
+    icon: Icons.wb_sunny_outlined,
+    title: 'Early bird',
+    unlocked: false,
+  ),
+  _PlaceholderAchievement(
+    id: '5',
+    icon: Icons.trending_up,
+    title: 'Strong start',
+    unlocked: false,
+  ),
+  _PlaceholderAchievement(
+    id: '6',
+    icon: Icons.local_fire_department_outlined,
+    title: 'Consistency',
+    unlocked: false,
+  ),
+];
+
+/// User profile screen.
+///
+/// Displays the current user's profile (avatar, name, nickname, email,
+/// member since) with pull-to-refresh and error/retry.
+class ProfileScreen extends ConsumerWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profileAsync = ref.watch(profileProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Scaffold(
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: () => ref.refresh(profileProvider.future),
+          child: profileAsync.when(
+            data: (user) => _ProfileContent(user: user, isDark: isDark),
+            loading: () => const _ProfileLoading(),
+            error: (error, _) => _ProfileError(
+              message: error is Exception ? error.toString() : '$error',
+              onRetry: () => ref.invalidate(profileProvider),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileContent extends StatelessWidget {
+  const _ProfileContent({required this.user, required this.isDark});
+
+  final UserModel user;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final memberSince = user.createdAt != null
+        ? DateFormat.yMMM().format(user.createdAt!)
+        : null;
+
+    return CustomScrollView(
+      slivers: [
+        SliverAppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.pop(),
+          ),
+          title: Text(
+            'Profile',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              const SizedBox(height: 8),
+              // Avatar and name block
+              Center(
+                child: Column(
+                  children: [
+                    AppAvatar(
+                      name: user.name,
+                      size: AppAvatarSize.xxl,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      user.name,
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            fontFamily: AppTextStyles.fontFamilySans,
+                          ),
+                      textAlign: TextAlign.center,
+                    ),
+                    if (user.nickname.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        user.nickname,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight,
+                              fontFamily: AppTextStyles.fontFamilySans,
+                            ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+              // Info card
+              AppCard(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _ProfileRow(
+                      icon: Icons.email_outlined,
+                      label: 'Email',
+                      value: user.email,
+                      isDark: isDark,
+                    ),
+                    if (memberSince != null) ...[
+                      const SizedBox(height: 16),
+                      _ProfileRow(
+                        icon: Icons.calendar_today_outlined,
+                        label: 'Member since',
+                        value: memberSince,
+                        isDark: isDark,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Stats placeholder section
+              _SectionHeader(title: 'Stats', isDark: isDark),
+              const SizedBox(height: 12),
+              AppCard(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _ProfileRow(
+                      icon: Icons.fitness_center_outlined,
+                      label: 'Workouts this week',
+                      value: '—',
+                      isDark: isDark,
+                    ),
+                    const SizedBox(height: 16),
+                    _ProfileRow(
+                      icon: Icons.local_fire_department_outlined,
+                      label: 'Current streak',
+                      value: '—',
+                      isDark: isDark,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Achievements section
+              _SectionHeader(title: 'Achievements', isDark: isDark),
+              const SizedBox(height: 12),
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 3,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 0.85,
+                children: _placeholderAchievements
+                    .map(
+                      (a) => _AchievementTile(
+                        achievement: a,
+                        isDark: isDark,
+                      ),
+                    )
+                    .toList(),
+              ),
+              const SizedBox(height: 24),
+              // Logout
+              Consumer(
+                builder: (context, ref, _) {
+                  return OutlinedButton.icon(
+                    onPressed: () async {
+                      await ref.read(authStateProvider.notifier).logout();
+                      if (context.mounted) {
+                        context.go(AppRoutes.login);
+                      }
+                    },
+                    icon: const Icon(Icons.logout),
+                    label: const Text('Sign out'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: isDark
+                          ? AppColors.error
+                          : AppColors.destructiveLight,
+                      side: BorderSide(
+                        color: isDark
+                            ? AppColors.error
+                            : AppColors.destructiveLight,
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 32),
+            ]),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProfileRow extends StatelessWidget {
+  const _ProfileRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.isDark,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          icon,
+          size: 22,
+          color: isDark
+              ? AppColors.textSecondaryDark
+              : AppColors.textSecondaryLight,
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
+                      fontFamily: AppTextStyles.fontFamilySans,
+                    ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      fontFamily: AppTextStyles.fontFamilySans,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.title,
+    required this.isDark,
+  });
+
+  final String title;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: isDark
+                    ? AppColors.foregroundDark
+                    : AppColors.foregroundLight,
+                fontFamily: AppTextStyles.fontFamilySans,
+              ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AchievementTile extends StatelessWidget {
+  const _AchievementTile({
+    required this.achievement,
+    required this.isDark,
+  });
+
+  final _PlaceholderAchievement achievement;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final isLocked = !achievement.unlocked;
+    final iconColor = isDark
+        ? AppColors.textSecondaryDark
+        : AppColors.textSecondaryLight;
+    final bgColor = isDark ? AppColors.cardDark : AppColors.cardLight;
+
+    return Opacity(
+      opacity: isLocked ? 0.6 : 1.0,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDark ? AppColors.borderDark : AppColors.borderLight,
+          ),
+        ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  achievement.icon,
+                  size: 36,
+                  color: iconColor,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  achievement.title,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: iconColor,
+                        fontFamily: AppTextStyles.fontFamilySans,
+                      ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+            if (isLocked)
+              Positioned(
+                top: 4,
+                right: 4,
+                child: Icon(
+                  Icons.lock_outline,
+                  size: 14,
+                  color: iconColor,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileLoading extends StatelessWidget {
+  const _ProfileLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 20),
+            Text('Loading profile...'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileError extends StatelessWidget {
+  const _ProfileError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppEmptyState.fullPage(
+      icon: Icons.person_off_outlined,
+      title: 'Couldn’t load profile',
+      description: message,
+      actionLabel: 'Retry',
+      onAction: onRetry,
+    );
+  }
+}
