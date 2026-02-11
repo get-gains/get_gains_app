@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/app_error.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../providers/register_provider.dart';
@@ -70,11 +71,23 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
         .read(passwordRecoveryProvider.notifier)
         .sendRecoveryEmail(email: _emailController.text.trim());
 
-    if (success && mounted) {
+    if (!mounted) return;
+
+    if (success) {
       setState(() => _emailSent = true);
       // Re-trigger animation for the success state
       _animationController.reset();
       _animationController.forward();
+    } else {
+      // Display the error from the provider state
+      final state = ref.read(passwordRecoveryProvider);
+      if (state is AsyncError) {
+        final error = state.error;
+        final message = error is AppError
+            ? error.message
+            : 'Failed to send recovery email. Please try again.';
+        AppToast.error(context, message);
+      }
     }
   }
 
