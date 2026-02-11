@@ -86,6 +86,9 @@ class ApiClient {
     ]);
   }
 
+  /// Public method to attempt token refresh (e.g., on app startup)
+  Future<bool> tryRefreshToken() => _refreshToken();
+
   /// Attempt to refresh the access token
   Future<bool> _refreshToken() async {
     try {
@@ -106,7 +109,9 @@ class ApiClient {
       );
 
       if (response.statusCode == 200) {
-        final data = response.data as Map<String, dynamic>;
+        final responseData = response.data as Map<String, dynamic>;
+        // Server wraps responses in { data: { ... }, errors: [] }
+        final data = responseData['data'] as Map<String, dynamic>;
         await _secureStorage.saveTokens(
           accessToken: data['accessToken'] as String,
           refreshToken: data['refreshToken'] as String,
