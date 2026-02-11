@@ -16,6 +16,10 @@ class StorageKeys {
   static const String userId = 'user_id';
   static const String userEmail = 'user_email';
 
+  // Recovery Tokens (Password Reset)
+  static const String recoveryAccessToken = 'recovery_access_token';
+  static const String recoveryRefreshToken = 'recovery_refresh_token';
+
   // App Settings (sensitive)
   static const String biometricEnabled = 'biometric_enabled';
   static const String lastSyncTimestamp = 'last_sync_timestamp';

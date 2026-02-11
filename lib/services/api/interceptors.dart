@@ -29,11 +29,16 @@ class AuthInterceptor extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
-    // Skip auth header for auth endpoints
+    // Skip auth header for auth endpoints and recovery endpoints
+    // Recovery endpoints use explicit Bearer tokens (not the stored access token)
     final isAuthEndpoint =
         options.path.contains('/auth/login') ||
         options.path.contains('/auth/register') ||
-        options.path.contains('/auth/refresh');
+        options.path.contains('/auth/refresh') ||
+        options.path.contains('/auth/reset-password') ||
+        options.path.contains('/auth/send-recovery-email') ||
+        options.path.contains('/auth/check-email-verified') ||
+        options.path.contains('/auth/exchange-code');
 
     if (!isAuthEndpoint) {
       final token = await secureStorage.getAccessToken();
@@ -49,8 +54,15 @@ class AuthInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     // Handle 401 Unauthorized
     if (err.response?.statusCode == HttpStatus.unauthorized) {
-      // Don't retry if already refreshing or if this is a refresh request
-      if (_isRefreshing || err.requestOptions.path.contains('/auth/refresh')) {
+      // Don't retry if already refreshing or if this is a refresh/recovery request
+      if (_isRefreshing ||
+          err.requestOptions.path.contains('/auth/refresh') ||
+          err.requestOptions.path.contains('/auth/reset-password')) {
+        if (err.requestOptions.path.contains('/auth/reset-password')) {
+          // Recovery token failure — don't trigger logout, just propagate
+          handler.next(err);
+          return;
+        }
         AppLogger.warning(
           'Token refresh failed, logging out',
           tag: 'AuthInterceptor',

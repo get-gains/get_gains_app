@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../core/utils/logger.dart';
 import '../features/auth/auth.dart';
 import '../features/coach_pose/coach_pose.dart';
 import '../features/home/home.dart';
@@ -9,6 +10,7 @@ import '../features/profile/profile.dart';
 import '../features/workout/workout.dart';
 import '../features/unity/unity.dart';
 import 'auth_state_provider.dart';
+import 'deep_link_provider.dart';
 
 part 'router_provider.g.dart';
 
@@ -23,6 +25,7 @@ class AppRoutes {
   static const String completeProfile = '/complete-profile';
   static const String forgotPassword = '/forgot-password';
   static const String resetPassword = '/reset-password';
+  static const String emailVerified = '/email-verified';
   static const String home = '/home';
   static const String profile = '/profile';
   static const String settings = '/settings';
@@ -66,7 +69,7 @@ GoRouter router(Ref ref) {
   // Create a notifier that listens to auth state changes
   final refreshNotifier = _GoRouterRefreshStream(ref);
 
-  return GoRouter(
+  final routerInstance = GoRouter(
     initialLocation: AppRoutes.splash,
     debugLogDiagnostics: true,
     refreshListenable: refreshNotifier,
@@ -85,6 +88,7 @@ GoRouter router(Ref ref) {
           location == AppRoutes.register ||
           location == AppRoutes.checkEmail ||
           location == AppRoutes.forgotPassword ||
+          location == AppRoutes.emailVerified ||
           location ==
               AppRoutes
                   .unityTest; // Temporary: no auth required for dev/testing
@@ -153,15 +157,17 @@ GoRouter router(Ref ref) {
       ),
       GoRoute(
         path: AppRoutes.forgotPassword,
-        builder: (context, state) =>
-            const _PlaceholderScreen(title: 'Forgot Password'),
+        builder: (context, state) => const ForgotPasswordScreen(),
       ),
 
       // Auth Routes (Semi-Authenticated)
       GoRoute(
         path: AppRoutes.resetPassword,
-        builder: (context, state) =>
-            const _PlaceholderScreen(title: 'Reset Password'),
+        builder: (context, state) => const ResetPasswordScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.emailVerified,
+        builder: (context, state) => const EmailVerifiedScreen(),
       ),
       GoRoute(
         path: AppRoutes.completeProfile,
@@ -225,6 +231,35 @@ GoRouter router(Ref ref) {
 
     errorBuilder: (context, state) => _ErrorScreen(error: state.error),
   );
+
+  // Listen for deep links and navigate accordingly
+  ref.listen<DeepLinkEvent?>(deepLinkProvider, (
+    DeepLinkEvent? previous,
+    DeepLinkEvent? next,
+  ) {
+    if (next != null) {
+      AppLogger.info('Navigating from deep link: ${next.path}', tag: 'Router');
+
+      switch (next.path) {
+        case '/auth/email-verified':
+          routerInstance.go(AppRoutes.emailVerified);
+          break;
+        case '/auth/reset-password':
+          routerInstance.go(AppRoutes.resetPassword);
+          break;
+        default:
+          AppLogger.warning(
+            'Unknown deep link path: ${next.path}',
+            tag: 'Router',
+          );
+      }
+
+      // Clear the deep link after handling
+      ref.read(deepLinkProvider.notifier).clearDeepLink();
+    }
+  });
+
+  return routerInstance;
 }
 
 /// Refresh notifier for router when auth state changes

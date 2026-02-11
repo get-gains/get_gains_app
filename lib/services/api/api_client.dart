@@ -339,6 +339,10 @@ class ApiClient {
       case DioExceptionType.connectionError:
         return NetworkError.noConnection();
       case DioExceptionType.badResponse:
+        // First try to extract errors from the standard { data, errors } format
+        // so we preserve the server's user-friendly error message.
+        final serverError = _tryParseServerErrors(e.response);
+        if (serverError != null) return serverError;
         return _mapStatusCode(e.response?.statusCode, e.message);
       case DioExceptionType.cancel:
         return const NetworkError(
@@ -351,6 +355,32 @@ class ApiClient {
           originalError: e,
         );
     }
+  }
+
+  /// Try to parse the server's standard { data, errors } format from an
+  /// error response. Returns an AppError with the server's message if found.
+  AppError? _tryParseServerErrors(Response<dynamic>? response) {
+    if (response?.data == null) return null;
+    try {
+      final data = response!.data;
+      if (data is Map<String, dynamic> && data.containsKey('errors')) {
+        final errors = data['errors'] as List<dynamic>?;
+        if (errors != null && errors.isNotEmpty) {
+          final errorMessage = data.allErrorMessages;
+          final firstError = errors.first as Map<String, dynamic>;
+          final field = firstError['field'] as String?;
+          final statusCode = response.statusCode;
+
+          // Return the server's error message with the correct status code
+          return NetworkError(
+            message: errorMessage,
+            code: 'SERVER_ERROR',
+            statusCode: statusCode,
+          );
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   AppError _mapStatusCode(int? statusCode, String? message) {
