@@ -427,16 +427,17 @@ class AuthRepository {
 
   // ============== Google Login (Existing User) ==============
 
-  /// Login with Google (for existing users)
+  /// Login with Google (existing users, with auto-registration fallback)
   ///
-  /// Authenticates an existing Google user:
+  /// Authenticates a Google user:
   /// 1. Opens Google sign-in flow
   /// 2. Gets Google ID token
-  /// 3. Sends to server for authentication
-  /// 4. Returns full user data (user must already exist)
+  /// 3. Tries POST /auth/login/google (existing user)
+  /// 4. If 404 (user not found), falls back to registration via POST /auth/google
+  /// 5. Returns either AuthResponse (existing) or GoogleSignInResponse (new user)
   ///
-  /// Server endpoint: POST /auth/login/google
-  Future<Result<AuthResponse, AppError>> loginWithGoogle() async {
+  /// The return type uses [GoogleLoginResult] to distinguish between the two.
+  Future<Result<GoogleLoginResult, AppError>> loginWithGoogle() async {
     AppLogger.debug('Starting Google login flow', tag: 'AuthRepo');
 
     // Step 1: Get Google ID token
@@ -444,7 +445,7 @@ class AuthRepository {
 
     return googleResult.when(
       success: (googleData) async {
-        // Step 2: Send ID token to server
+        // Step 2: Try login for existing user
         final request = GoogleSignInRequest(idToken: googleData.idToken);
 
         final result = await _apiClient.post<Map<String, dynamic>>(
@@ -477,7 +478,7 @@ class AuthRepository {
               await _userPreferences.setIsGoogleUser(true);
 
               AppLogger.info('Google login successful', tag: 'AuthRepo');
-              return Success(response);
+              return Success(GoogleLoginResult.existingUser(response));
             } catch (e) {
               AppLogger.error(
                 'Failed to process Google login response',
@@ -492,7 +493,16 @@ class AuthRepository {
               );
             }
           },
-          failure: (error) {
+          failure: (error) async {
+            // If user not found (404), fall back to registration flow
+            if (error is NetworkError && error.statusCode == 404) {
+              AppLogger.info(
+                'User not found, falling back to Google registration',
+                tag: 'AuthRepo',
+              );
+              return _registerWithGoogleToken(googleData);
+            }
+
             AppLogger.error(
               'Google login API call failed',
               tag: 'AuthRepo',
@@ -504,6 +514,84 @@ class AuthRepository {
       },
       failure: (error) {
         return Failure(error);
+      },
+    );
+  }
+
+  /// Registers a new Google user using an already-obtained Google token.
+  ///
+  /// This is called internally by [loginWithGoogle] when the login endpoint
+  /// returns 404 (user not found). Reuses the Google ID token so the user
+  /// doesn't have to pick their account again.
+  Future<Result<GoogleLoginResult, AppError>> _registerWithGoogleToken(
+    GoogleSignInResult googleData,
+  ) async {
+    final request = GoogleSignInRequest(idToken: googleData.idToken);
+
+    final result = await _apiClient.post<Map<String, dynamic>>(
+      ApiConstants.googleSignIn,
+      data: request.toJson(),
+    );
+
+    return result.when(
+      success: (data) async {
+        try {
+          final response = GoogleSignInResponse(
+            accessToken: data['accessToken'] as String,
+            refreshToken: data['refreshToken'] as String,
+            user: PartialUserModel.fromJson(
+              data['user'] as Map<String, dynamic>,
+            ),
+          );
+
+          // Save pending profile for completion
+          await _userPreferences.savePendingGoogleProfile(
+            PendingGoogleProfile(
+              email: response.user.email,
+              supabaseId: response.user.supabaseId,
+              accessToken: response.accessToken,
+              refreshToken: response.refreshToken,
+              displayName: googleData.displayName,
+            ),
+          );
+
+          // Store tokens temporarily (will be used for /google/link call)
+          await _secureStorage.saveTokens(
+            accessToken: response.accessToken,
+            refreshToken: response.refreshToken,
+          );
+
+          AppLogger.info(
+            'Google registration successful, pending profile completion',
+            tag: 'AuthRepo',
+          );
+          return Success(
+            GoogleLoginResult.newUser(
+              response,
+              suggestedName: googleData.displayName,
+            ),
+          );
+        } catch (e) {
+          AppLogger.error(
+            'Failed to process Google registration response',
+            tag: 'AuthRepo',
+            error: e,
+          );
+          return Failure(
+            UnknownError(
+              message: 'Failed to process Google registration',
+              originalError: e,
+            ),
+          );
+        }
+      },
+      failure: (error) {
+        AppLogger.error(
+          'Google registration API call failed',
+          tag: 'AuthRepo',
+          error: error,
+        );
+        return Failure(_mapToAuthError(error));
       },
     );
   }

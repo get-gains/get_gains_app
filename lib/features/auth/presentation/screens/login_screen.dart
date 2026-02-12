@@ -72,6 +72,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     if (next is LoginSuccess) {
       // Navigate to home on successful login
       context.go(AppRoutes.home);
+    } else if (next is LoginGooglePendingProfile) {
+      // New Google user — navigate to complete profile
+      context.go(AppRoutes.completeProfile);
     } else if (next is LoginError) {
       // Show error toast
       final message = _getErrorMessage(next.error);
