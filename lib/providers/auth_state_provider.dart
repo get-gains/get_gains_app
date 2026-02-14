@@ -1,6 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../core/utils/logger.dart';
+import '../services/api/api_client.dart';
 import '../services/storage/secure_storage_service.dart';
 
 part 'auth_state_provider.g.dart';
@@ -105,6 +106,26 @@ class AuthStateNotifier extends _$AuthStateNotifier {
       print('[AuthState] isAuthenticated: $isAuthenticated');
 
       if (isAuthenticated) {
+        // If access token is expired, try refreshing before proceeding
+        final isExpired = await _storage.isTokenExpired();
+        if (isExpired) {
+          // ignore: avoid_print
+          print('[AuthState] Access token expired, attempting refresh');
+          final apiClient = ref.read(apiClientProvider);
+          final refreshed = await apiClient.tryRefreshToken();
+          if (!refreshed) {
+            // ignore: avoid_print
+            print('[AuthState] Token refresh failed, setting unauthenticated');
+            state = state.copyWith(
+              status: AuthStatus.unauthenticated,
+              isLoading: false,
+            );
+            return;
+          }
+          // ignore: avoid_print
+          print('[AuthState] Token refreshed successfully');
+        }
+
         final userId = await _storage.getUserId();
         final email = await _storage.getUserEmail();
 

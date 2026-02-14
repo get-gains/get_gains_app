@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../core/utils/logger.dart';
 import '../features/auth/auth.dart';
+import '../features/coach_pose/coach_pose.dart';
 import '../features/home/home.dart';
+import '../features/profile/profile.dart';
 import '../features/workout/workout.dart';
 import '../features/unity/unity.dart';
 import 'auth_state_provider.dart';
@@ -12,6 +15,7 @@ import '../features/programs/screens/program_details_screen.dart';
 import '../features/programs/screens/calendar_screen.dart';
 import '../features/programs/screens/create_program_screen.dart';
 
+import 'deep_link_provider.dart';
 
 part 'router_provider.g.dart';
 
@@ -26,6 +30,7 @@ class AppRoutes {
   static const String completeProfile = '/complete-profile';
   static const String forgotPassword = '/forgot-password';
   static const String resetPassword = '/reset-password';
+  static const String emailVerified = '/email-verified';
   static const String home = '/home';
   static const String profile = '/profile';
   static const String settings = '/settings';
@@ -40,6 +45,12 @@ class AppRoutes {
   static const String calendar = '/calendar';
 
 
+
+  // Coach Pose routes
+  static const String coachExercises = '/coach/exercises';
+  static const String createExercise = '/coach/exercises/create';
+  static const String exerciseDetail = '/coach/exercises/:id';
+  static const String recordForm = '/coach/exercises/:id/record';
 }
 
 /// Router Provider
@@ -69,7 +80,7 @@ GoRouter router(Ref ref) {
   // Create a notifier that listens to auth state changes
   final refreshNotifier = _GoRouterRefreshStream(ref);
 
-  return GoRouter(
+  final routerInstance = GoRouter(
     initialLocation: AppRoutes.splash,
     debugLogDiagnostics: true,
     refreshListenable: refreshNotifier,
@@ -88,6 +99,7 @@ GoRouter router(Ref ref) {
           location == AppRoutes.register ||
           location == AppRoutes.checkEmail ||
           location == AppRoutes.forgotPassword ||
+          location == AppRoutes.emailVerified ||
           location ==
               AppRoutes
                   .unityTest; // Temporary: no auth required for dev/testing
@@ -156,15 +168,17 @@ GoRouter router(Ref ref) {
       ),
       GoRoute(
         path: AppRoutes.forgotPassword,
-        builder: (context, state) =>
-            const _PlaceholderScreen(title: 'Forgot Password'),
+        builder: (context, state) => const ForgotPasswordScreen(),
       ),
 
       // Auth Routes (Semi-Authenticated)
       GoRoute(
         path: AppRoutes.resetPassword,
-        builder: (context, state) =>
-            const _PlaceholderScreen(title: 'Reset Password'),
+        builder: (context, state) => const ResetPasswordScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.emailVerified,
+        builder: (context, state) => const EmailVerifiedScreen(),
       ),
       GoRoute(
         path: AppRoutes.completeProfile,
@@ -183,7 +197,7 @@ GoRouter router(Ref ref) {
 
       GoRoute(
         path: AppRoutes.profile,
-        builder: (context, state) => const _PlaceholderScreen(title: 'Profile'),
+        builder: (context, state) => const ProfileScreen(),
       ),
       GoRoute(
         path: AppRoutes.settings,
@@ -227,10 +241,64 @@ GoRouter router(Ref ref) {
         builder: (context, state) => const CalendarScreen(),
       ),
 
+
+      // Coach Pose Routes
+      GoRoute(
+        path: AppRoutes.coachExercises,
+        builder: (context, state) => const ExerciseListScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.createExercise,
+        builder: (context, state) => const CreateExerciseScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.exerciseDetail,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          final exercise = state.extra as ExerciseModel?;
+          return ExerciseDetailScreen(exerciseId: id, exercise: exercise);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.recordForm,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return FormRecordingScreen(exerciseId: id);
+        },
+      ),
     ],
 
     errorBuilder: (context, state) => _ErrorScreen(error: state.error),
   );
+
+  // Listen for deep links and navigate accordingly
+  ref.listen<DeepLinkEvent?>(deepLinkProvider, (
+    DeepLinkEvent? previous,
+    DeepLinkEvent? next,
+  ) {
+    if (next != null) {
+      AppLogger.info('Navigating from deep link: ${next.path}', tag: 'Router');
+
+      switch (next.path) {
+        case '/auth/email-verified':
+          routerInstance.go(AppRoutes.emailVerified);
+          break;
+        case '/auth/reset-password':
+          routerInstance.go(AppRoutes.resetPassword);
+          break;
+        default:
+          AppLogger.warning(
+            'Unknown deep link path: ${next.path}',
+            tag: 'Router',
+          );
+      }
+
+      // Clear the deep link after handling
+      ref.read(deepLinkProvider.notifier).clearDeepLink();
+    }
+  });
+
+  return routerInstance;
 }
 
 /// Refresh notifier for router when auth state changes

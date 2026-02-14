@@ -551,7 +551,7 @@ class AppTheme {
         focusElevation: 0,
         hoverElevation: 0,
         highlightElevation: 0,
-        shape: CircleBorder(),
+        shape: StadiumBorder(),
         backgroundColor: AppColors.primaryDark,
         foregroundColor: AppColors.primaryForegroundDark,
       );
@@ -562,7 +562,7 @@ class AppTheme {
         focusElevation: 4,
         hoverElevation: 4,
         highlightElevation: 4,
-        shape: CircleBorder(),
+        shape: StadiumBorder(),
         backgroundColor: AppColors.primaryLight,
         foregroundColor: AppColors.primaryForegroundLight,
       );

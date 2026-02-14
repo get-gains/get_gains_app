@@ -377,8 +377,31 @@ Request:
 Add to `.env`:
 ```
 API_BASE_URL=http://your-server-url/api
-GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
 ```
+
+> **Important:** `GOOGLE_CLIENT_ID` must be the **Web application** OAuth client ID, NOT the Android client ID.
+
+### Google Cloud Console Setup
+
+For Google Sign-In to work, you need **two** OAuth 2.0 client IDs in the same Google Cloud project:
+
+1. **Web application** client ID → used as `GOOGLE_CLIENT_ID` in `.env` and on the server
+2. **Android** client ID → matched automatically by Google Play Services
+
+#### Android OAuth Client Setup
+
+1. Go to [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials)
+2. Create an OAuth 2.0 Client ID of type **Android**
+3. Set package name: `com.getgains.app`
+4. Set SHA-1 certificate fingerprint (get it via Gradle):
+   ```bash
+   cd android && ./gradlew signingReport
+   ```
+5. You need to register SHA-1 for **both** debug and release signing keys
+
+> **Common error:** `ApiException: 10` (DEVELOPER_ERROR) means the SHA-1 fingerprint
+> or package name doesn't match what's registered in Google Cloud Console.
 
 ### iOS Configuration
 
@@ -402,15 +425,9 @@ Update `ios/Runner/Info.plist`:
 
 ### Android Configuration
 
-Add to `android/app/build.gradle`:
-```gradle
-defaultConfig {
-    // ... existing config
-    manifestPlaceholders += [
-        'appAuthRedirectScheme': 'com.googleusercontent.apps.YOUR_CLIENT_ID'
-    ]
-}
-```
+No additional Gradle or manifest changes are needed for `google_sign_in` 6.x on Android.
+The plugin uses Google Play Services directly and resolves the Android OAuth client
+by matching the app's package name + SHA-1 fingerprint in Google Cloud Console.
 
 ---
 
