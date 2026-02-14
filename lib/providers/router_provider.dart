@@ -10,6 +10,11 @@ import '../features/profile/profile.dart';
 import '../features/workout/workout.dart';
 import '../features/unity/unity.dart';
 import 'auth_state_provider.dart';
+import '../features/programs/screens/program_screen.dart';
+import '../features/programs/screens/program_details_screen.dart';
+import '../features/programs/screens/calendar_screen.dart';
+import '../features/programs/screens/create_program_screen.dart';
+
 import 'deep_link_provider.dart';
 
 part 'router_provider.g.dart';
@@ -34,6 +39,12 @@ class AppRoutes {
   static const String routines = '/routines';
   static const String workoutSession = '/workout-session';
   static const String unityTest = '/unity-test';
+  static const String programs = '/programs';
+  static const String createProgram = '/create-program';
+  static const String programDetails = '/program-details';
+  static const String calendar = '/calendar';
+
+
 
   // Coach Pose routes
   static const String coachExercises = '/coach/exercises';
@@ -179,6 +190,11 @@ GoRouter router(Ref ref) {
         path: AppRoutes.home,
         builder: (context, state) => const HomeScreen(),
       ),
+      // GoRoute(
+      //   path: AppRoutes.home,
+      //   builder: (context, state) => const ProgramsScreen(),
+      // ),
+
       GoRoute(
         path: AppRoutes.profile,
         builder: (context, state) => const ProfileScreen(),
@@ -202,6 +218,29 @@ GoRouter router(Ref ref) {
         path: AppRoutes.unityTest,
         builder: (context, state) => const UnityTestScreen(),
       ),
+      GoRoute(
+        path: AppRoutes.programs,
+        builder: (context, state) => const ProgramsScreen(),
+      ),
+
+      GoRoute(
+        path: AppRoutes.createProgram,
+        builder: (context, state) => const CreateProgramScreen(),
+      ),
+
+      GoRoute(
+        path: AppRoutes.programDetails,
+        builder: (context, state) {
+          final program = state.extra as Map;
+          return ProgramDetailsScreen(program: program);
+        },
+      ),
+
+      GoRoute(
+        path: AppRoutes.calendar,
+        builder: (context, state) => const CalendarScreen(),
+      ),
+
 
       // Coach Pose Routes
       GoRoute(
