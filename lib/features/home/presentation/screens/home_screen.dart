@@ -145,6 +145,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ],
                     ),
 
+                    const SizedBox(height: 12),
+
+                    // Coach Tools Quick Action
+                    QuickActionCard(
+                      icon: Icons.sports,
+                      title: 'Coach Tools',
+                      subtitle: 'Exercise library & form recording',
+                      gradient: LinearGradient(
+                        colors: [
+                          isDark
+                              ? AppColors.accentDark
+                              : const Color(0xFF22C55E),
+                          isDark
+                              ? AppColors.accentDark.withValues(alpha: 0.7)
+                              : const Color(0xFF22C55E).withValues(alpha: 0.7),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      onTap: () => context.push(AppRoutes.coachExercises),
+                    ),
+
                     const SizedBox(height: 24),
 
                     // Today's Focus Section

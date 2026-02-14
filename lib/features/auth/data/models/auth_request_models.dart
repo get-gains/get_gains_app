@@ -80,14 +80,24 @@ abstract class SendRecoveryEmailRequest with _$SendRecoveryEmailRequest {
 /// Reset Password Request Model
 ///
 /// Used to reset password with recovery token.
-/// Note: This is an authenticated endpoint (uses access token from email link).
+/// The recovery access token is sent in the Authorization header, not the body.
 @freezed
 abstract class ResetPasswordRequest with _$ResetPasswordRequest {
-  const factory ResetPasswordRequest({
-    required String accessToken,
-    required String newPassword,
-  }) = _ResetPasswordRequest;
+  const factory ResetPasswordRequest({required String newPassword}) =
+      _ResetPasswordRequest;
 
   factory ResetPasswordRequest.fromJson(Map<String, dynamic> json) =>
       _$ResetPasswordRequestFromJson(json);
+}
+
+/// Check Email Verified Request Model
+///
+/// Used to check if a user's email has been verified.
+@freezed
+abstract class CheckEmailVerifiedRequest with _$CheckEmailVerifiedRequest {
+  const factory CheckEmailVerifiedRequest({required String email}) =
+      _CheckEmailVerifiedRequest;
+
+  factory CheckEmailVerifiedRequest.fromJson(Map<String, dynamic> json) =>
+      _$CheckEmailVerifiedRequestFromJson(json);
 }

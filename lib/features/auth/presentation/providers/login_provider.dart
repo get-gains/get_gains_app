@@ -30,6 +30,21 @@ class LoginSuccess extends LoginState {
   final AuthResponse response;
 }
 
+/// Google sign-in pending profile completion
+///
+/// User authenticated with Google but doesn't have a profile yet.
+/// Navigate to the complete-profile screen.
+class LoginGooglePendingProfile extends LoginState {
+  const LoginGooglePendingProfile({
+    required this.email,
+    required this.supabaseId,
+    this.suggestedName,
+  });
+  final String email;
+  final String supabaseId;
+  final String? suggestedName;
+}
+
 /// Error state - login failed
 class LoginError extends LoginState {
   const LoginError(this.error);
@@ -104,23 +119,34 @@ class LoginNotifier extends _$LoginNotifier {
   /// Login with Google
   ///
   /// Authenticates an existing Google user.
-  /// On success, updates auth state and navigates to home.
+  /// If user is not registered, automatically falls back to
+  /// the registration flow and navigates to profile completion.
   Future<void> loginWithGoogle() async {
     state = const LoginLoading();
 
     final result = await _authRepository.loginWithGoogle();
 
     result.when(
-      success: (response) async {
-        // Update app-wide auth state
-        await _authStateNotifier.setAuthenticated(
-          accessToken: response.accessToken,
-          refreshToken: response.refreshToken,
-          userId: response.user.id,
-          email: response.user.email,
-        );
+      success: (loginResult) async {
+        switch (loginResult) {
+          case GoogleLoginExistingUser(:final response):
+            // Existing user — set auth state and navigate home
+            await _authStateNotifier.setAuthenticated(
+              accessToken: response.accessToken,
+              refreshToken: response.refreshToken,
+              userId: response.user.id,
+              email: response.user.email,
+            );
+            state = LoginSuccess(response);
 
-        state = LoginSuccess(response);
+          case GoogleLoginNewUser(:final response, :final suggestedName):
+            // New user — navigate to complete profile screen
+            state = LoginGooglePendingProfile(
+              email: response.user.email,
+              supabaseId: response.user.supabaseId,
+              suggestedName: suggestedName,
+            );
+        }
       },
       failure: (error) {
         state = LoginError(error);

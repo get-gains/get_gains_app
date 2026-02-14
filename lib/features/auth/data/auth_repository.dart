@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/constants/api_constants.dart';
@@ -426,16 +427,17 @@ class AuthRepository {
 
   // ============== Google Login (Existing User) ==============
 
-  /// Login with Google (for existing users)
+  /// Login with Google (existing users, with auto-registration fallback)
   ///
-  /// Authenticates an existing Google user:
+  /// Authenticates a Google user:
   /// 1. Opens Google sign-in flow
   /// 2. Gets Google ID token
-  /// 3. Sends to server for authentication
-  /// 4. Returns full user data (user must already exist)
+  /// 3. Tries POST /auth/login/google (existing user)
+  /// 4. If 404 (user not found), falls back to registration via POST /auth/google
+  /// 5. Returns either AuthResponse (existing) or GoogleSignInResponse (new user)
   ///
-  /// Server endpoint: POST /auth/login/google
-  Future<Result<AuthResponse, AppError>> loginWithGoogle() async {
+  /// The return type uses [GoogleLoginResult] to distinguish between the two.
+  Future<Result<GoogleLoginResult, AppError>> loginWithGoogle() async {
     AppLogger.debug('Starting Google login flow', tag: 'AuthRepo');
 
     // Step 1: Get Google ID token
@@ -443,7 +445,7 @@ class AuthRepository {
 
     return googleResult.when(
       success: (googleData) async {
-        // Step 2: Send ID token to server
+        // Step 2: Try login for existing user
         final request = GoogleSignInRequest(idToken: googleData.idToken);
 
         final result = await _apiClient.post<Map<String, dynamic>>(
@@ -476,7 +478,7 @@ class AuthRepository {
               await _userPreferences.setIsGoogleUser(true);
 
               AppLogger.info('Google login successful', tag: 'AuthRepo');
-              return Success(response);
+              return Success(GoogleLoginResult.existingUser(response));
             } catch (e) {
               AppLogger.error(
                 'Failed to process Google login response',
@@ -491,7 +493,16 @@ class AuthRepository {
               );
             }
           },
-          failure: (error) {
+          failure: (error) async {
+            // If user not found (404), fall back to registration flow
+            if (error is NetworkError && error.statusCode == 404) {
+              AppLogger.info(
+                'User not found, falling back to Google registration',
+                tag: 'AuthRepo',
+              );
+              return _registerWithGoogleToken(googleData);
+            }
+
             AppLogger.error(
               'Google login API call failed',
               tag: 'AuthRepo',
@@ -503,6 +514,84 @@ class AuthRepository {
       },
       failure: (error) {
         return Failure(error);
+      },
+    );
+  }
+
+  /// Registers a new Google user using an already-obtained Google token.
+  ///
+  /// This is called internally by [loginWithGoogle] when the login endpoint
+  /// returns 404 (user not found). Reuses the Google ID token so the user
+  /// doesn't have to pick their account again.
+  Future<Result<GoogleLoginResult, AppError>> _registerWithGoogleToken(
+    GoogleSignInResult googleData,
+  ) async {
+    final request = GoogleSignInRequest(idToken: googleData.idToken);
+
+    final result = await _apiClient.post<Map<String, dynamic>>(
+      ApiConstants.googleSignIn,
+      data: request.toJson(),
+    );
+
+    return result.when(
+      success: (data) async {
+        try {
+          final response = GoogleSignInResponse(
+            accessToken: data['accessToken'] as String,
+            refreshToken: data['refreshToken'] as String,
+            user: PartialUserModel.fromJson(
+              data['user'] as Map<String, dynamic>,
+            ),
+          );
+
+          // Save pending profile for completion
+          await _userPreferences.savePendingGoogleProfile(
+            PendingGoogleProfile(
+              email: response.user.email,
+              supabaseId: response.user.supabaseId,
+              accessToken: response.accessToken,
+              refreshToken: response.refreshToken,
+              displayName: googleData.displayName,
+            ),
+          );
+
+          // Store tokens temporarily (will be used for /google/link call)
+          await _secureStorage.saveTokens(
+            accessToken: response.accessToken,
+            refreshToken: response.refreshToken,
+          );
+
+          AppLogger.info(
+            'Google registration successful, pending profile completion',
+            tag: 'AuthRepo',
+          );
+          return Success(
+            GoogleLoginResult.newUser(
+              response,
+              suggestedName: googleData.displayName,
+            ),
+          );
+        } catch (e) {
+          AppLogger.error(
+            'Failed to process Google registration response',
+            tag: 'AuthRepo',
+            error: e,
+          );
+          return Failure(
+            UnknownError(
+              message: 'Failed to process Google registration',
+              originalError: e,
+            ),
+          );
+        }
+      },
+      failure: (error) {
+        AppLogger.error(
+          'Google registration API call failed',
+          tag: 'AuthRepo',
+          error: error,
+        );
+        return Failure(_mapToAuthError(error));
       },
     );
   }
@@ -543,6 +632,67 @@ class AuthRepository {
     );
   }
 
+  // ============== Password Reset ==============
+
+  /// Reset password using recovery access token
+  ///
+  /// Called after user receives deep link from password reset email.
+  /// The recovery access token is sent as Bearer token in the Authorization header.
+  ///
+  /// Server endpoint: POST /auth/reset-password
+  Future<Result<void, AppError>> resetPassword({
+    required String newPassword,
+    required String recoveryAccessToken,
+  }) async {
+    AppLogger.debug('Resetting password', tag: 'AuthRepo');
+
+    final result = await _apiClient.post<Map<String, dynamic>>(
+      ApiConstants.resetPassword,
+      data: {'newPassword': newPassword},
+      options: Options(
+        headers: {'Authorization': 'Bearer $recoveryAccessToken'},
+      ),
+    );
+
+    return result.when(
+      success: (_) {
+        AppLogger.info('Password reset successfully', tag: 'AuthRepo');
+        return const Success(null);
+      },
+      failure: (error) {
+        AppLogger.error('Password reset failed', tag: 'AuthRepo', error: error);
+        return Failure(_mapToAuthError(error));
+      },
+    );
+  }
+
+  // ============== Email Verification Status ==============
+
+  /// Check if user's email has been verified
+  ///
+  /// Polls the server to check Supabase email verification status.
+  /// Used on the "Check Email" screen for auto-detection.
+  ///
+  /// Server endpoint: POST /auth/check-email-verified
+  Future<Result<bool, AppError>> checkEmailVerified({
+    required String email,
+  }) async {
+    final result = await _apiClient.post<Map<String, dynamic>>(
+      ApiConstants.checkEmailVerified,
+      data: {'email': email},
+    );
+
+    return result.when(
+      success: (data) {
+        final verified = data['verified'] as bool? ?? false;
+        return Success(verified);
+      },
+      failure: (error) {
+        return Failure(_mapToAuthError(error));
+      },
+    );
+  }
+
   // ============== Utility Methods ==============
 
   /// Get cached user data (for offline access)
@@ -566,20 +716,28 @@ class AuthRepository {
   }
 
   /// Map AppError to appropriate AuthError
+  ///
+  /// Preserves server-provided error messages when available (the server
+  /// already maps Supabase error codes to user-friendly messages).
   AppError _mapToAuthError(AppError error) {
+    if (error is ValidationError) {
+      // Server returned errors in { data, errors } format — the message
+      // is already parsed from the server's response and is user-friendly.
+      return error;
+    }
     if (error is NetworkError) {
       switch (error.statusCode) {
-        case 401:
-          return AuthError.invalidCredentials();
         case 409:
           return const AuthError(
-            message: 'Email already exists',
+            message: 'Email already exists.',
             code: 'EMAIL_EXISTS',
           );
-        case 400:
-          return ValidationError(
-            message: error.message,
-            code: 'VALIDATION_ERROR',
+        case 429:
+          return AuthError(
+            message: error.message.isNotEmpty
+                ? error.message
+                : 'Too many requests. Please wait a moment and try again.',
+            code: 'RATE_LIMITED',
           );
         default:
           return error;
