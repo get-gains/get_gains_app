@@ -50,21 +50,30 @@ lib/
 
 ## Essential Commands
 
+### When using FLUTTER/DART commands
+
+```bash
+# Always USE the fvm prefix
+fvm flutter
+fvm dart
+```
+
+
 ### Code Generation (REQUIRED after model/provider changes)
 
 ```bash
 # Generate all code (freezed, json_serializable, riverpod, drift)
-dart run build_runner build --delete-conflicting-outputs
+fvm dart run build_runner build --delete-conflicting-outputs
 
 # Watch mode (auto-regenerate on save)
-dart run build_runner watch --delete-conflicting-outputs
+fvm dart run build_runner watch --delete-conflicting-outputs
 ```
 
 ### Drift Database Commands
 
 ```bash
 # Generate database code
-dart run build_runner build --delete-conflicting-outputs
+fvm dart run build_runner build --delete-conflicting-outputs
 
 # Generate migration (after schema changes)
 # 1. Increment schemaVersion in app_database.dart
@@ -76,16 +85,16 @@ dart run build_runner build --delete-conflicting-outputs
 
 ```bash
 # Get dependencies
-flutter pub get
+fvm flutter pub get
 
 # Run app
-flutter run
+fvm flutter run
 
 # Build APK
-flutter build apk --release
+fvm flutter build apk --release
 
 # Analyze code
-flutter analyze
+fvm flutter analyze
 ```
 
 ---
