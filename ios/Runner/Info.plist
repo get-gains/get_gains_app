@@ -3,7 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Camera access is required for pose detection</string>
+	<string>Camera access is needed for pose detection and profile photos</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photo library access is needed to select a profile picture</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Microphone access may be needed</string>
 	<key>CFBundleDevelopmentRegion</key>
