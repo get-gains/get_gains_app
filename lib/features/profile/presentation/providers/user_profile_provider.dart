@@ -33,7 +33,7 @@ part 'user_profile_provider.g.dart';
 /// ## Usage
 /// ```dart
 /// // Watch for profile state (screens, onboarding guards)
-/// final profileAsync = ref.watch(userProfileNotifierProvider);
+/// final profileAsync = ref.watch(userProfileProvider);
 ///
 /// // Check if onboarding is needed
 /// final needsOnboarding = ref.watch(needsOnboardingProvider);
@@ -42,10 +42,10 @@ part 'user_profile_provider.g.dart';
 /// final isOnline = ref.watch(isOnlineProvider).valueOrNull ?? true;
 ///
 /// // Create profile during onboarding (online only)
-/// await ref.read(userProfileNotifierProvider.notifier).createProfile(request);
+/// await ref.read(userProfileProvider.notifier).createProfile(request);
 ///
 /// // Update profile from edit screen (online only)
-/// await ref.read(userProfileNotifierProvider.notifier).updateProfile(request);
+/// await ref.read(userProfileProvider.notifier).updateProfile(request);
 /// ```
 @Riverpod(keepAlive: true)
 class UserProfileNotifier extends _$UserProfileNotifier {
