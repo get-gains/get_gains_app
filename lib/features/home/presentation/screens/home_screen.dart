@@ -8,6 +8,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/auth_state_provider.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../profile/profile.dart';
 import '../../../subscription/subscription.dart';
 import '../widgets/widgets.dart';
 
@@ -27,8 +28,30 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  bool _onboardingShown = false;
+
   @override
   Widget build(BuildContext context) {
+    // ── Onboarding check ──────────────────────────────────────────
+    // Show the setup sheet once when the profile hasn't been created.
+    ref.listen<bool>(needsOnboardingProvider, (previous, needsOnboarding) {
+      if (needsOnboarding && !_onboardingShown) {
+        _onboardingShown = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) showOnboardingSheet(context);
+        });
+      }
+    });
+
+    // Also check on first build (listen only fires on change)
+    final needsOnboarding = ref.watch(needsOnboardingProvider);
+    if (needsOnboarding && !_onboardingShown) {
+      _onboardingShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) showOnboardingSheet(context);
+      });
+    }
+
     final authState = ref.watch(authStateProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Extract name from email or use default
