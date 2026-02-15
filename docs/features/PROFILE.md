@@ -58,7 +58,9 @@ The Profile feature allows users to view and manage their personal information w
 | **Connectivity Service** | ✅ Complete | Reactive online/offline monitoring |
 | **Offline Profile Display** | ✅ Complete | Hive-backed local cache fallback |
 | **Online-only Edit Guard** | ✅ Complete | `canEditProfileProvider` gates mutations |
-| **Edit Profile Screen** | 🔮 Not Implemented | Presentation layer planned |
+| **Edit Profile Screen** | ✅ Complete | Full form with avatar picker, permissions, multipart upload |
+| **Edit Profile Provider** | ✅ Complete | Form state management with dirty tracking |
+| **Image Permissions** | ✅ Complete | `permission_handler` for camera + photo library |
 | **Stats Integration** | 🔮 Not Implemented | Placeholder UI exists |
 | **Achievements System** | 🔮 Not Implemented | Placeholder UI exists |
 
@@ -84,9 +86,11 @@ lib/features/profile/
     ├── providers/
     │   ├── profile_provider.dart         # Account-level UserModel fetching
     │   ├── user_profile_provider.dart    # Fitness profile notifier + derived providers
+    │   ├── edit_profile_provider.dart    # Edit form state management + save
     │   └── *.g.dart                      # Generated provider code
     └── screens/
-        └── profile_screen.dart           # Profile display UI
+        ├── profile_screen.dart           # Profile display UI (offline-ready)
+        └── edit_profile_screen.dart      # Edit profile form (online-only)
 
 lib/services/connectivity/
 └── connectivity_service.dart             # ConnectivityService + isOnlineProvider
@@ -97,10 +101,7 @@ lib/services/connectivity/
 ```
 lib/features/profile/
 └── presentation/
-    ├── providers/
-    │   └── edit_profile_provider.dart   # Edit form state management (future)
     └── screens/
-        ├── edit_profile_screen.dart     # Edit profile UI (future)
         └── onboarding_screen.dart       # Profile onboarding UI (future)
 ```
 
@@ -552,7 +553,7 @@ All achievements are currently `unlocked: false` (displayed with lock icon and 6
 
 **TODO**: Replace with API-backed data when backend endpoints are ready.
 
-#### Design System Compliance
+#### Design System Compliance (ProfileScreen)
 
 Follows [DESIGN_STYLE.md](../DESIGN_STYLE.md):
 
@@ -564,6 +565,91 @@ Follows [DESIGN_STYLE.md](../DESIGN_STYLE.md):
 | Border Radius | ✅ Cards use 16px radius (radius-lg) |
 | Shadows | ✅ AppCard applies appropriate elevation |
 | Dark Mode | ✅ Respects theme brightness with isDark checks |
+
+---
+
+### EditProfileScreen
+
+**Location**: `lib/features/profile/presentation/screens/edit_profile_screen.dart`
+
+**Purpose**: Online-only form for editing all fitness profile fields with avatar upload.
+
+**Route**: `/profile/edit` (`AppRoutes.editProfile`)
+
+**Provider**: `editProfileNotifierProvider` (manages form state & save logic)
+
+#### Screen Composition
+
+```
+EditProfileScreen (ConsumerStatefulWidget)
+├── Scaffold
+│   ├── AppBar
+│   │   ├── Title: "Edit Profile"
+│   │   └── Save button (disabled when saving)
+│   └── SingleChildScrollView
+│       └── Column
+│           ├── _AvatarPicker (camera / gallery / remove)
+│           ├── Bio text field
+│           ├── Body Metrics section
+│           │   ├── Height (cm) text field
+│           │   ├── Weight (kg) text field
+│           │   ├── _SexSelector (ChoiceChip: Male / Female / Other)
+│           │   └── _DateOfBirthField (date picker)
+│           ├── Training Preferences section
+│           │   ├── _ExperienceLevelSelector (ChoiceChip: beginner/intermediate/advanced)
+│           │   └── _AvailabilitySelector
+│           │       ├── Days per week slider (1–7)
+│           │       └── Session duration slider (15–120 min)
+│           ├── _EquipmentSelector (FilterChip multi-select, 16 options)
+│           └── Injury History text area
+```
+
+#### Permissions Flow
+
+Uses `permission_handler` for camera & photo library access:
+
+```
+User taps avatar → showAppActionSheet (Take Photo / Choose from Gallery / Remove)
+  ↓
+_requestPermission(source)
+  ├─ Already granted → proceed to ImagePicker
+  ├─ Denied → request permission
+  │   ├─ Granted → proceed to ImagePicker
+  │   └─ Denied → show toast warning
+  └─ Permanently denied → show confirm dialog
+      ├─ "Open Settings" → openAppSettings()
+      └─ Cancel → return
+```
+
+**Packages Used**:
+- `image_picker: ^1.1.2` — Camera & gallery image selection
+- `permission_handler: ^11.3.1` — Runtime permission requests
+
+#### Save Flow
+
+```
+User taps Save button
+  ↓
+_handleSave() syncs TextEditingController values → notifier
+  ↓
+editProfileNotifier.save() → userProfileNotifier.updateProfile()
+  ↓
+Multipart PATCH /api/profile (avatar as file, fields as parts)
+  ↓
+[Success] Toast "Profile updated" → context.pop()
+[Failure] Toast error message → form state preserved
+```
+
+#### Equipment Options
+
+```dart
+const equipmentOptions = [
+  'Barbell', 'Dumbbells', 'Kettlebell', 'Pull-up Bar',
+  'Resistance Bands', 'Cable Machine', 'Smith Machine', 'Leg Press',
+  'Bench', 'Squat Rack', 'TRX / Suspension', 'Medicine Ball',
+  'Foam Roller', 'Ab Wheel', 'Jump Rope', 'None / Bodyweight Only',
+];
+```
 
 ---
 
@@ -972,56 +1058,35 @@ testWidgets('User can sign out from profile', (tester) async {
 
 ### Phase 1: Profile Editing (Presentation Layer)
 
-**Status**: 🔮 Presentation Not Implemented — **Data layer complete**
+**Status**: ✅ Complete
 
-**Description**: UI for editing fitness profile fields and account info.
+**Description**: UI for editing fitness profile fields with avatar upload.
 
-**Data layer already provides**:
-- `UserProfileNotifier.updateProfile()` with multipart support
-- `canEditProfileProvider` to disable controls when offline
-- `UpdateUserProfileRequest` model with all optional fields
+**Implemented**:
+- `EditProfileScreen` — Full form with all fitness profile fields
+- `EditProfileNotifier` — Form state management (field setters, dirty tracking, save)
+- Avatar picker via `image_picker` (camera + gallery)
+- `permission_handler` for runtime camera & photo library permissions
+- Permanently-denied permission → prompt to open device Settings
+- Action sheet for avatar options (take photo, choose from gallery, remove)
+- Online-only gate: edit button shows warning toast when offline
+- Bio, height, weight, sex, date of birth, experience level
+- Days per week & session duration sliders
+- Equipment multi-select (filter chips)
+- Injury history text area
+- Multipart PATCH upload on save → auto-caches locally
+- Success toast + pop back to profile screen
 
-**Components to Add**:
+**Route**: `/profile/edit` (`AppRoutes.editProfile`)
 
-1. **Edit Profile Screen** (`edit_profile_screen.dart`)
-   - Form fields for all fitness profile data
-   - Avatar picker (camera/gallery) → passes `avatarFilePath`
-   - "Remove avatar" option → sets `removeAvatar: true`
-   - Disable save button when `canEditProfileProvider` is `false`
-   - Upload progress indicator
+**Dependencies Added**:
+- `image_picker: ^1.1.2`
+- `permission_handler: ^11.3.1`
 
-2. **Edit Profile Provider** (`edit_profile_provider.dart`)
-   - Form state management (dirty tracking, validation)
-   - Calls `userProfileNotifierProvider.notifier.updateProfile()`
-
-**UI Flow**:
-
-```
-User on ProfileScreen
-  ↓
-Taps "Edit" button → check canEditProfileProvider
-  ├─ Online → Navigate to EditProfileScreen
-  └─ Offline → Show "Editing requires internet" message
-  ↓
-Form displays with current profile data
-  ↓
-User edits fields / picks new avatar
-  ↓
-Taps "Save" (disabled if offline)
-  ↓
-userProfileNotifier.updateProfile(
-  UpdateUserProfileRequest(
-    weightKg: 75.0,
-    avatarFilePath: pickedFile?.path,
-    removeAvatar: wantsToRemove,
-  ),
-)
-  ↓
-Multipart PATCH /api/profile
-  ↓
-[Success] Navigate back, profile updated + cached
-[Failure] Show error, form state preserved
-```
+**Platform Permissions Configured**:
+- **Android**: `CAMERA`, `READ_MEDIA_IMAGES` in AndroidManifest
+- **iOS**: `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription` in Info.plist
+- **iOS Podfile**: `PERMISSION_CAMERA=1`, `PERMISSION_PHOTOS=1` GCC macros
 
 ### Phase 2: Onboarding Screen
 
@@ -1036,7 +1101,7 @@ Multipart PATCH /api/profile
 
 **Components to Add**:
 - Multi-step onboarding wizard
-- Avatar picker for initial profile photo
+- Avatar picker for initial profile photo (can reuse `EditProfileScreen` patterns)
 - Experience level selector
 - Equipment multi-select
 - Availability picker
@@ -1143,9 +1208,11 @@ lib/features/profile/
     ├── presentation.dart
     ├── providers/
     │   ├── profile_provider.dart         # Account-level UserModel
-    │   └── user_profile_provider.dart    # Fitness profile + derived providers
+    │   ├── user_profile_provider.dart    # Fitness profile + derived providers
+    │   └── edit_profile_provider.dart    # Edit form state + save logic
     └── screens/
-        └── profile_screen.dart
+        ├── profile_screen.dart           # Display profile (offline-ready)
+        └── edit_profile_screen.dart      # Edit form (online-only)
 
 lib/services/connectivity/
 └── connectivity_service.dart             # ConnectivityService + isOnlineProvider
@@ -1179,6 +1246,17 @@ final canEdit = ref.watch(canEditProfileProvider);
 // Check if onboarding is needed
 final needsOnboarding = ref.watch(needsOnboardingProvider);
 
+// Edit profile form state
+final formState = ref.watch(editProfileNotifierProvider);
+
+// Update a form field
+ref.read(editProfileNotifierProvider.notifier).setBio('New bio');
+ref.read(editProfileNotifierProvider.notifier).setWeightKg(75.0);
+ref.read(editProfileNotifierProvider.notifier).setEquipment(['Barbell', 'Dumbbells']);
+
+// Save edits (calls updateProfile under the hood)
+await ref.read(editProfileNotifierProvider.notifier).save();
+
 // Create profile (onboarding)
 await ref.read(userProfileNotifierProvider.notifier).createProfile(
   CreateUserProfileRequest(
@@ -1203,10 +1281,13 @@ ref.read(userProfileNotifierProvider.notifier).clear();
 // Navigate to profile
 context.push(AppRoutes.profile);
 
-// From profile back to home
+// Navigate to edit profile (online-only)
+context.push(AppRoutes.editProfile);
+
+// From profile/edit back
 context.pop();
 ```
 
 ---
 
-*Last updated: February 15, 2026*
+*Last updated: July 2025*

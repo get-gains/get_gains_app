@@ -66,9 +66,9 @@
 | Registration | Email/password + Google sign-up | ✅ Data/Services | [features/REGISTER.md](features/REGISTER.md) |
 | Login | Email/password + Google login | 🔮 Not Implemented | - |
 | Password Reset | Recovery via email | ⚠️ Partial (send email only) | [features/REGISTER.md](features/REGISTER.md) |
-| Profile Management | View profile, stats, achievements, sign out | ✅ View Only | [features/PROFILE.md](features/PROFILE.md) |
+| Profile Management | View profile, stats, achievements, sign out | ✅ View + Edit | [features/PROFILE.md](features/PROFILE.md) |
 | Profile Data Layer | Fitness profile CRUD, avatar upload, offline cache | ✅ Complete | [features/PROFILE.md](features/PROFILE.md) |
-| Profile Editing UI | Edit name, nickname, avatar, fitness fields | 🔮 Not Implemented | [features/PROFILE.md](features/PROFILE.md) |
+| Profile Editing UI | Edit avatar, bio, body metrics, training prefs, equipment | ✅ Complete | [features/PROFILE.md](features/PROFILE.md) |
 | Connectivity Service | Network status monitoring for offline-first | ✅ Complete | [features/PROFILE.md](features/PROFILE.md) |
 
 **Primary Files:**
@@ -85,7 +85,9 @@
 - `/lib/features/profile/data/models/profile_request_models.dart` - Create/Update request models
 - `/lib/features/profile/presentation/providers/profile_provider.dart` - Account-level profile fetching
 - `/lib/features/profile/presentation/providers/user_profile_provider.dart` - Fitness profile notifier + derived providers
-- `/lib/features/profile/presentation/screens/profile_screen.dart` - Profile UI
+- `/lib/features/profile/presentation/providers/edit_profile_provider.dart` - Edit form state + save logic
+- `/lib/features/profile/presentation/screens/profile_screen.dart` - Profile display UI (offline-ready)
+- `/lib/features/profile/presentation/screens/edit_profile_screen.dart` - Edit profile form (online-only)
 - `/lib/services/connectivity/connectivity_service.dart` - Connectivity monitoring + isOnlineProvider
 
 ### Pose Detection & Form Analysis *(Documented in [features/POSE_DETECTION.md](features/POSE_DETECTION.md))*
