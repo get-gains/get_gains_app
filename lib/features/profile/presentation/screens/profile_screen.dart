@@ -11,7 +11,9 @@ import '../../../../providers/auth_state_provider.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../auth/data/models/user_model.dart';
+import '../../data/models/user_profile_model.dart';
 import '../providers/profile_provider.dart';
+import '../providers/user_profile_provider.dart';
 
 /// Placeholder achievement entry for the profile achievements grid.
 /// Replace with API-backed model when backend is ready.
@@ -78,14 +80,24 @@ class ProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(profileProvider);
+    final fitnessProfileAsync = ref.watch(userProfileProvider);
+    final canEdit = ref.watch(canEditProfileProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () => ref.refresh(profileProvider.future),
+          onRefresh: () async {
+            await ref.refresh(profileProvider.future);
+            ref.read(userProfileProvider.notifier).refresh();
+          },
           child: profileAsync.when(
-            data: (user) => _ProfileContent(user: user, isDark: isDark),
+            data: (user) => _ProfileContent(
+              user: user,
+              fitnessProfile: fitnessProfileAsync.value,
+              canEdit: canEdit,
+              isDark: isDark,
+            ),
             loading: () => const _ProfileLoading(),
             error: (error, _) => _ProfileError(
               message: error is Exception ? error.toString() : '$error',
@@ -99,9 +111,16 @@ class ProfileScreen extends ConsumerWidget {
 }
 
 class _ProfileContent extends StatelessWidget {
-  const _ProfileContent({required this.user, required this.isDark});
+  const _ProfileContent({
+    required this.user,
+    required this.fitnessProfile,
+    required this.canEdit,
+    required this.isDark,
+  });
 
   final UserModel user;
+  final UserProfileModel? fitnessProfile;
+  final bool canEdit;
   final bool isDark;
 
   @override
@@ -119,10 +138,25 @@ class _ProfileContent extends StatelessWidget {
           ),
           title: Text(
             'Profile',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: IconButton(
+                icon: const Icon(Icons.edit_outlined),
+                tooltip: canEdit ? 'Edit profile' : 'Editing requires internet',
+                onPressed: canEdit
+                    ? () => context.push(AppRoutes.editProfile)
+                    : () => AppToast.warning(
+                        context,
+                        'Editing requires an internet connection',
+                      ),
+              ),
+            ),
+          ],
           backgroundColor: Colors.transparent,
           elevation: 0,
         ),
@@ -131,18 +165,20 @@ class _ProfileContent extends StatelessWidget {
           sliver: SliverList(
             delegate: SliverChildListDelegate([
               const SizedBox(height: 8),
-              // Avatar and name block
+              // ── Avatar and name block ─────────────────────────────
               Center(
                 child: Column(
                   children: [
                     AppAvatar(
                       name: user.name,
+                      imageUrl: fitnessProfile?.avatarUrl,
                       size: AppAvatarSize.xxl,
                     ),
                     const SizedBox(height: 16),
                     Text(
                       user.name,
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
                             fontWeight: FontWeight.bold,
                             fontFamily: AppTextStyles.fontFamilySans,
                           ),
@@ -152,7 +188,8 @@ class _ProfileContent extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         user.nickname,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
                               color: isDark
                                   ? AppColors.textSecondaryDark
                                   : AppColors.textSecondaryLight,
@@ -161,11 +198,28 @@ class _ProfileContent extends StatelessWidget {
                         textAlign: TextAlign.center,
                       ),
                     ],
+                    if (fitnessProfile?.bio != null &&
+                        fitnessProfile!.bio!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        fitnessProfile!.bio!,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight,
+                          fontFamily: AppTextStyles.fontFamilySans,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ],
                 ),
               ),
               const SizedBox(height: 32),
-              // Info card
+
+              // ── Account info card ─────────────────────────────────
               AppCard(
                 padding: const EdgeInsets.all(20),
                 child: Column(
@@ -190,7 +244,69 @@ class _ProfileContent extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              // Stats placeholder section
+
+              // ── Fitness profile card ──────────────────────────────
+              if (fitnessProfile != null) ...[
+                _SectionHeader(title: 'Fitness Profile', isDark: isDark),
+                const SizedBox(height: 12),
+                _FitnessProfileCard(profile: fitnessProfile!, isDark: isDark),
+                const SizedBox(height: 24),
+
+                // ── Training preferences card ─────────────────────
+                _SectionHeader(title: 'Training Preferences', isDark: isDark),
+                const SizedBox(height: 12),
+                _TrainingPreferencesCard(
+                  profile: fitnessProfile!,
+                  isDark: isDark,
+                ),
+                const SizedBox(height: 24),
+
+                // ── Equipment card ────────────────────────────────
+                if (fitnessProfile!.equipment.isNotEmpty) ...[
+                  _SectionHeader(title: 'Equipment', isDark: isDark),
+                  const SizedBox(height: 12),
+                  _EquipmentCard(
+                    equipment: fitnessProfile!.equipment,
+                    isDark: isDark,
+                  ),
+                  const SizedBox(height: 24),
+                ],
+
+                // ── Injury history ────────────────────────────────
+                if (fitnessProfile!.injuryHistory != null &&
+                    fitnessProfile!.injuryHistory!.isNotEmpty) ...[
+                  _SectionHeader(title: 'Injury History', isDark: isDark),
+                  const SizedBox(height: 12),
+                  AppCard(
+                    padding: const EdgeInsets.all(20),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.healing_outlined,
+                          size: 22,
+                          color: isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight,
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Text(
+                            fitnessProfile!.injuryHistory!,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  fontFamily: AppTextStyles.fontFamilySans,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ],
+
+              // ── Stats placeholder section ─────────────────────────
               _SectionHeader(title: 'Stats', isDark: isDark),
               const SizedBox(height: 12),
               AppCard(
@@ -227,10 +343,7 @@ class _ProfileContent extends StatelessWidget {
                 childAspectRatio: 0.85,
                 children: _placeholderAchievements
                     .map(
-                      (a) => _AchievementTile(
-                        achievement: a,
-                        isDark: isDark,
-                      ),
+                      (a) => _AchievementTile(achievement: a, isDark: isDark),
                     )
                     .toList(),
               ),
@@ -303,19 +416,19 @@ class _ProfileRow extends StatelessWidget {
               Text(
                 label,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
-                      fontFamily: AppTextStyles.fontFamilySans,
-                    ),
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                  fontFamily: AppTextStyles.fontFamilySans,
+                ),
               ),
               const SizedBox(height: 2),
               Text(
                 value,
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      fontWeight: FontWeight.w500,
-                      fontFamily: AppTextStyles.fontFamilySans,
-                    ),
+                  fontWeight: FontWeight.w500,
+                  fontFamily: AppTextStyles.fontFamilySans,
+                ),
               ),
             ],
           ),
@@ -326,10 +439,7 @@ class _ProfileRow extends StatelessWidget {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.title,
-    required this.isDark,
-  });
+  const _SectionHeader({required this.title, required this.isDark});
 
   final String title;
   final bool isDark;
@@ -342,23 +452,181 @@ class _SectionHeader extends StatelessWidget {
         Text(
           title,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: isDark
-                    ? AppColors.foregroundDark
-                    : AppColors.foregroundLight,
-                fontFamily: AppTextStyles.fontFamilySans,
-              ),
+            fontWeight: FontWeight.bold,
+            color: isDark
+                ? AppColors.foregroundDark
+                : AppColors.foregroundLight,
+            fontFamily: AppTextStyles.fontFamilySans,
+          ),
         ),
       ],
     );
   }
 }
 
+// ─── Fitness profile display cards ──────────────────────────────────────
+
+class _FitnessProfileCard extends StatelessWidget {
+  const _FitnessProfileCard({required this.profile, required this.isDark});
+
+  final UserProfileModel profile;
+  final bool isDark;
+
+  String _formatHeight(double cm) {
+    return '${cm.toStringAsFixed(1)} cm';
+  }
+
+  String _formatWeight(double kg) {
+    return '${kg.toStringAsFixed(1)} kg';
+  }
+
+  String _formatSex(Sex sex) {
+    return switch (sex) {
+      Sex.male => 'Male',
+      Sex.female => 'Female',
+    };
+  }
+
+  String _formatExperience(ExperienceLevel level) {
+    return switch (level) {
+      ExperienceLevel.beginner => 'Beginner',
+      ExperienceLevel.intermediate => 'Intermediate',
+      ExperienceLevel.advanced => 'Advanced',
+    };
+  }
+
+  String _formatDateOfBirth(DateTime dob) {
+    final age = DateTime.now().difference(dob).inDays ~/ 365;
+    return '${DateFormat.yMMMd().format(dob)} ($age yrs)';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (profile.heightCm != null) ...[
+            _ProfileRow(
+              icon: Icons.straighten_outlined,
+              label: 'Height',
+              value: _formatHeight(profile.heightCm!),
+              isDark: isDark,
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (profile.weightKg != null) ...[
+            _ProfileRow(
+              icon: Icons.monitor_weight_outlined,
+              label: 'Weight',
+              value: _formatWeight(profile.weightKg!),
+              isDark: isDark,
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (profile.sex != null) ...[
+            _ProfileRow(
+              icon: Icons.person_outline,
+              label: 'Sex',
+              value: _formatSex(profile.sex!),
+              isDark: isDark,
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (profile.dateOfBirth != null) ...[
+            _ProfileRow(
+              icon: Icons.cake_outlined,
+              label: 'Date of Birth',
+              value: _formatDateOfBirth(profile.dateOfBirth!),
+              isDark: isDark,
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (profile.experienceLevel != null)
+            _ProfileRow(
+              icon: Icons.trending_up_outlined,
+              label: 'Experience',
+              value: _formatExperience(profile.experienceLevel!),
+              isDark: isDark,
+            ),
+          // If no fields are populated, show a hint
+          if (profile.heightCm == null &&
+              profile.weightKg == null &&
+              profile.sex == null &&
+              profile.dateOfBirth == null &&
+              profile.experienceLevel == null)
+            _ProfileRow(
+              icon: Icons.info_outline,
+              label: 'Tip',
+              value: 'Tap the edit button to complete your fitness profile',
+              isDark: isDark,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TrainingPreferencesCard extends StatelessWidget {
+  const _TrainingPreferencesCard({required this.profile, required this.isDark});
+
+  final UserProfileModel profile;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _ProfileRow(
+            icon: Icons.calendar_view_week_outlined,
+            label: 'Days per week',
+            value: '${profile.daysAvailable}',
+            isDark: isDark,
+          ),
+          const SizedBox(height: 16),
+          _ProfileRow(
+            icon: Icons.timer_outlined,
+            label: 'Session duration',
+            value: '${profile.sessionDurationMinutes} min',
+            isDark: isDark,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EquipmentCard extends StatelessWidget {
+  const _EquipmentCard({required this.equipment, required this.isDark});
+
+  final List<String> equipment;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: const EdgeInsets.all(20),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: equipment.map((item) {
+          // Capitalise first letter for display
+          final label = item.isNotEmpty
+              ? '${item[0].toUpperCase()}${item.substring(1)}'
+              : item;
+          return AppBadge(label: label, variant: AppBadgeVariant.secondary);
+        }).toList(),
+      ),
+    );
+  }
+}
+
 class _AchievementTile extends StatelessWidget {
-  const _AchievementTile({
-    required this.achievement,
-    required this.isDark,
-  });
+  const _AchievementTile({required this.achievement, required this.isDark});
 
   final _PlaceholderAchievement achievement;
   final bool isDark;
@@ -389,18 +657,14 @@ class _AchievementTile extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  achievement.icon,
-                  size: 36,
-                  color: iconColor,
-                ),
+                Icon(achievement.icon, size: 36, color: iconColor),
                 const SizedBox(height: 8),
                 Text(
                   achievement.title,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: iconColor,
-                        fontFamily: AppTextStyles.fontFamilySans,
-                      ),
+                    color: iconColor,
+                    fontFamily: AppTextStyles.fontFamilySans,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
@@ -411,11 +675,7 @@ class _AchievementTile extends StatelessWidget {
               Positioned(
                 top: 4,
                 right: 4,
-                child: Icon(
-                  Icons.lock_outline,
-                  size: 14,
-                  color: iconColor,
-                ),
+                child: Icon(Icons.lock_outline, size: 14, color: iconColor),
               ),
           ],
         ),
