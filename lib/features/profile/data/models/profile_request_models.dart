@@ -9,6 +9,11 @@ part 'profile_request_models.g.dart';
 /// `daysAvailable` and `sessionDurationMinutes` are required by the server.
 /// All other fields are optional and can be filled in during onboarding or
 /// later via profile editing.
+///
+/// **Avatar handling**: The optional [avatarFilePath] is NOT serialised to
+/// JSON — it is only used by [UserProfileRepository] when building a
+/// multipart/form-data request.  The server stores the avatar in S3 and
+/// returns a presigned URL in the response `avatarUrl` field.
 @freezed
 abstract class CreateUserProfileRequest with _$CreateUserProfileRequest {
   const factory CreateUserProfileRequest({
@@ -18,7 +23,6 @@ abstract class CreateUserProfileRequest with _$CreateUserProfileRequest {
 
     // Personal Data — optional
     String? bio,
-    String? avatarUrl,
     double? heightCm,
     double? weightKg,
     String? unitPreference,
@@ -27,6 +31,11 @@ abstract class CreateUserProfileRequest with _$CreateUserProfileRequest {
     @Default([]) List<String> equipment,
     String? injuryHistory,
     ExperienceLevel? experienceLevel,
+
+    /// Local file path for avatar image to upload.
+    /// Excluded from JSON – handled via multipart form-data in the repository.
+    @JsonKey(includeToJson: false, includeFromJson: false)
+    String? avatarFilePath,
   }) = _CreateUserProfileRequest;
 
   factory CreateUserProfileRequest.fromJson(Map<String, dynamic> json) =>
@@ -36,13 +45,18 @@ abstract class CreateUserProfileRequest with _$CreateUserProfileRequest {
 /// Request body for PATCH /api/profile (editing).
 ///
 /// Every field is optional. Only provided fields are updated on the server.
-/// Use explicit `null` for clearable fields (avatarUrl, dateOfBirth,
-/// injuryHistory) to unset them.
+/// Use explicit `null` for clearable fields (dateOfBirth, injuryHistory)
+/// to unset them.
+///
+/// **Avatar management**:
+/// - Provide [avatarFilePath] to upload a new avatar (replaces existing).
+/// - Set [removeAvatar] to `true` to delete the current avatar without
+///   replacement.
+/// - Leave both unset to keep the avatar unchanged.
 @freezed
 abstract class UpdateUserProfileRequest with _$UpdateUserProfileRequest {
   const factory UpdateUserProfileRequest({
     String? bio,
-    String? avatarUrl,
     double? heightCm,
     double? weightKg,
     String? unitPreference,
@@ -53,6 +67,17 @@ abstract class UpdateUserProfileRequest with _$UpdateUserProfileRequest {
     ExperienceLevel? experienceLevel,
     int? daysAvailable,
     int? sessionDurationMinutes,
+
+    /// Local file path for a new avatar image to upload.
+    /// Excluded from JSON – handled via multipart form-data in the repository.
+    @JsonKey(includeToJson: false, includeFromJson: false)
+    String? avatarFilePath,
+
+    /// When `true`, deletes the current avatar from S3 without replacement.
+    /// Excluded from JSON – sent as a form field in the repository.
+    @JsonKey(includeToJson: false, includeFromJson: false)
+    @Default(false)
+    bool removeAvatar,
   }) = _UpdateUserProfileRequest;
 
   factory UpdateUserProfileRequest.fromJson(Map<String, dynamic> json) =>
