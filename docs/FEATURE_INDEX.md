@@ -67,19 +67,26 @@
 | Login | Email/password + Google login | 🔮 Not Implemented | - |
 | Password Reset | Recovery via email | ⚠️ Partial (send email only) | [features/REGISTER.md](features/REGISTER.md) |
 | Profile Management | View profile, stats, achievements, sign out | ✅ View Only | [features/PROFILE.md](features/PROFILE.md) |
-| Profile Editing | Edit name, nickname, avatar | 🔮 Not Implemented | [features/PROFILE.md](features/PROFILE.md) |
+| Profile Data Layer | Fitness profile CRUD, avatar upload, offline cache | ✅ Complete | [features/PROFILE.md](features/PROFILE.md) |
+| Profile Editing UI | Edit name, nickname, avatar, fitness fields | 🔮 Not Implemented | [features/PROFILE.md](features/PROFILE.md) |
+| Connectivity Service | Network status monitoring for offline-first | ✅ Complete | [features/PROFILE.md](features/PROFILE.md) |
 
 **Primary Files:**
 - `/lib/features/auth/auth.dart` - Feature barrel export
 - `/lib/features/auth/data/auth_repository.dart` - Auth data operations
 - `/lib/features/auth/services/google_sign_in_service.dart` - Google OAuth
-- `/lib/features/auth/services/user_preferences_service.dart` - User caching
+- `/lib/features/auth/services/user_preferences_service.dart` - User caching + raw cache helpers
 - `/lib/features/auth/presentation/providers/register_provider.dart` - Registration state
 - `/lib/providers/auth_state_provider.dart` - App-wide auth state
 - `/lib/providers/router_provider.dart` - Route guards
 - `/lib/features/profile/profile.dart` - Profile feature export
-- `/lib/features/profile/presentation/providers/profile_provider.dart` - Profile data fetching
+- `/lib/features/profile/data/user_profile_repository.dart` - Fitness profile CRUD + multipart upload + caching
+- `/lib/features/profile/data/models/user_profile_model.dart` - Fitness profile model
+- `/lib/features/profile/data/models/profile_request_models.dart` - Create/Update request models
+- `/lib/features/profile/presentation/providers/profile_provider.dart` - Account-level profile fetching
+- `/lib/features/profile/presentation/providers/user_profile_provider.dart` - Fitness profile notifier + derived providers
 - `/lib/features/profile/presentation/screens/profile_screen.dart` - Profile UI
+- `/lib/services/connectivity/connectivity_service.dart` - Connectivity monitoring + isOnlineProvider
 
 ### Pose Detection & Form Analysis *(Documented in [features/POSE_DETECTION.md](features/POSE_DETECTION.md))*
 

@@ -50,11 +50,15 @@ The Profile feature allows users to view and manage their personal information w
 | Component | Status | Notes |
 |-----------|--------|-------|
 | **Profile Screen** | ✅ Complete | Display-only, no editing |
-| **Profile Provider** | ✅ Complete | Fetches user data from API |
-| **Profile Repository** | ❌ Not Created | API calls handled directly in provider |
-| **Edit Profile Screen** | 🔮 Not Implemented | Planned for future |
-| **Edit Profile Provider** | 🔮 Not Implemented | Planned for future |
-| **Avatar Upload** | 🔮 Not Implemented | Planned for future |
+| **Account Profile Provider** | ✅ Complete | Fetches `UserModel` from API |
+| **Fitness Profile Data Layer** | ✅ Complete | Models, repository, providers with offline caching |
+| **Fitness Profile Provider** | ✅ Complete | Async notifier with create/update/refresh/clear |
+| **Fitness Profile Repository** | ✅ Complete | Multipart upload, network-first with local fallback |
+| **Avatar Upload (Data Layer)** | ✅ Complete | Multipart form-data via repository |
+| **Connectivity Service** | ✅ Complete | Reactive online/offline monitoring |
+| **Offline Profile Display** | ✅ Complete | Hive-backed local cache fallback |
+| **Online-only Edit Guard** | ✅ Complete | `canEditProfileProvider` gates mutations |
+| **Edit Profile Screen** | 🔮 Not Implemented | Presentation layer planned |
 | **Stats Integration** | 🔮 Not Implemented | Placeholder UI exists |
 | **Achievements System** | 🔮 Not Implemented | Placeholder UI exists |
 
@@ -67,44 +71,59 @@ The Profile feature allows users to view and manage their personal information w
 ```
 lib/features/profile/
 ├── profile.dart                          # Feature barrel export
+├── data/
+│   ├── data.dart                         # Data layer barrel export
+│   ├── models/
+│   │   ├── models.dart                   # Models barrel export
+│   │   ├── user_profile_model.dart       # Freezed model (Sex, ExperienceLevel, UserProfileModel)
+│   │   ├── profile_request_models.dart   # Create & Update request models
+│   │   └── *.freezed.dart / *.g.dart     # Generated code
+│   └── user_profile_repository.dart      # Network-first repo with local cache + multipart upload
 └── presentation/
     ├── presentation.dart                 # Presentation layer export
     ├── providers/
-    │   ├── profile_provider.dart         # Profile data fetching
-    │   └── profile_provider.g.dart       # Generated provider code
+    │   ├── profile_provider.dart         # Account-level UserModel fetching
+    │   ├── user_profile_provider.dart    # Fitness profile notifier + derived providers
+    │   └── *.g.dart                      # Generated provider code
     └── screens/
         └── profile_screen.dart           # Profile display UI
+
+lib/services/connectivity/
+└── connectivity_service.dart             # ConnectivityService + isOnlineProvider
 ```
 
 ### Missing Components (To Be Created)
 
 ```
 lib/features/profile/
-├── data/                                 # Data layer (recommended)
-│   ├── data.dart
-│   ├── models/
-│   │   └── profile_update_request.dart  # Edit request model
-│   └── profile_repository.dart          # Data access abstraction
 └── presentation/
     ├── providers/
-    │   └── edit_profile_provider.dart   # Edit state management
+    │   └── edit_profile_provider.dart   # Edit form state management (future)
     └── screens/
-        └── edit_profile_screen.dart     # Edit profile UI
+        ├── edit_profile_screen.dart     # Edit profile UI (future)
+        └── onboarding_screen.dart       # Profile onboarding UI (future)
 ```
 
 ### Architecture Patterns
 
 Following the [simplified clean architecture](../CONTEXT.md#architecture-overview) approach:
 
-1. **Provider Layer**: State management with Riverpod
-2. **Screen Layer**: UI widgets and user interaction
-3. **API Layer**: HTTP communication via shared ApiClient
-4. **Repository Layer**: (Recommended) Abstract data access for testability
+1. **Model Layer**: Freezed data models + request models
+2. **Repository Layer**: Data access abstraction with caching and multipart upload
+3. **Provider Layer**: State management with Riverpod async notifiers
+4. **Screen Layer**: UI widgets and user interaction (display-only for now)
 
-**Current Implementation Note**: The feature currently bypasses the repository pattern and calls ApiClient directly from the provider. This works but is not ideal for:
-- Unit testing (harder to mock)
-- Separation of concerns
-- Reusability across multiple providers
+**Two Profile Concepts**:
+
+| Concept | Provider | Model | API Endpoint | Purpose |
+|---|---|---|---|---|
+| **Account profile** | `profileProvider` | `UserModel` | `GET /users/profile` | Name, email, nickname |
+| **Fitness profile** | `userProfileNotifierProvider` | `UserProfileModel?` | `GET/POST/PATCH /profile` | Bio, avatar, height, weight, equipment, etc. |
+
+**Offline-first Strategy**:
+- `UserProfileRepository.getProfile()` fetches from the server first, then falls back to a Hive-cached copy on network failure.
+- `createProfile()` and `updateProfile()` are **online-only** — gated behind `ConnectivityService.isConnected()`.
+- The `canEditProfileProvider` combines profile-loaded state with connectivity state so the UI can disable edit controls when offline.
 
 ---
 
@@ -144,71 +163,268 @@ abstract class UserModel with _$UserModel {
 | `createdAt` | DateTime? | No | Account creation timestamp |
 | `updatedAt` | DateTime? | No | Last update timestamp |
 
-**Note**: This model is shared with the auth feature. The profile feature does not define separate models currently. When editing is implemented, consider creating a `ProfileUpdateRequest` model.
+**Note**: This model is shared with the auth feature and is used by the account-level `profileProvider`.
+
+### UserProfileModel (Fitness Profile)
+
+**Location**: `lib/features/profile/data/models/user_profile_model.dart`
+
+```dart
+enum Sex {
+  @JsonValue('MALE') male,
+  @JsonValue('FEMALE') female,
+}
+
+enum ExperienceLevel {
+  @JsonValue('BEGINNER') beginner,
+  @JsonValue('INTERMEDIATE') intermediate,
+  @JsonValue('ADVANCED') advanced,
+}
+
+@freezed
+abstract class UserProfileModel with _$UserProfileModel {
+  const factory UserProfileModel({
+    required String id,
+    required String userId,
+    String? bio,
+    String? avatarUrl,
+    double? heightCm,
+    double? weightKg,
+    String? unitPreference,
+    Sex? sex,
+    DateTime? dateOfBirth,
+    @Default([]) List<String> equipment,
+    String? injuryHistory,
+    ExperienceLevel? experienceLevel,
+    required int daysAvailable,
+    required int sessionDurationMinutes,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) = _UserProfileModel;
+
+  factory UserProfileModel.fromJson(Map<String, dynamic> json) =>
+      _$UserProfileModelFromJson(json);
+}
+```
+
+**Notes**:
+- `avatarUrl` is a **presigned URL** generated by the server on each GET. The server stores S3 object keys internally.
+- `daysAvailable` and `sessionDurationMinutes` are required by the server during creation and always present in responses.
+
+### CreateUserProfileRequest (Onboarding)
+
+**Location**: `lib/features/profile/data/models/profile_request_models.dart`
+
+```dart
+@freezed
+abstract class CreateUserProfileRequest with _$CreateUserProfileRequest {
+  const factory CreateUserProfileRequest({
+    required int daysAvailable,
+    required int sessionDurationMinutes,
+    String? bio,
+    double? heightCm,
+    double? weightKg,
+    String? unitPreference,
+    Sex? sex,
+    DateTime? dateOfBirth,
+    @Default([]) List<String> equipment,
+    String? injuryHistory,
+    ExperienceLevel? experienceLevel,
+    @JsonKey(includeToJson: false, includeFromJson: false)
+    String? avatarFilePath,
+  }) = _CreateUserProfileRequest;
+}
+```
+
+**Key Point**: `avatarFilePath` is excluded from JSON serialisation. The repository uses it to attach the file as a `MultipartFile` in the `multipart/form-data` request.
+
+### UpdateUserProfileRequest (Editing)
+
+```dart
+@freezed
+abstract class UpdateUserProfileRequest with _$UpdateUserProfileRequest {
+  const factory UpdateUserProfileRequest({
+    String? bio,
+    double? heightCm,
+    double? weightKg,
+    String? unitPreference,
+    Sex? sex,
+    DateTime? dateOfBirth,
+    List<String>? equipment,
+    String? injuryHistory,
+    ExperienceLevel? experienceLevel,
+    int? daysAvailable,
+    int? sessionDurationMinutes,
+    @JsonKey(includeToJson: false, includeFromJson: false)
+    String? avatarFilePath,
+    @JsonKey(includeToJson: false, includeFromJson: false)
+    @Default(false) bool removeAvatar,
+  }) = _UpdateUserProfileRequest;
+}
+```
+
+**Avatar management**:
+- Provide `avatarFilePath` → uploads a new avatar (replaces existing).
+- Set `removeAvatar: true` → server deletes avatar from S3 without replacement.
+- Leave both unset → avatar unchanged.
+
+---
+
+## Repository
+
+### UserProfileRepository
+
+**Location**: `lib/features/profile/data/user_profile_repository.dart`
+
+The repository wraps `/api/profile` endpoints with **multipart upload support** and **local caching**.
+
+**Provider**: `userProfileRepositoryProvider` (keepAlive)
+
+**Dependencies**:
+- `apiClientProvider` — HTTP client
+- `userPreferencesServiceProvider` — Hive-based local cache
+
+#### Key Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `getProfile()` | `Result<UserProfileModel?, AppError>` | Network-first fetch with Hive fallback |
+| `getCachedProfile()` | `UserProfileModel?` | Direct local cache read (no network) |
+| `createProfile(request)` | `Result<UserProfileModel, AppError>` | Multipart POST, caches result |
+| `updateProfile(request)` | `Result<UserProfileModel, AppError>` | Multipart PATCH, caches result |
+| `hasProfile()` | `Result<bool, AppError>` | Convenience onboarding check |
+| `clearCache()` | `void` | Removes cached profile (call on logout) |
+
+#### Multipart Upload Flow
+
+Both `createProfile` and `updateProfile` build `FormData` internally:
+
+```dart
+// Profile fields serialised as form fields
+final formData = FormData.fromMap({
+  'daysAvailable': '5',
+  'sessionDurationMinutes': '60',
+  'bio': 'Fitness enthusiast',
+  'equipment': '["dumbbells","barbell"]',  // JSON-encoded array
+  // ... other non-null fields
+});
+
+// Avatar file attached when avatarFilePath is provided
+if (avatarFilePath != null) {
+  formData.fields.add(MapEntry('avatar', await MultipartFile.fromFile(avatarFilePath)));
+}
+
+// Remove avatar flag
+if (removeAvatar) {
+  formData.fields.add(MapEntry('removeAvatar', 'true'));
+}
+```
+
+#### Offline-first Caching Flow
+
+```
+getProfile() called
+  ↓
+GET /api/profile (network)
+  ├─ Success → cache to Hive → return profile
+  └─ Failure → read Hive cache
+      ├─ Cache hit → return cached profile
+      └─ Cache miss → return original error
+```
 
 ---
 
 ## Providers
 
-### ProfileProvider
+### ProfileProvider (Account Level)
 
 **Location**: `lib/features/profile/presentation/providers/profile_provider.dart`
 
-```dart
-@Riverpod(keepAlive: true)
-class Profile extends _$Profile {
-  @override
-  Future<UserModel> build() async {
-    final apiClient = ref.watch(apiClientProvider);
-    final result = await apiClient.get<Map<String, dynamic>>(
-      ApiConstants.userProfile, // '/users/profile'
-    );
-    return result.when(
-      success: (data) {
-        final userMap = data['user'] as Map<String, dynamic>? ?? data;
-        AppLogger.debug('Profile loaded', tag: 'Profile');
-        return UserModel.fromJson(userMap);
-      },
-      failure: (error) {
-        AppLogger.error('Profile load failed', tag: 'Profile', error: error);
-        throw Exception(error.message);
-      },
-    );
-  }
-}
-```
+Fetches the `UserModel` (name, email, nickname) from `GET /users/profile`.
 
-**Provider Type**: `AsyncNotifier` (stateful async provider)
-
-**Lifecycle**: `keepAlive: true` - remains in memory after first load
-
-**Usage**:
+**Provider Type**: `AsyncNotifier` (keepAlive)
 
 ```dart
-// Watch profile data (rebuilds on change)
 final profileAsync = ref.watch(profileProvider);
-
-// Handle states
 profileAsync.when(
   data: (user) => Text(user.name),
   loading: () => CircularProgressIndicator(),
   error: (error, stackTrace) => Text('Error: $error'),
 );
-
-// Refresh profile data
-ref.invalidate(profileProvider);
-// or
-ref.refresh(profileProvider.future);
 ```
 
-**Dependencies**:
-- `apiClientProvider` - HTTP client for API calls
-- `ApiConstants.userProfile` - Endpoint path constant
+### UserProfileNotifier (Fitness Profile)
 
-**State Management**:
-- Automatically caches successful API response
-- Persists across navigation (keepAlive)
-- Provides built-in loading/error states
+**Location**: `lib/features/profile/presentation/providers/user_profile_provider.dart`
+
+Manages the `UserProfileModel?` fitness profile with create/update/refresh/clear operations.
+
+**Provider Type**: `AsyncNotifier<UserProfileModel?>` (keepAlive)
+
+**States**:
+- `AsyncLoading` → initial fetch in progress
+- `AsyncData(null)` → no profile (onboarding required)
+- `AsyncData(UserProfileModel)` → profile exists
+- `AsyncError` → network failure with no local cache
+
+#### Key Methods
+
+| Method | Returns | Online Required |
+|--------|---------|:---------------:|
+| `build()` | `UserProfileModel?` | No (has cache fallback) |
+| `createProfile(request)` | `UserProfileModel` | ✅ Yes |
+| `updateProfile(request)` | `UserProfileModel` | ✅ Yes |
+| `refresh()` | `void` | No (degrades gracefully) |
+| `clear()` | `void` | No |
+
+#### Usage
+
+```dart
+// Watch fitness profile
+final profileAsync = ref.watch(userProfileNotifierProvider);
+
+// Create during onboarding (online only)
+await ref.read(userProfileNotifierProvider.notifier).createProfile(
+  CreateUserProfileRequest(
+    daysAvailable: 5,
+    sessionDurationMinutes: 60,
+    avatarFilePath: '/path/to/photo.jpg',  // optional
+  ),
+);
+
+// Update with new avatar (online only)
+await ref.read(userProfileNotifierProvider.notifier).updateProfile(
+  UpdateUserProfileRequest(
+    weightKg: 75.0,
+    avatarFilePath: '/path/to/new_photo.jpg',
+  ),
+);
+
+// Update removing avatar (online only)
+await ref.read(userProfileNotifierProvider.notifier).updateProfile(
+  UpdateUserProfileRequest(removeAvatar: true),
+);
+
+// Clear on logout
+ref.read(userProfileNotifierProvider.notifier).clear();
+```
+
+### Derived Convenience Providers
+
+| Provider | Type | Description |
+|----------|------|-------------|
+| `needsOnboardingProvider` | `bool` | `true` when profile is `null` (onboarding required) |
+| `isProfileLoadedProvider` | `bool` | `true` when profile fetch completed (regardless of result) |
+| `canEditProfileProvider` | `bool` | `true` when profile is loaded **and** device is online |
+
+### Connectivity Providers
+
+**Location**: `lib/services/connectivity/connectivity_service.dart`
+
+| Provider | Type | Description |
+|----------|------|-------------|
+| `connectivityServiceProvider` | `ConnectivityService` | Singleton service (keepAlive) |
+| `isOnlineProvider` | `Stream<bool>` | Reactive connectivity stream |
 
 ---
 
@@ -754,83 +970,76 @@ testWidgets('User can sign out from profile', (tester) async {
 
 ## Future Enhancements
 
-### Phase 1: Profile Editing
+### Phase 1: Profile Editing (Presentation Layer)
 
-**Status**: 🔮 Not Implemented
+**Status**: 🔮 Presentation Not Implemented — **Data layer complete**
 
-**Description**: Allow users to edit their name and nickname.
+**Description**: UI for editing fitness profile fields and account info.
+
+**Data layer already provides**:
+- `UserProfileNotifier.updateProfile()` with multipart support
+- `canEditProfileProvider` to disable controls when offline
+- `UpdateUserProfileRequest` model with all optional fields
 
 **Components to Add**:
 
 1. **Edit Profile Screen** (`edit_profile_screen.dart`)
-   - Text fields for name and nickname
-   - Form validation
-   - Save button
-   - Cancel button
+   - Form fields for all fitness profile data
+   - Avatar picker (camera/gallery) → passes `avatarFilePath`
+   - "Remove avatar" option → sets `removeAvatar: true`
+   - Disable save button when `canEditProfileProvider` is `false`
+   - Upload progress indicator
 
 2. **Edit Profile Provider** (`edit_profile_provider.dart`)
-   - State management for edit form
-   - API integration for PATCH /users/profile
-   - Success/error handling
-
-3. **Profile Update Request Model** (`profile_update_request.dart`)
-   - Freezed model for API request payload
-
-4. **Profile Repository** (`profile_repository.dart`)
-   - Abstract data operations
-   - `getProfile()` method
-   - `updateProfile()` method
-
-**Server API** (Already Implemented):
-
-```typescript
-// PATCH /api/users/profile
-// Body: { name?: string, nickname?: string }
-// Response: { data: { user: {...} }, errors: [] }
-```
+   - Form state management (dirty tracking, validation)
+   - Calls `userProfileNotifierProvider.notifier.updateProfile()`
 
 **UI Flow**:
 
 ```
 User on ProfileScreen
   ↓
-Taps "Edit" button (to be added)
+Taps "Edit" button → check canEditProfileProvider
+  ├─ Online → Navigate to EditProfileScreen
+  └─ Offline → Show "Editing requires internet" message
   ↓
-Navigates to EditProfileScreen
+Form displays with current profile data
   ↓
-Form displays with current name/nickname
+User edits fields / picks new avatar
   ↓
-User edits fields
+Taps "Save" (disabled if offline)
   ↓
-Taps "Save"
+userProfileNotifier.updateProfile(
+  UpdateUserProfileRequest(
+    weightKg: 75.0,
+    avatarFilePath: pickedFile?.path,
+    removeAvatar: wantsToRemove,
+  ),
+)
   ↓
-EditProfileProvider calls updateProfile()
+Multipart PATCH /api/profile
   ↓
-API: PATCH /users/profile
-  ↓
-[Success] Navigate back to ProfileScreen
-  ↓
-ProfileProvider invalidated (refetches data)
-  ↓
-Updated profile displayed
+[Success] Navigate back, profile updated + cached
+[Failure] Show error, form state preserved
 ```
 
-### Phase 2: Avatar Upload
+### Phase 2: Onboarding Screen
 
-**Status**: 🔮 Not Implemented
+**Status**: 🔮 Presentation Not Implemented — **Data layer complete**
 
-**Description**: Allow users to upload and update their profile avatar.
+**Description**: First-time onboarding flow for new users.
 
-**Backend Changes Required**:
-- Add `avatarUrl` field to Prisma User model (already in UserProfile)
-- Add file upload endpoint
-- Add avatar storage (S3, Cloudinary, etc.)
+**Data layer already provides**:
+- `UserProfileNotifier.createProfile()` with multipart avatar upload
+- `needsOnboardingProvider` to detect first-time users
+- `CreateUserProfileRequest` with required `daysAvailable` and `sessionDurationMinutes`
 
 **Components to Add**:
-- Avatar picker widget
-- Image cropper
-- Upload progress indicator
-- Avatar display in profile screen
+- Multi-step onboarding wizard
+- Avatar picker for initial profile photo
+- Experience level selector
+- Equipment multi-select
+- Availability picker
 
 ### Phase 3: Stats Integration
 
@@ -876,26 +1085,17 @@ Updated profile displayed
 
 ### Phase 5: Additional Profile Fields
 
-**Status**: 🔮 Not Implemented
+**Status**: ✅ Data Layer Complete — Presentation Not Implemented
 
-**Description**: Add more detailed user profile information.
+**Description**: Extended fitness profile fields.
 
-**Fields to Add** (from UserProfile in schema.prisma):
-- Bio
-- Height/Weight
-- Date of Birth
-- Sex
-- Equipment Available
-- Injury History
-- Experience Level
-- Days Available
-- Session Duration Preference
+**Already modelled** in `UserProfileModel` and both request models:
+- Bio, Height/Weight, Date of Birth, Sex
+- Equipment Available, Injury History
+- Experience Level, Days Available, Session Duration
+- Unit Preference
 
-**UI Considerations**:
-- Multi-page edit form or tabs
-- Unit preference toggle (metric/imperial)
-- Equipment selector (multi-select)
-- Experience level picker
+**Remaining work**: Build UI form fields, pickers, and validation in the edit/onboarding screens (Phase 1 & 2 above).
 
 ### Phase 6: Social Features
 
@@ -931,13 +1131,24 @@ Updated profile displayed
 
 ```
 lib/features/profile/
-├── profile.dart
+├── profile.dart                          # Barrel export
+├── data/
+│   ├── data.dart
+│   ├── models/
+│   │   ├── models.dart
+│   │   ├── user_profile_model.dart       # UserProfileModel + enums
+│   │   └── profile_request_models.dart   # Create/Update request models
+│   └── user_profile_repository.dart      # Multipart + caching repository
 └── presentation/
     ├── presentation.dart
     ├── providers/
-    │   └── profile_provider.dart
+    │   ├── profile_provider.dart         # Account-level UserModel
+    │   └── user_profile_provider.dart    # Fitness profile + derived providers
     └── screens/
         └── profile_screen.dart
+
+lib/services/connectivity/
+└── connectivity_service.dart             # ConnectivityService + isOnlineProvider
 ```
 
 ### Commands
@@ -956,15 +1167,34 @@ flutter test test/features/profile/
 ### Provider Usage
 
 ```dart
-// Watch profile
+// Watch account profile (UserModel)
 final profileAsync = ref.watch(profileProvider);
 
-// Refresh profile
-ref.invalidate(profileProvider);
-ref.refresh(profileProvider.future);
+// Watch fitness profile (UserProfileModel?)
+final fitnessProfileAsync = ref.watch(userProfileNotifierProvider);
 
-// Read profile value (no rebuild)
-final user = ref.read(profileProvider).value;
+// Check if editing is allowed (profile loaded + online)
+final canEdit = ref.watch(canEditProfileProvider);
+
+// Check if onboarding is needed
+final needsOnboarding = ref.watch(needsOnboardingProvider);
+
+// Create profile (onboarding)
+await ref.read(userProfileNotifierProvider.notifier).createProfile(
+  CreateUserProfileRequest(
+    daysAvailable: 5,
+    sessionDurationMinutes: 60,
+    avatarFilePath: '/path/to/avatar.jpg',
+  ),
+);
+
+// Update profile with new avatar
+await ref.read(userProfileNotifierProvider.notifier).updateProfile(
+  UpdateUserProfileRequest(weightKg: 75.0, avatarFilePath: pickedPath),
+);
+
+// Clear on logout
+ref.read(userProfileNotifierProvider.notifier).clear();
 ```
 
 ### Navigation
@@ -979,4 +1209,4 @@ context.pop();
 
 ---
 
-*Last updated: February 14, 2026*
+*Last updated: February 15, 2026*
