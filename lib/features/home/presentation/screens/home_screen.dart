@@ -7,9 +7,43 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/auth_state_provider.dart';
 import '../../../../providers/router_provider.dart';
+import '../../../../services/api/api_client.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../subscription/subscription.dart';
 import '../widgets/widgets.dart';
+
+final isCoachProvider = FutureProvider.autoDispose<bool>((ref) async {
+  final authState = ref.watch(authStateProvider);
+  final currentUserId = authState.userId;
+
+  if (!authState.isAuthenticated || currentUserId == null) {
+    return false;
+  }
+
+  final apiClient = ref.watch(apiClientProvider);
+  final result = await apiClient.get<Map<String, dynamic>>('/auth/me');
+
+  return result.when(
+    success: (data) {
+      final user = data['user'];
+      if (user is! Map<String, dynamic>) return false;
+
+      final responseUserId = user['id'] as String?;
+      if (responseUserId != null && responseUserId != currentUserId) {
+        return false;
+      }
+
+      final isCoach = data['isCoach'];
+      if (isCoach is bool) return isCoach;
+
+      final userIsCoach = user['isCoach'];
+      if (userIsCoach is bool) return userIsCoach;
+
+      return false;
+    },
+    failure: (_) => false,
+  );
+});
 
 /// Main home screen / dashboard
 ///
@@ -30,6 +64,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+    final isCoachAsync = ref.watch(isCoachProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Extract name from email or use default
     final email = authState.email ?? '';
@@ -148,26 +183,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     const SizedBox(height: 12),
 
                     // Coach Tools Quick Action
-                    QuickActionCard(
-                      icon: Icons.sports,
-                      title: 'Coach Tools',
-                      subtitle: 'Exercise library & form recording',
-                      gradient: LinearGradient(
-                        colors: [
-                          isDark
-                              ? AppColors.accentDark
-                              : const Color(0xFF22C55E),
-                          isDark
-                              ? AppColors.accentDark.withValues(alpha: 0.7)
-                              : const Color(0xFF22C55E).withValues(alpha: 0.7),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                    if (isCoachAsync.asData?.value ?? false) ...[
+                      QuickActionCard(
+                        icon: Icons.sports,
+                        title: 'Coach Tools',
+                        subtitle: 'Exercise library & form recording',
+                        gradient: LinearGradient(
+                          colors: [
+                            isDark
+                                ? AppColors.accentDark
+                                : const Color(0xFF22C55E),
+                            isDark
+                                ? AppColors.accentDark.withValues(alpha: 0.7)
+                                : const Color(
+                                    0xFF22C55E,
+                                  ).withValues(alpha: 0.7),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        onTap: () => context.push(AppRoutes.coachExercises),
                       ),
-                      onTap: () => context.push(AppRoutes.coachExercises),
-                    ),
-
-                    const SizedBox(height: 24),
+                      const SizedBox(height: 24),
+                    ] else
+                      const SizedBox(height: 24),
 
                     // Today's Focus Section
                     _SectionHeader(
@@ -255,6 +294,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _onRefresh() async {
+    ref.invalidate(isCoachProvider);
     // TODO: Refresh data from server
     await Future.delayed(const Duration(seconds: 1));
   }
