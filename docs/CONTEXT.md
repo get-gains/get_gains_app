@@ -462,6 +462,14 @@ drift_dev: ^2.29.0
 
 6. **Database migrations**: Increment `schemaVersion` and add migration logic before deploying
 
+7. **Query parameters are always strings in URLs** — the server's `validateRequest` middleware
+   now correctly coerces URL query strings into their proper types (booleans, numbers, dates)
+   via Zod before they reach controllers. The Flutter app sends query parameters as plain strings
+   (standard HTTP behaviour) and does **not** need to change. Boolean flags like
+   `?includeInactive=false` and pagination like `?limit=20&offset=0` will be interpreted
+   correctly by the server. Do not attempt to serialize booleans or numbers specially on the
+   app side.
+
 ---
 
 ## Contact / Resources
