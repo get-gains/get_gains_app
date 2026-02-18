@@ -4,6 +4,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../core/utils/logger.dart';
 import '../features/auth/auth.dart';
+import '../features/client_pose/client_pose.dart';
 import '../features/coach_pose/coach_pose.dart';
 import '../features/home/home.dart';
 import '../features/profile/profile.dart';
@@ -32,6 +33,7 @@ class AppRoutes {
 
   // Workout routes
   static const String routines = '/routines';
+  static const String routineDetail = '/routines/:id';
   static const String workoutSession = '/workout-session';
   static const String unityTest = '/unity-test';
 
@@ -40,6 +42,11 @@ class AppRoutes {
   static const String createExercise = '/coach/exercises/create';
   static const String exerciseDetail = '/coach/exercises/:id';
   static const String recordForm = '/coach/exercises/:id/record';
+
+  // Client Pose routes
+  static const String clientViewForm = '/client/exercise/:id/view-form';
+  static const String clientCompareForm = '/client/exercise/:id/compare';
+  static const String clientUnityRecord = '/client/exercise/:id/unity-record';
 }
 
 /// Router Provider
@@ -195,8 +202,25 @@ GoRouter router(Ref ref) {
         builder: (context, state) => const RoutineListScreen(),
       ),
       GoRoute(
+        path: AppRoutes.routineDetail,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          final routine = state.extra as RoutineModel?;
+          return RoutineDetailScreen(routineId: id, routine: routine);
+        },
+      ),
+      GoRoute(
         path: AppRoutes.workoutSession,
-        builder: (context, state) => const WorkoutSessionScreen(),
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final rawNextSetNavigation = extra?['nextSetNavigation'];
+          return WorkoutSessionScreen(
+            readOnly: (extra?['readOnly'] as bool?) ?? false,
+            nextSetNavigation: rawNextSetNavigation is Map
+                ? Map<String, dynamic>.from(rawNextSetNavigation)
+                : null,
+          );
+        },
       ),
       GoRoute(
         path: AppRoutes.unityTest,
@@ -225,6 +249,38 @@ GoRouter router(Ref ref) {
         builder: (context, state) {
           final id = state.pathParameters['id']!;
           return FormRecordingScreen(exerciseId: id);
+        },
+      ),
+
+      // Client Pose Routes
+      GoRoute(
+        path: AppRoutes.clientViewForm,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return ViewFormScreen(exerciseId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.clientCompareForm,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return ClientRecordingScreen(exerciseId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.clientUnityRecord,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          final extra = state.extra as Map<String, dynamic>?;
+          return ClientUnityRecordingScreen(
+            exerciseId: id,
+            workoutSessionId: extra?['workoutSessionId'] as String?,
+            routineExerciseId: extra?['routineExerciseId'] as String?,
+            routineExercises:
+                extra?['routineExercises'] as List<RoutineExerciseModel>?,
+            currentExerciseIndex: (extra?['currentExerciseIndex'] as int?) ?? 0,
+            currentSetNumber: (extra?['currentSetNumber'] as int?) ?? 1,
+          );
         },
       ),
     ],
