@@ -309,6 +309,13 @@ class AppDatabase extends _$AppDatabase {
     return (select(routines)..where((r) => r.id.equals(id))).getSingleOrNull();
   }
 
+  /// Get routine by remote ID
+  Future<Routine?> getRoutineByRemoteId(String remoteId) {
+    return (select(
+      routines,
+    )..where((r) => r.remoteId.equals(remoteId))).getSingleOrNull();
+  }
+
   /// Insert or update routine
   Future<int> upsertRoutine(RoutinesCompanion routine) {
     return into(routines).insertOnConflictUpdate(routine);
@@ -334,6 +341,13 @@ class AppDatabase extends _$AppDatabase {
     return (select(
       routineExercises,
     )..where((re) => re.id.equals(id))).getSingleOrNull();
+  }
+
+  /// Get routine exercise by remote ID
+  Future<RoutineExercise?> getRoutineExerciseByRemoteId(String remoteId) {
+    return (select(
+      routineExercises,
+    )..where((re) => re.remoteId.equals(remoteId))).getSingleOrNull();
   }
 
   /// Insert or update routine exercise
