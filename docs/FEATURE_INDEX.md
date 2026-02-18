@@ -38,8 +38,7 @@
 |----------|---------|
 | [CONTEXT.md](CONTEXT.md) | Core infrastructure, patterns, conventions |
 | [FEATURE_INDEX.md](FEATURE_INDEX.md) | This file - navigation hub |
-| [features/REGISTER.md](features/REGISTER.md) | Registration feature documentation |
-| [features/POSE_DETECTION.md](features/POSE_DETECTION.md) | Pose detection, form analysis, on-device ML |
+| [features/REGISTER.md](features/REGISTER.md) | Registration feature documentation || [features/HOME.md](features/HOME.md) | Home dashboard screen & widgets || [features/POSE_DETECTION.md](features/POSE_DETECTION.md) | Pose detection, form analysis, on-device ML |
 
 ---
 
@@ -58,6 +57,24 @@
 | Secure Storage | JWT token management | Secure Storage |
 | Navigation | go_router setup | Navigation |
 
+### Home Dashboard
+
+| Feature | Description | Status | Documentation |
+|---------|-------------|--------|---------------|
+| Home Screen | Dashboard with greeting, quick actions, weekly progress | ✅ Complete (static data) | [features/HOME.md](features/HOME.md) |
+| Quick Actions | Start Workout, History, Coach Tools (coach-only) | ✅ Complete | [features/HOME.md](features/HOME.md) |
+| Today's Focus | Assigned routine summary card | 🚧 Placeholder | [features/HOME.md](features/HOME.md) |
+| Weekly Progress | Goal progress bar + streak + minutes | 🚧 Placeholder | [features/HOME.md](features/HOME.md) |
+| Recent Activity | Workout history list | 🔮 Not Implemented | - |
+| Bottom Navigation | Home, Workouts, Progress, Profile tabs | ✅ Complete | [features/HOME.md](features/HOME.md) |
+
+**Primary Files:**
+- `/lib/features/home/home.dart` - Feature barrel export
+- `/lib/features/home/presentation/screens/home_screen.dart` - Main dashboard
+- `/lib/features/home/presentation/widgets/quick_action_card.dart` - Quick action card
+- `/lib/features/home/presentation/widgets/workout_summary_card.dart` - Today's routine card
+- `/lib/features/home/presentation/widgets/weekly_progress_card.dart` - Weekly stats card
+
 ### Authentication & User Management
 
 | Feature | Description | Status | Documentation |
@@ -75,6 +92,25 @@
 - `/lib/features/auth/presentation/providers/register_provider.dart` - Registration state
 - `/lib/providers/auth_state_provider.dart` - App-wide auth state
 - `/lib/providers/router_provider.dart` - Route guards
+
+### Client Pose & Form Comparison
+
+| Feature | Description | Status | Documentation |
+|---------|-------------|--------|---------------|
+| View Reference Form | Animated 2D skeleton playback of coach's form | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Unity 3D Recording | Record + compare with 3D Unity avatar skeleton | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| 2D Recording (legacy) | Camera + 2D skeleton recording + compare | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| DTW Comparison | On-device similarity scoring | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Score + Corrections | Result display with segment breakdown | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Offline Form Cache | Download & cache forms in Drift | 🔮 Not Implemented | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) |
+
+**Primary Files:**
+- `/lib/features/client_pose/client_pose.dart` - Feature barrel export
+- `/lib/features/client_pose/data/client_pose_repository.dart` - API: download form, submit result
+- `/lib/features/client_pose/presentation/providers/client_recording_provider.dart` - State machine
+- `/lib/features/client_pose/presentation/screens/client_unity_recording_screen.dart` - 3D Unity screen
+- `/lib/features/client_pose/presentation/screens/view_form_screen.dart` - Reference form viewer
+- `/lib/features/client_pose/presentation/screens/client_recording_screen.dart` - Legacy 2D screen
 
 ### Pose Detection & Form Analysis *(Documented in [features/POSE_DETECTION.md](features/POSE_DETECTION.md))*
 
@@ -115,9 +151,15 @@
 | `/forgot-password` | Forgot Password | No | Public |
 | `/reset-password` | Reset Password | Semi* | Has recovery token |
 | `/complete-profile` | Complete Profile | Semi* | Has Google tokens |
-| `/home` | Home | Yes | Main screen |
+| `/home` | Home | Yes | Main screen — [features/HOME.md](features/HOME.md) |
 | `/profile` | Profile | Yes | User profile |
 | `/settings` | Settings | Yes | App settings |
+| `/routines` | Routine List | Yes | — |
+| `/routines/:id` | Routine Detail | Yes | — |
+| `/workout-session` | Workout Session | Yes | — |
+| `/client/exercise/:id/view-form` | View Form | Yes | See [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| `/client/exercise/:id/unity-record` | Unity 3D Record | Yes | Primary compare route |
+| `/client/exercise/:id/compare` | 2D Record (legacy) | Yes | Legacy compare route |
 
 *Semi-authenticated: Has temporary tokens but not full profile
 
@@ -203,6 +245,10 @@ ref.read(registerNotifierProvider.notifier).registerWithEmailPassword(
 | Data models | [CONTEXT.md](CONTEXT.md) → Creating Models |
 | API calls | [CONTEXT.md](CONTEXT.md) → Making API Calls |
 | Error handling | [CONTEXT.md](CONTEXT.md) → Using Result Type |
+| Home dashboard | [features/HOME.md](features/HOME.md) |
+| Client pose recording | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Reference form source | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) → Reference Form Source |
+| Unity 3D skeleton | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) → Unity Message Contract |
 | Registration flow | [features/REGISTER.md](features/REGISTER.md) |
 | Google sign-in | [features/REGISTER.md](features/REGISTER.md) → Google Sign-Up Flow |
 | Route guards | [features/REGISTER.md](features/REGISTER.md) → Router Guard |
@@ -258,6 +304,15 @@ lib/
 │   │   └── result.dart             # Result type
 │   └── theme/                      # Theming
 ├── features/
+│   ├── home/
+│   │   ├── home.dart               # Feature export
+│   │   └── presentation/
+│   │       ├── screens/
+│   │       │   └── home_screen.dart
+│   │       └── widgets/
+│   │           ├── quick_action_card.dart
+│   │           ├── weekly_progress_card.dart
+│   │           └── workout_summary_card.dart
 │   └── auth/
 │       ├── auth.dart               # Feature export
 │       ├── data/
@@ -288,4 +343,4 @@ lib/
 
 ---
 
-*Last updated: January 27, 2026*
+*Last updated: February 18, 2026*
