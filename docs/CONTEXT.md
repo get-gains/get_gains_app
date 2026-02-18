@@ -470,6 +470,20 @@ drift_dev: ^2.29.0
    correctly by the server. Do not attempt to serialize booleans or numbers specially on the
    app side.
 
+8. **Multipart/form-data: always send numeric fields as strings** — when building
+   `FormData` for multipart endpoints (e.g. profile create/update), convert all numeric
+   values (`double`, `int`) to strings using `.toString()`. This is the standard
+   HTTP multipart behaviour and avoids floating-point precision loss in transport.
+   The server's Zod schemas use `z.preprocess(toNumber, z.number())` to coerce them
+   back before they reach Prisma. Never attempt to embed raw Dart numbers inside
+   `FormData` map values.
+
+9. **FormData cannot be retried** — Dio's `FormData` is finalized (streams consumed)
+   after the first send. The `RetryInterceptor` automatically skips retry for any
+   request whose `data` is a `FormData` instance. If a multipart request fails with
+   a transient error, the caller is responsible for rebuilding `FormData` and
+   re-issuing the request (not relying on automatic retry).
+
 ---
 
 ## Contact / Resources
