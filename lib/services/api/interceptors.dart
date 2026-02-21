@@ -274,6 +274,15 @@ class RetryInterceptor extends Interceptor {
       return;
     }
 
+    // FormData streams are consumed after the first send and cannot be
+    // replayed. Retrying would throw "The FormData has already been
+    // finalized." Skip retry entirely for multipart requests — the caller
+    // is responsible for rebuilding FormData if it wants to retry.
+    if (err.requestOptions.data is FormData) {
+      handler.next(err);
+      return;
+    }
+
     final retryCount = err.requestOptions.extra['retryCount'] ?? 0;
 
     if (retryCount < maxRetries) {
