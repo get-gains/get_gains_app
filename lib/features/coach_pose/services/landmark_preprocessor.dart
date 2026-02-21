@@ -149,6 +149,28 @@ class LandmarkPreprocessor {
     return LandmarkFrame(timestampMs: frame.timestampMs, landmarks: normalized);
   }
 
+  /// Smooth a single frame in real-time using the last [smoothingWindowSize]
+  /// frames from [recentFrames]. Call this as each new frame arrives for
+  /// jitter-free live display.
+  LandmarkFrame smoothRealtime(
+    LandmarkFrame frame,
+    List<LandmarkFrame> recentFrames,
+  ) {
+    // Use the tail of recentFrames as the smoothing window
+    final windowStart = recentFrames.length < smoothingWindowSize
+        ? 0
+        : recentFrames.length - smoothingWindowSize;
+    final window = recentFrames.sublist(windowStart);
+
+    if (window.length < 2) return frame; // not enough history yet
+
+    final avgLandmarks = _averageLandmarks(window);
+    return LandmarkFrame(
+      timestampMs: frame.timestampMs,
+      landmarks: avgLandmarks,
+    );
+  }
+
   /// Compute the average confidence across all landmarks in a frame.
   double averageConfidence(LandmarkFrame frame) {
     if (frame.landmarks.isEmpty) return 0.0;
