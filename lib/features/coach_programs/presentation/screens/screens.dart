@@ -5,6 +5,7 @@ library;
 
 export 'coach_programs_screen.dart';
 export 'coach_program_detail_screen.dart';
+export 'coach_roster_screen.dart';
 export 'coach_program_form_screen.dart';
 export 'coach_routines_screen.dart';
 export 'coach_routine_detail_screen.dart';

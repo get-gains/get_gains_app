@@ -43,6 +43,8 @@
 | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) | Pose detection, form analysis, on-device ML |
 | [features/PROFILE.md](features/PROFILE.md) | Profile viewing and management documentation |
 | [features/PROGRAM.md](features/PROGRAM.md) | Coach programs, routines, exercises, assignments |
+| [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md) | Coach discovery, settings & missing links data layer |
+| [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md) | Coaches & Subscription presentation layer (screens, routes) |
 
 ---
 
@@ -156,15 +158,53 @@
 | ProgramRoutine Junctions | Assign/reorder/remove routines in programs | ✅ Data/Services | [features/PROGRAM.md](features/PROGRAM.md) |
 | RoutineExercise Junctions | Add/update/remove exercises in routines | ✅ Data/Services | [features/PROGRAM.md](features/PROGRAM.md) |
 | Program Assignments | Assign programs to clients, manage assignments | ✅ Data/Services | [features/PROGRAM.md](features/PROGRAM.md) |
+| Class Roster (ML-4) | Coach roster with client subscription expiry | ✅ Complete | [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md) |
+| Client List (ML-4) | Full client list with assignments + expiry | ✅ Data/Services | [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md) |
 
 **Primary Files:**
 - `/lib/features/coach_programs/coach_programs.dart` - Feature barrel export
 - `/lib/features/coach_programs/data/coach_program_repository.dart` - All API calls
 - `/lib/features/coach_programs/data/models/program_model.dart` - Program, routine summary, assignment models
+- `/lib/features/coach_programs/data/models/coach_client_model.dart` - Roster/client models with subscription expiry (ML-4)
 - `/lib/features/coach_programs/data/models/program_request_models.dart` - Request models
 - `/lib/features/coach_programs/presentation/providers/coach_program_provider.dart` - Programs list + detail
 - `/lib/features/coach_programs/presentation/providers/coach_routine_provider.dart` - Routines list + detail
 - `/lib/features/coach_programs/presentation/providers/coach_assignment_provider.dart` - Client assignments
+- `/lib/features/coach_programs/presentation/providers/coach_roster_provider.dart` - Class roster with expiry (ML-4)
+- `/lib/features/coach_programs/presentation/providers/coach_client_list_provider.dart` - Full client list (ML-4)
+
+### Coach Discovery & Subscription *(Documented in [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md))*
+
+| Feature | Description | Status | Documentation |
+|---------|-------------|--------|---------------|
+| Coach Discovery | Browse/search public coaches | ✅ Complete | [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md) |
+| Coach Profile (ML-1) | Single coach detail with social links | ✅ Complete | [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md) |
+| Subscribed Coaches | List user's subscribed coaches | ✅ Complete | [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md) |
+| Subscribe/Unsubscribe | Coach subscription management | ✅ Complete | [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md) |
+
+**Primary Files:**
+- `/lib/features/coaches/coaches.dart` - Feature barrel export
+- `/lib/features/coaches/data/coach_repository.dart` - Discovery, profile, subscribe API calls
+- `/lib/features/coaches/data/models/coach_model.dart` - CoachSummaryModel, CoachDetailModel
+- `/lib/features/coaches/presentation/providers/coach_discovery_provider.dart` - Discover coaches
+- `/lib/features/coaches/presentation/providers/coach_profile_provider.dart` - Single coach detail (ML-1)
+- `/lib/features/coaches/presentation/providers/subscribed_coaches_provider.dart` - Subscribed coaches list
+- `/lib/features/coaches/presentation/screens/coach_discovery_screen.dart` - Browse/search screen
+- `/lib/features/coaches/presentation/screens/coach_profile_screen.dart` - Full profile screen (ML-1)
+- `/lib/features/coaches/presentation/screens/subscribed_coaches_screen.dart` - My coaches screen
+
+### Coach Settings *(Documented in [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md))*
+
+| Feature | Description | Status | Documentation |
+|---------|-------------|--------|---------------|
+| Coach Settings CRUD (ML-5) | Max clients, accepting toggle, discoverability | ✅ Complete | [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md) |
+
+**Primary Files:**
+- `/lib/features/coach_settings/coach_settings.dart` - Feature barrel export
+- `/lib/features/coach_settings/data/coach_settings_repository.dart` - GET/PATCH settings
+- `/lib/features/coach_settings/data/models/coach_settings_model.dart` - Settings model + update request
+- `/lib/features/coach_settings/presentation/providers/coach_settings_provider.dart` - Settings state + toggles
+- `/lib/features/coach_settings/presentation/screens/coach_settings_screen.dart` - Settings UI screen (ML-5)
 
 ### Future Domain Features *(Needs Implementation)*
 
@@ -196,6 +236,11 @@
 | `/client/exercise/:id/view-form` | View Form | Yes | See [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
 | `/client/exercise/:id/unity-record` | Unity 3D Record | Yes | Primary compare route |
 | `/client/exercise/:id/compare` | 2D Record (legacy) | Yes | Legacy compare route |
+| `/coaches/discover` | Coach Discovery | Yes | Browse/search public coaches |
+| `/coaches/:id` | Coach Profile | Yes | View coach profile, subscribe/unsubscribe |
+| `/coaches/subscribed` | Subscribed Coaches | Yes | User's subscribed coaches list |
+| `/coach/roster` | Coach Roster | Yes | Coach's client roster with expiry info |
+| `/coach/settings` | Coach Settings | Yes | Coach capacity & discoverability settings |
 
 *Semi-authenticated: Has temporary tokens but not full profile
 
