@@ -86,17 +86,17 @@ class FormComparisonService {
 
       final dtwDistance = _dtw(refSeries, clientSeries);
 
-      // Normalize DTW distance to a 0-1 score
-      // Max reasonable deviation per frame pair is ~180 degrees
-      final maxPossibleDistance =
-          180.0 * math.max(refSeries.length, clientSeries.length);
-      final score = 1.0 - (dtwDistance / maxPossibleDistance).clamp(0.0, 1.0);
+      // Mean angular deviation per aligned frame pair
+      final alignedLen = math.max(refSeries.length, clientSeries.length);
+      final meanDev = alignedLen > 0 ? dtwDistance / alignedLen : 180.0;
+
+      // Score: 0° mean deviation → 1.0, ≥45° → 0.0
+      final score = (1.0 - meanDev / 45.0).clamp(0.0, 1.0);
       segmentScores[angleName] = score;
 
       // Generate correction if score is below threshold
       if (score < 0.7) {
-        final avgDev =
-            dtwDistance / math.max(refSeries.length, clientSeries.length);
+        final avgDev = meanDev;
         final maxDev = _maxDeviation(refSeries, clientSeries);
         final direction = _inferDirection(refSeries, clientSeries);
         final segment = _angleToSegment(angleName);
