@@ -18,8 +18,8 @@ class RepCounter {
   RepCounter({
     this.primaryAngleName,
     this.smoothingWindowSize = 5,
-    this.minPeakProminence = 15.0,
-    this.minRepDurationMs = 500,
+    this.minPeakProminence = 18.0,
+    this.minRepDurationMs = 600,
   });
 
   /// Specific angle to track (if null, auto-detects the most variable angle)
@@ -45,9 +45,15 @@ class RepCounter {
   double? _lastValleyValue;
   int? _lastRepTimestamp;
   String? _detectedAngleName;
+  String? _exerciseHint;
 
   /// Current rep count
   int get repCount => _repCount;
+
+  /// Set the exercise name so angle selection can be smarter.
+  void configure({String? exerciseName}) {
+    _exerciseHint = exerciseName?.toLowerCase();
+  }
 
   /// The angle being tracked
   String? get trackedAngle => _detectedAngleName ?? primaryAngleName;
@@ -70,6 +76,7 @@ class RepCounter {
     _lastValleyValue = null;
     _lastRepTimestamp = null;
     _detectedAngleName = null;
+    // keep _exerciseHint across resets so reconfigure isn't needed
   }
 
   /// Process a new feature frame and return updated rep count.
@@ -110,19 +117,44 @@ class RepCounter {
     return _repCount;
   }
 
-  /// Select the most variable angle as primary tracking target
+  /// Select the best angle to track based on exercise hint, then fallback.
   String? _selectPrimaryAngle(FeatureFrame frame) {
     if (primaryAngleName != null &&
         frame.angles.containsKey(primaryAngleName)) {
       return primaryAngleName;
     }
 
-    // Prefer common exercise angles
+    // Try to infer from exercise name
+    final hint = _exerciseHint ?? '';
+    List<String>? hintAngles;
+    if (_matchesAny(hint, ['curl', 'bicep', 'hammer', 'tricep'])) {
+      hintAngles = ['leftElbowFlexion', 'rightElbowFlexion'];
+    } else if (_matchesAny(hint, ['squat', 'lunge', 'leg'])) {
+      hintAngles = ['leftKneeFlexion', 'rightKneeFlexion'];
+    } else if (_matchesAny(hint, ['press', 'push', 'bench', 'chest'])) {
+      hintAngles = ['leftElbowFlexion', 'rightElbowFlexion'];
+    } else if (_matchesAny(hint, ['deadlift', 'hinge', 'row'])) {
+      hintAngles = ['leftHipFlexion', 'rightHipFlexion'];
+    }
+
+    if (hintAngles != null) {
+      for (final angle in hintAngles) {
+        if (frame.angles.containsKey(angle)) {
+          AppLogger.debug(
+            'Hint-selected primary angle: $angle (hint=$hint)',
+            tag: 'RepCounter',
+          );
+          return angle;
+        }
+      }
+    }
+
+    // Fallback: elbow first (more common in gym), then knee, hip, shoulder
     const preferredAngles = [
-      'leftKneeFlexion',
-      'rightKneeFlexion',
       'leftElbowFlexion',
       'rightElbowFlexion',
+      'leftKneeFlexion',
+      'rightKneeFlexion',
       'leftHipFlexion',
       'rightHipFlexion',
       'leftShoulderAbduction',
@@ -142,6 +174,9 @@ class RepCounter {
     // Fallback: use first available angle
     return frame.angles.keys.firstOrNull;
   }
+
+  bool _matchesAny(String text, List<String> keywords) =>
+      keywords.any(text.contains);
 
   /// Calculate moving average at the current position
   double _movingAverage() {
