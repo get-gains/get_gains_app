@@ -5,3 +5,4 @@ library;
 
 export 'workout_session_screen.dart';
 export 'routine_list_screen.dart';
+export 'routine_detail_screen.dart';

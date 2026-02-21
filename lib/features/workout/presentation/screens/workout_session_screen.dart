@@ -15,7 +15,18 @@ import '../widgets/widgets.dart';
 /// Main screen for logging exercises during a workout session.
 /// Shows current exercise, set logging controls, and progress.
 class WorkoutSessionScreen extends ConsumerStatefulWidget {
-  const WorkoutSessionScreen({super.key});
+  const WorkoutSessionScreen({
+    super.key,
+    this.readOnly = false,
+    this.nextSetNavigation,
+  });
+
+  /// When true (after recording flow), inputs are hidden and sets are
+  /// shown read-only. The user taps "Finish Workout" to complete.
+  final bool readOnly;
+
+  /// Route extras used to launch the next recording set from the logger.
+  final Map<String, dynamic>? nextSetNavigation;
 
   @override
   ConsumerState<WorkoutSessionScreen> createState() =>
@@ -106,16 +117,18 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
 
   void _onExerciseChanged(int index) {
     ref.read(workoutSessionProvider.notifier).goToExercise(index);
-    
+
     final state = ref.read(workoutSessionProvider);
     if (state is WorkoutSessionActive && state.currentExercise != null) {
       final completedSets = state.session.setsForExercise(
         state.routine!.exercises[index].id,
       );
-      ref.read(exerciseLogProvider.notifier).initializeForExercise(
-        state.routine!.exercises[index],
-        existingSets: completedSets,
-      );
+      ref
+          .read(exerciseLogProvider.notifier)
+          .initializeForExercise(
+            state.routine!.exercises[index],
+            existingSets: completedSets,
+          );
     }
   }
 
@@ -138,8 +151,9 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor:
-            isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+        backgroundColor: isDark
+            ? AppColors.backgroundDark
+            : AppColors.backgroundLight,
         appBar: _buildAppBar(context, sessionState, isDark),
         body: _buildBody(context, sessionState, isDark),
       ),
@@ -176,10 +190,10 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
           Text(
             _formatDuration(state.session.duration),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight,
-                ),
+              color: isDark
+                  ? AppColors.textSecondaryDark
+                  : AppColors.textSecondaryLight,
+            ),
           ),
         ],
       ),
@@ -216,13 +230,9 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     }
 
     if (state is WorkoutSessionInitial) {
-      return AppEmptyState(
-        icon: Icons.fitness_center,
-        title: 'No Active Workout',
-        description: 'Start a workout from your routines to begin.',
-        actionLabel: 'View Routines',
-        onAction: () => context.go(AppRoutes.routines),
-      );
+      // Still checking for an active session — show spinner while
+      // _checkActiveSession() resolves.
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (state is WorkoutSessionError) {
@@ -273,6 +283,7 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
                 routineExercise: exercise,
                 completedSets: completedSets,
                 onSetCompleted: _onSetCompleted,
+                readOnly: widget.readOnly,
               );
             },
           ),
@@ -289,6 +300,21 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     WorkoutSessionActive state,
     bool isDark,
   ) {
+    if (widget.readOnly) {
+      final canStartNextSet = widget.nextSetNavigation != null;
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: AppButton.primary(
+            label: canStartNextSet ? 'Start Next Set' : 'Finish Workout',
+            icon: canStartNextSet ? Icons.videocam : Icons.check,
+            isFullWidth: true,
+            onPressed: canStartNextSet ? _startNextSet : _completeWorkout,
+          ),
+        ),
+      );
+    }
+
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -301,7 +327,9 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
                   label: 'Previous',
                   icon: Icons.arrow_back,
                   onPressed: () {
-                    ref.read(workoutSessionProvider.notifier).previousExercise();
+                    ref
+                        .read(workoutSessionProvider.notifier)
+                        .previousExercise();
                     _pageController.previousPage(
                       duration: const Duration(milliseconds: 300),
                       curve: Curves.easeInOut,
@@ -327,7 +355,9 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
                       icon: Icons.arrow_forward,
                       iconPosition: IconPosition.trailing,
                       onPressed: () {
-                        ref.read(workoutSessionProvider.notifier).nextExercise();
+                        ref
+                            .read(workoutSessionProvider.notifier)
+                            .nextExercise();
                         _pageController.nextPage(
                           duration: const Duration(milliseconds: 300),
                           curve: Curves.easeInOut,
@@ -346,11 +376,33 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     setState(() {});
   }
 
+  void _startNextSet() {
+    final next = widget.nextSetNavigation;
+    if (next == null) return;
+
+    final exerciseId = next['exerciseId'] as String?;
+    if (exerciseId == null || exerciseId.isEmpty) {
+      AppToast.error(context, 'Unable to start next set. Missing exercise.');
+      return;
+    }
+
+    context.go(
+      '/client/exercise/$exerciseId/unity-record',
+      extra: {
+        'workoutSessionId': next['workoutSessionId'],
+        'routineExerciseId': next['routineExerciseId'],
+        'routineExercises': next['routineExercises'],
+        'currentExerciseIndex': next['currentExerciseIndex'],
+        'currentSetNumber': next['currentSetNumber'],
+      },
+    );
+  }
+
   Future<void> _completeWorkout() async {
     final notes = await _showNotesDialog();
-    await ref.read(workoutSessionProvider.notifier).completeSession(
-          notes: notes,
-        );
+    await ref
+        .read(workoutSessionProvider.notifier)
+        .completeSession(notes: notes);
   }
 
   Future<String?> _showNotesDialog() async {
