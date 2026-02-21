@@ -33,6 +33,7 @@ class AppRoutes {
   static const String emailVerified = '/email-verified';
   static const String home = '/home';
   static const String profile = '/profile';
+  static const String editProfile = '/profile/edit';
   static const String settings = '/settings';
 
   // Workout routes
@@ -43,8 +44,6 @@ class AppRoutes {
   static const String createProgram = '/create-program';
   static const String programDetails = '/program-details';
   static const String calendar = '/calendar';
-
-
 
   // Coach Pose routes
   static const String coachExercises = '/coach/exercises';
@@ -190,14 +189,18 @@ GoRouter router(Ref ref) {
         path: AppRoutes.home,
         builder: (context, state) => const HomeScreen(),
       ),
+
       // GoRoute(
       //   path: AppRoutes.home,
       //   builder: (context, state) => const ProgramsScreen(),
       // ),
-
       GoRoute(
         path: AppRoutes.profile,
         builder: (context, state) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.editProfile,
+        builder: (context, state) => const EditProfileScreen(),
       ),
       GoRoute(
         path: AppRoutes.settings,
@@ -240,7 +243,6 @@ GoRouter router(Ref ref) {
         path: AppRoutes.calendar,
         builder: (context, state) => const CalendarScreen(),
       ),
-
 
       // Coach Pose Routes
       GoRoute(

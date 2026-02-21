@@ -39,6 +39,7 @@
 | [CONTEXT.md](CONTEXT.md) | Core infrastructure, patterns, conventions |
 | [FEATURE_INDEX.md](FEATURE_INDEX.md) | This file - navigation hub |
 | [features/REGISTER.md](features/REGISTER.md) | Registration feature documentation |
+| [features/PROFILE.md](features/PROFILE.md) | Profile viewing and management documentation |
 | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) | Pose detection, form analysis, on-device ML |
 
 ---
@@ -65,16 +66,29 @@
 | Registration | Email/password + Google sign-up | ✅ Data/Services | [features/REGISTER.md](features/REGISTER.md) |
 | Login | Email/password + Google login | 🔮 Not Implemented | - |
 | Password Reset | Recovery via email | ⚠️ Partial (send email only) | [features/REGISTER.md](features/REGISTER.md) |
-| Profile Management | User profile editing | 🔮 Not Implemented | - |
+| Profile Management | View profile, stats, achievements, sign out | ✅ View + Edit | [features/PROFILE.md](features/PROFILE.md) |
+| Profile Data Layer | Fitness profile CRUD, avatar upload, offline cache | ✅ Complete | [features/PROFILE.md](features/PROFILE.md) |
+| Profile Editing UI | Edit avatar, bio, body metrics, training prefs, equipment | ✅ Complete | [features/PROFILE.md](features/PROFILE.md) |
+| Connectivity Service | Network status monitoring for offline-first | ✅ Complete | [features/PROFILE.md](features/PROFILE.md) |
 
 **Primary Files:**
 - `/lib/features/auth/auth.dart` - Feature barrel export
 - `/lib/features/auth/data/auth_repository.dart` - Auth data operations
 - `/lib/features/auth/services/google_sign_in_service.dart` - Google OAuth
-- `/lib/features/auth/services/user_preferences_service.dart` - User caching
+- `/lib/features/auth/services/user_preferences_service.dart` - User caching + raw cache helpers
 - `/lib/features/auth/presentation/providers/register_provider.dart` - Registration state
 - `/lib/providers/auth_state_provider.dart` - App-wide auth state
 - `/lib/providers/router_provider.dart` - Route guards
+- `/lib/features/profile/profile.dart` - Profile feature export
+- `/lib/features/profile/data/user_profile_repository.dart` - Fitness profile CRUD + multipart upload + caching
+- `/lib/features/profile/data/models/user_profile_model.dart` - Fitness profile model
+- `/lib/features/profile/data/models/profile_request_models.dart` - Create/Update request models
+- `/lib/features/profile/presentation/providers/profile_provider.dart` - Account-level profile fetching
+- `/lib/features/profile/presentation/providers/user_profile_provider.dart` - Fitness profile notifier + derived providers
+- `/lib/features/profile/presentation/providers/edit_profile_provider.dart` - Edit form state + save logic
+- `/lib/features/profile/presentation/screens/profile_screen.dart` - Profile display UI (offline-ready)
+- `/lib/features/profile/presentation/screens/edit_profile_screen.dart` - Edit profile form (online-only)
+- `/lib/services/connectivity/connectivity_service.dart` - Connectivity monitoring + isOnlineProvider
 
 ### Pose Detection & Form Analysis *(Documented in [features/POSE_DETECTION.md](features/POSE_DETECTION.md))*
 
@@ -206,6 +220,8 @@ ref.read(registerNotifierProvider.notifier).registerWithEmailPassword(
 | Registration flow | [features/REGISTER.md](features/REGISTER.md) |
 | Google sign-in | [features/REGISTER.md](features/REGISTER.md) → Google Sign-Up Flow |
 | Route guards | [features/REGISTER.md](features/REGISTER.md) → Router Guard |
+| Profile viewing | [features/PROFILE.md](features/PROFILE.md) |
+| Profile editing plan | [features/PROFILE.md](features/PROFILE.md) → Future Enhancements |
 | Server endpoints | [Server AUTH.md](../../get-gains-server/docs/features/AUTH.md) |
 
 ---
