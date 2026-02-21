@@ -245,6 +245,26 @@ class UserPreferencesService {
     ]);
     AppLogger.info('All user preferences cleared', tag: 'UserPrefs');
   }
+
+  // ============== Generic Raw Cache Helpers ==============
+
+  /// Store an arbitrary string value under [key].
+  ///
+  /// Used by non-auth features (e.g. profile caching) that need simple
+  /// key-value persistence in the same Hive box.
+  void cacheRaw(String key, String value) {
+    _box.put(key, value);
+  }
+
+  /// Read a raw string value previously stored via [cacheRaw].
+  String? readRaw(String key) {
+    return _box.get(key) as String?;
+  }
+
+  /// Delete a raw cached value.
+  void deleteRaw(String key) {
+    _box.delete(key);
+  }
 }
 
 /// Provider for the Hive box used by UserPreferencesService

@@ -38,7 +38,11 @@
 |----------|---------|
 | [CONTEXT.md](CONTEXT.md) | Core infrastructure, patterns, conventions |
 | [FEATURE_INDEX.md](FEATURE_INDEX.md) | This file - navigation hub |
-| [features/REGISTER.md](features/REGISTER.md) | Registration feature documentation || [features/HOME.md](features/HOME.md) | Home dashboard screen & widgets || [features/POSE_DETECTION.md](features/POSE_DETECTION.md) | Pose detection, form analysis, on-device ML |
+| [features/REGISTER.md](features/REGISTER.md) | Registration feature documentation |
+| [features/HOME.md](features/HOME.md) | Home dashboard screen & widgets |
+| [features/POSE_DETECTION.md](features/POSE_DETECTION.md) | Pose detection, form analysis, on-device ML |
+| [features/PROFILE.md](features/PROFILE.md) | Profile viewing and management documentation |
+| [features/PROGRAM.md](features/PROGRAM.md) | Coach programs, routines, exercises, assignments |
 
 ---
 
@@ -82,16 +86,29 @@
 | Registration | Email/password + Google sign-up | ✅ Data/Services | [features/REGISTER.md](features/REGISTER.md) |
 | Login | Email/password + Google login | 🔮 Not Implemented | - |
 | Password Reset | Recovery via email | ⚠️ Partial (send email only) | [features/REGISTER.md](features/REGISTER.md) |
-| Profile Management | User profile editing | 🔮 Not Implemented | - |
+| Profile Management | View profile, stats, achievements, sign out | ✅ View + Edit | [features/PROFILE.md](features/PROFILE.md) |
+| Profile Data Layer | Fitness profile CRUD, avatar upload, offline cache | ✅ Complete | [features/PROFILE.md](features/PROFILE.md) |
+| Profile Editing UI | Edit avatar, bio, body metrics, training prefs, equipment | ✅ Complete | [features/PROFILE.md](features/PROFILE.md) |
+| Connectivity Service | Network status monitoring for offline-first | ✅ Complete | [features/PROFILE.md](features/PROFILE.md) |
 
 **Primary Files:**
 - `/lib/features/auth/auth.dart` - Feature barrel export
 - `/lib/features/auth/data/auth_repository.dart` - Auth data operations
 - `/lib/features/auth/services/google_sign_in_service.dart` - Google OAuth
-- `/lib/features/auth/services/user_preferences_service.dart` - User caching
+- `/lib/features/auth/services/user_preferences_service.dart` - User caching + raw cache helpers
 - `/lib/features/auth/presentation/providers/register_provider.dart` - Registration state
 - `/lib/providers/auth_state_provider.dart` - App-wide auth state
 - `/lib/providers/router_provider.dart` - Route guards
+- `/lib/features/profile/profile.dart` - Profile feature export
+- `/lib/features/profile/data/user_profile_repository.dart` - Fitness profile CRUD + multipart upload + caching
+- `/lib/features/profile/data/models/user_profile_model.dart` - Fitness profile model
+- `/lib/features/profile/data/models/profile_request_models.dart` - Create/Update request models
+- `/lib/features/profile/presentation/providers/profile_provider.dart` - Account-level profile fetching
+- `/lib/features/profile/presentation/providers/user_profile_provider.dart` - Fitness profile notifier + derived providers
+- `/lib/features/profile/presentation/providers/edit_profile_provider.dart` - Edit form state + save logic
+- `/lib/features/profile/presentation/screens/profile_screen.dart` - Profile display UI (offline-ready)
+- `/lib/features/profile/presentation/screens/edit_profile_screen.dart` - Edit profile form (online-only)
+- `/lib/services/connectivity/connectivity_service.dart` - Connectivity monitoring + isOnlineProvider
 
 ### Client Pose & Form Comparison
 
@@ -129,6 +146,25 @@
 - `/lib/features/pose_detection/data/` - Models, repository
 - `/lib/features/pose_detection/services/` - MLKit, DTW, feature extraction
 - `/lib/features/pose_detection/presentation/` - Screens, providers, widgets
+
+### Coach Programs *(Documented in [features/PROGRAM.md](features/PROGRAM.md))*
+
+| Feature | Description | Status | Documentation |
+|---------|-------------|--------|---------------|
+| Programs CRUD | Create, list, update, delete programs | ✅ Data/Services | [features/PROGRAM.md](features/PROGRAM.md) |
+| Routines CRUD | Create, list, update, delete routines | ✅ Data/Services | [features/PROGRAM.md](features/PROGRAM.md) |
+| ProgramRoutine Junctions | Assign/reorder/remove routines in programs | ✅ Data/Services | [features/PROGRAM.md](features/PROGRAM.md) |
+| RoutineExercise Junctions | Add/update/remove exercises in routines | ✅ Data/Services | [features/PROGRAM.md](features/PROGRAM.md) |
+| Program Assignments | Assign programs to clients, manage assignments | ✅ Data/Services | [features/PROGRAM.md](features/PROGRAM.md) |
+
+**Primary Files:**
+- `/lib/features/coach_programs/coach_programs.dart` - Feature barrel export
+- `/lib/features/coach_programs/data/coach_program_repository.dart` - All API calls
+- `/lib/features/coach_programs/data/models/program_model.dart` - Program, routine summary, assignment models
+- `/lib/features/coach_programs/data/models/program_request_models.dart` - Request models
+- `/lib/features/coach_programs/presentation/providers/coach_program_provider.dart` - Programs list + detail
+- `/lib/features/coach_programs/presentation/providers/coach_routine_provider.dart` - Routines list + detail
+- `/lib/features/coach_programs/presentation/providers/coach_assignment_provider.dart` - Client assignments
 
 ### Future Domain Features *(Needs Implementation)*
 
@@ -252,6 +288,8 @@ ref.read(registerNotifierProvider.notifier).registerWithEmailPassword(
 | Registration flow | [features/REGISTER.md](features/REGISTER.md) |
 | Google sign-in | [features/REGISTER.md](features/REGISTER.md) → Google Sign-Up Flow |
 | Route guards | [features/REGISTER.md](features/REGISTER.md) → Router Guard |
+| Profile viewing | [features/PROFILE.md](features/PROFILE.md) |
+| Profile editing plan | [features/PROFILE.md](features/PROFILE.md) → Future Enhancements |
 | Server endpoints | [Server AUTH.md](../../get-gains-server/docs/features/AUTH.md) |
 
 ---
