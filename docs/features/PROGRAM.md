@@ -1,6 +1,6 @@
 # Coach Programs Feature
 
-> **Purpose**: Complete data layer for the coach program flow — creating programs & routines, building exercise prescriptions, assigning routines to program day-slots, and managing client program assignments.
+> **Purpose**: Full-stack coach program flow — creating programs & routines, building exercise prescriptions, assigning routines to program day-slots, managing client program assignments, and the complete presentation layer (screens, bottom sheets, routing).
 
 ---
 
@@ -46,11 +46,23 @@ lib/features/coach_programs/
 │       └── program_request_models.dart          ← Create/Update request models
 └── presentation/
     ├── presentation.dart                        ← Presentation layer barrel
-    └── providers/
-        ├── providers.dart                       ← Providers barrel
-        ├── coach_program_provider.dart          ← Programs list + detail notifiers
-        ├── coach_routine_provider.dart          ← Routines list + detail notifiers
-        └── coach_assignment_provider.dart       ← Client assignment notifier
+    ├── providers/
+    │   ├── providers.dart                       ← Providers barrel
+    │   ├── coach_program_provider.dart          ← Programs list + detail notifiers
+    │   ├── coach_routine_provider.dart          ← Routines list + detail notifiers
+    │   └── coach_assignment_provider.dart       ← Client assignment notifier
+    └── screens/
+        ├── screens.dart                         ← Screens barrel
+        ├── coach_programs_screen.dart           ← Programs list (paginated, pull-to-refresh)
+        ├── coach_program_detail_screen.dart     ← Program detail with day-slot routine tree
+        ├── coach_program_form_screen.dart       ← Create / edit program form
+        ├── coach_routines_screen.dart           ← Routines list (paginated, muscle group chips)
+        ├── coach_routine_detail_screen.dart     ← Routine detail with exercise prescriptions
+        ├── coach_routine_form_screen.dart       ← Create / edit routine form
+        ├── client_assignments_screen.dart       ← Client program assignments management
+        ├── assign_routine_sheet.dart            ← Bottom sheet: assign routine to a day-slot
+        ├── add_exercise_sheet.dart              ← Bottom sheet: add exercise to a routine
+        └── assign_program_sheet.dart            ← Bottom sheet: assign program to a client
 ```
 
 ### Shared Models (from `workout` feature)
@@ -436,13 +448,254 @@ if (pagination?.hasMore ?? false) {
 
 ---
 
+## Presentation Layer
+
+### Routing
+
+All routes are defined in `router_provider.dart` under the `AppRoutes` class:
+
+| Constant | Path | Screen | Parameters |
+|----------|------|--------|------------|
+| `coachPrograms` | `/coach/programs` | `CoachProgramsScreen` | — |
+| `coachCreateProgram` | `/coach/programs/create` | `CoachProgramFormScreen` | — |
+| `coachProgramDetail` | `/coach/programs/:id` | `CoachProgramDetailScreen` | `id` (path) |
+| `coachEditProgram` | `/coach/programs/:id/edit` | `CoachProgramFormScreen` | `id` (path) |
+| `coachRoutines` | `/coach/routines` | `CoachRoutinesScreen` | — |
+| `coachCreateRoutine` | `/coach/routines/create` | `CoachRoutineFormScreen` | — |
+| `coachRoutineDetail` | `/coach/routines/:id` | `CoachRoutineDetailScreen` | `id` (path) |
+| `coachEditRoutine` | `/coach/routines/:id/edit` | `CoachRoutineFormScreen` | `id` (path) |
+| `clientAssignments` | `/coach/clients/:userId/programs` | `ClientAssignmentsScreen` | `userId` (path), `name?` (query) |
+
+> **Route ordering**: Static paths (e.g. `/coach/programs/create`) are defined **before** parameterized paths (e.g. `/coach/programs/:id`) to prevent GoRouter from matching `:id` against `create`.
+
+### Navigation Flow
+
+```
+CoachProgramsScreen (list)
+├── FAB → CoachProgramFormScreen (create mode)
+├── Card tap → CoachProgramDetailScreen
+│   ├── Edit icon → CoachProgramFormScreen (edit mode, programId passed)
+│   ├── FAB → showAssignRoutineSheet → assigns routine to day-slot
+│   ├── Routine name tap → CoachRoutineDetailScreen
+│   └── Remove routine → showAppConfirmSheet → removes day-slot
+├── Popup "Edit" → CoachProgramFormScreen (edit mode)
+├── Popup "Delete" → showAppConfirmSheet → deletes program
+└── AppBar action → CoachRoutinesScreen (list)
+    ├── FAB → CoachRoutineFormScreen (create mode)
+    ├── Card tap → CoachRoutineDetailScreen
+    │   ├── Edit icon → CoachRoutineFormScreen (edit mode, routineId passed)
+    │   ├── FAB → showAddExerciseSheet → adds exercise with prescription
+    │   └── Remove exercise → showAppConfirmSheet → removes exercise
+    ├── Popup "Edit" → CoachRoutineFormScreen (edit mode)
+    └── Popup "Delete" → showAppConfirmSheet → deletes routine
+
+ClientAssignmentsScreen
+├── FAB → showAssignProgramSheet → assigns program to client
+├── Popup "Toggle active" → updateAssignment
+└── Popup "Delete" → showAppConfirmSheet → deletes assignment
+```
+
+### Screens
+
+#### CoachProgramsScreen
+
+**Purpose**: Paginated list of all programs owned by the coach.
+
+**Provider**: `coachProgramsProvider` (with convenience selectors: `coachProgramsLoadingProvider`, `coachProgramsListProvider`, `coachProgramsPaginationProvider`)
+
+**Features**:
+- Pull-to-refresh via `RefreshIndicator`
+- Infinite scroll via `ScrollController` triggering `loadMore()`
+- FAB to create a new program
+- AppBar action to navigate to Routines list
+- Each card shows: program name, description, routine count, assigned client count
+- Popup menu per card: Edit / Delete with confirmation
+
+#### CoachProgramDetailScreen
+
+**Purpose**: Full program view showing the day-slot routine tree.
+
+**Provider**: `programDetailProvider(programId)` (family)
+
+**Features**:
+- Sorted day-slot cards showing day number, routine name, description
+- Exercise preview per slot (first 3 exercises shown + "+N more" overflow)
+- Stats badges: total days, total unique routines
+- FAB to assign a routine to a new day-slot via `showAssignRoutineSheet`
+- Tap routine name → navigates to routine detail
+- Remove routine via confirm sheet
+- Edit program via AppBar action
+
+**Extension used**: `ProgramDetailModelX.totalDays`, `.cycleLengthDays` for computed stats.
+
+#### CoachProgramFormScreen
+
+**Purpose**: Dual-mode form for creating or editing a program.
+
+**Provider**: `programDetailProvider(programId)` when editing (loads existing data)
+
+**Fields**: Name (required), Description (required)
+
+**Mode detection**: `programId` constructor param — `null` = create, non-null = edit (pre-fills form from provider state).
+
+#### CoachRoutinesScreen
+
+**Purpose**: Paginated list of all routines owned by the coach.
+
+**Provider**: `coachRoutinesProvider` (with convenience selectors: `coachRoutinesLoadingProvider`, `coachRoutinesListProvider`, `coachRoutinesPaginationProvider`)
+
+**Features**:
+- Pull-to-refresh and infinite scroll
+- FAB to create a new routine
+- Each card shows: routine name, description, exercise/program/duration counts, muscle group chips
+- Popup menu per card: Edit / Delete with confirmation
+
+#### CoachRoutineDetailScreen
+
+**Purpose**: Single routine detail showing all exercise prescriptions.
+
+**Provider**: `routineDetailProvider(routineId)` (family)
+
+**Features**:
+- Ordered exercise cards with numbered circles
+- Prescription stats per exercise: sets, rep range, rest seconds
+- Notes display if present
+- Muscle group badge
+- Stats badges: total exercises, estimated duration
+- FAB to add exercise via `showAddExerciseSheet`
+- Remove exercise via confirm sheet
+
+#### CoachRoutineFormScreen
+
+**Purpose**: Dual-mode form for creating or editing a routine.
+
+**Provider**: `routineDetailProvider(routineId)` when editing
+
+**Fields**: Name (required), Description (required), Estimated Duration in minutes (required), Muscle Groups Targeted (multi-select `FilterChip` grid over all `MuscleGroup.values`)
+
+**Extension used**: `MuscleGroupX.displayName` for human-readable chip labels.
+
+#### ClientAssignmentsScreen
+
+**Purpose**: View and manage all program assignments for a specific client.
+
+**Provider**: `clientAssignmentsProvider(userId)` (family)
+
+**Params**: `userId` (required path param), `userName` (optional query param for display)
+
+**Features**:
+- Assignment cards sorted: active first, then by start date descending
+- Active/Inactive badge per card
+- Shows: program name, date range, notes, routine count
+- Popup menu: Toggle active status / Delete with confirmation
+- FAB to assign a new program via `showAssignProgramSheet`
+
+### Bottom Sheets
+
+All bottom sheets use `showAppBottomSheet` from the design system, ensuring consistent styling and swipe-to-dismiss behavior.
+
+#### showAssignRoutineSheet
+
+**Purpose**: Assign an existing routine to a specific day-slot in a program.
+
+**Provider consumed**: `coachRoutinesProvider` (loads routine list for dropdown)  
+**Provider mutated**: `programDetailProvider(programId).notifier.assignRoutine()`
+
+**Fields**:
+- Routine dropdown (populated from `coachRoutinesListProvider`)
+- Day number text field (auto-suggests next available day number)
+
+#### showAddExerciseSheet
+
+**Purpose**: Add an exercise from the global library to a routine with a prescription.
+
+**Provider consumed**: `exerciseListProvider` (from `coach_pose` feature)  
+**Provider mutated**: `routineDetailProvider(routineId).notifier.addExercise()`
+
+**Fields**:
+- Exercise dropdown (populated from exercise library)
+- Sets (default: 3)
+- Reps Min (default: 8)
+- Reps Max (default: 12)
+- Rest Seconds (default: 90)
+- Notes (optional)
+
+**Validation**: All numeric fields required and must be > 0; repsMax ≥ repsMin.
+
+#### showAssignProgramSheet
+
+**Purpose**: Assign a program to a client with date range and notes.
+
+**Provider consumed**: `coachProgramsProvider` (loads programs for dropdown)  
+**Provider mutated**: `clientAssignmentsProvider(userId).notifier.assignProgram()`
+
+**Fields**:
+- Program dropdown (populated from `coachProgramsListProvider`)
+- Start date picker (required)
+- End date picker (optional)
+- Notes (optional)
+
+### Design System Components Used
+
+| Component | Usage |
+|-----------|-------|
+| `AppButton` | Form submit/cancel actions, sheet confirm/cancel |
+| `AppCard` | Program/routine/assignment list cards |
+| `AppTextField` | All form text inputs (names, descriptions, numbers, notes) |
+| `AppBadge` | Active/inactive assignment status |
+| `AppEmptyState` | Empty list fallback with icon + message |
+| `AppToast` | Success/error feedback on create, update, delete operations |
+| `showAppBottomSheet` | All three bottom sheet invocations |
+| `showAppConfirmSheet` | Delete confirmations (program, routine, exercise, assignment) |
+| `AppColors` | Dark/light theme colors, coral primary for accents |
+| `_InfoChip` (local) | Stats badges on list/detail screens (routines, clients, days, exercises, duration) |
+
+### Screen → Provider Wiring
+
+```
+CoachProgramsScreen
+  ├── watch: coachProgramsProvider (state switching)
+  ├── watch: coachProgramsLoadingProvider
+  ├── watch: coachProgramsListProvider
+  └── watch: coachProgramsPaginationProvider
+
+CoachProgramDetailScreen
+  └── watch: programDetailProvider(programId)
+
+CoachProgramFormScreen
+  ├── watch: programDetailProvider(programId)  [edit mode only]
+  ├── mutate: coachProgramsProvider.notifier.createProgram()
+  └── mutate: coachProgramsProvider.notifier.updateProgram()
+
+CoachRoutinesScreen
+  ├── watch: coachRoutinesProvider
+  ├── watch: coachRoutinesLoadingProvider
+  ├── watch: coachRoutinesListProvider
+  └── watch: coachRoutinesPaginationProvider
+
+CoachRoutineDetailScreen
+  └── watch: routineDetailProvider(routineId)
+
+CoachRoutineFormScreen
+  ├── watch: routineDetailProvider(routineId)  [edit mode only]
+  ├── mutate: coachRoutinesProvider.notifier.createRoutine()
+  └── mutate: coachRoutinesProvider.notifier.updateRoutine()
+
+ClientAssignmentsScreen
+  └── watch: clientAssignmentsProvider(userId)
+```
+
+---
+
 ## Relationship to Other Features
 
 | Feature | Relationship |
 |---------|-------------|
 | **Workout** | Shares `ExerciseModel`, `RoutineExerciseModel`, `RoutineModel`, `MuscleGroup` |
+| **Coach Pose** | Provides `exerciseListProvider` for exercise dropdown in `AddExerciseSheet` |
 | **Subscription** | Coach features require active coach profile; client access to coach content may require subscription |
 | **Profile** | Coach profile must exist before program creation |
+| **Design System** | Uses `AppButton`, `AppCard`, `AppTextField`, `AppBadge`, `AppEmptyState`, `AppToast`, `showAppBottomSheet`, `showAppConfirmSheet`, `AppColors` |
 
 ---
 
@@ -461,4 +714,4 @@ The `ApiClient` automatically unwraps the `data` field. Repository methods recei
 
 ---
 
-*Last updated: February 21, 2026*
+*Last updated: February 24, 2026*
