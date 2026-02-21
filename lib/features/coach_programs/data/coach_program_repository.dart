@@ -1,11 +1,13 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../core/constants/api_constants.dart';
 import '../../../core/utils/app_error.dart';
 import '../../../core/utils/logger.dart';
 import '../../../core/utils/result.dart';
 import '../../../services/api/api_client.dart';
 import '../../workout/data/models/exercise_model.dart';
 import '../../workout/data/models/routine_model.dart';
+import 'models/coach_client_model.dart';
 import 'models/program_model.dart';
 import 'models/program_request_models.dart';
 
@@ -533,6 +535,110 @@ class CoachProgramRepository {
           'Failed to delete assignment $assignmentId',
           tag: 'CoachProgramRepo',
         );
+        return Failure(error);
+      },
+    );
+  }
+
+  // ──────────────────────────────────────────────────
+  // Class Roster (ML-4)
+  // ──────────────────────────────────────────────────
+
+  /// Get the coach's class roster — all subscribed clients.
+  ///
+  /// `GET /coach/class`
+  /// Returns clients with `subscribedAt` and `subscriptionExpiresAt` (ML-4).
+  Future<
+    Result<
+      ({List<RosterClientModel> clients, PaginationMeta pagination}),
+      AppError
+    >
+  >
+  getClassRoster({int limit = 50, int offset = 0}) async {
+    final result = await _apiClient.get<Map<String, dynamic>>(
+      ApiConstants.coachClass,
+      queryParameters: {'limit': limit, 'offset': offset},
+    );
+
+    return result.when(
+      success: (data) {
+        final clients = (data['clients'] as List<dynamic>)
+            .map((e) => RosterClientModel.fromJson(e as Map<String, dynamic>))
+            .toList();
+        final pagination = PaginationMeta.fromJson(
+          data['pagination'] as Map<String, dynamic>,
+        );
+        return Success((clients: clients, pagination: pagination));
+      },
+      failure: (error) {
+        AppLogger.error(
+          'Failed to fetch class roster',
+          tag: 'CoachProgramRepo',
+        );
+        return Failure(error);
+      },
+    );
+  }
+
+  /// Remove a client from the coach's class.
+  ///
+  /// `DELETE /coach/class/:clientId`
+  Future<Result<void, AppError>> removeClientFromClass(String clientId) async {
+    final result = await _apiClient.delete<Map<String, dynamic>>(
+      '${ApiConstants.coachClass}/$clientId',
+    );
+
+    return result.when(
+      success: (_) => const Success(null),
+      failure: (error) {
+        AppLogger.error(
+          'Failed to remove client $clientId from class',
+          tag: 'CoachProgramRepo',
+        );
+        return Failure(error);
+      },
+    );
+  }
+
+  // ──────────────────────────────────────────────────
+  // Client List with Assignments (ML-4)
+  // ──────────────────────────────────────────────────
+
+  /// Get the coach's full client list with assignment info.
+  ///
+  /// `GET /coach/clients`
+  /// Richer than [getClassRoster] — includes `assignedPrograms` and
+  /// `isAssigned` fields. Also includes `subscriptionExpiresAt` (ML-4).
+  Future<
+    Result<
+      ({List<CoachClientModel> clients, PaginationMeta pagination}),
+      AppError
+    >
+  >
+  getClients({int limit = 50, int offset = 0, bool? isAssigned}) async {
+    final queryParams = <String, dynamic>{
+      'limit': limit,
+      'offset': offset,
+      if (isAssigned != null) 'isAssigned': isAssigned,
+    };
+
+    final result = await _apiClient.get<Map<String, dynamic>>(
+      ApiConstants.coachClients,
+      queryParameters: queryParams,
+    );
+
+    return result.when(
+      success: (data) {
+        final clients = (data['clients'] as List<dynamic>)
+            .map((e) => CoachClientModel.fromJson(e as Map<String, dynamic>))
+            .toList();
+        final pagination = PaginationMeta.fromJson(
+          data['pagination'] as Map<String, dynamic>,
+        );
+        return Success((clients: clients, pagination: pagination));
+      },
+      failure: (error) {
+        AppLogger.error('Failed to fetch clients', tag: 'CoachProgramRepo');
         return Failure(error);
       },
     );

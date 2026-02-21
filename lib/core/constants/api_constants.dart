@@ -49,6 +49,12 @@ class ApiConstants {
   static const String coachRoutines = '/coach/routines';
   static const String coachAssignProgram = '/coach/assign-program';
   static const String coachClients = '/coach/clients';
+  static const String coachClass = '/coach/class';
+  static const String coachSettings = '/coach/settings';
+
+  // Coach Discovery Endpoints (Client-Facing)
+  static const String discoverCoaches = '/user/coaches';
+  static const String subscribedCoaches = '/user/coaches/subscribed';
 
   // Sync Endpoints
   static const String sync = '/sync';

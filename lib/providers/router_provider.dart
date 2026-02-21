@@ -7,6 +7,8 @@ import '../features/auth/auth.dart';
 import '../features/client_pose/client_pose.dart';
 import '../features/coach_pose/coach_pose.dart';
 import '../features/coach_programs/coach_programs.dart';
+import '../features/coach_settings/coach_settings.dart';
+import '../features/coaches/coaches.dart';
 import '../features/home/home.dart';
 import '../features/profile/profile.dart';
 import '../features/workout/workout.dart';
@@ -68,6 +70,13 @@ class AppRoutes {
   static const String coachEditRoutine = '/coach/routines/:id/edit';
   static const String coachRoutineDetail = '/coach/routines/:id';
   static const String clientAssignments = '/coach/clients/:userId/programs';
+  static const String coachRoster = '/coach/roster';
+  static const String coachSettings = '/coach/settings';
+
+  // Coach Discovery routes (client-facing)
+  static const String discoverCoaches = '/coaches/discover';
+  static const String coachProfile = '/coaches/:id';
+  static const String subscribedCoaches = '/coaches/subscribed';
 }
 
 /// Router Provider
@@ -333,6 +342,9 @@ GoRouter router(Ref ref) {
             currentExerciseIndex: (extra?['currentExerciseIndex'] as int?) ?? 0,
             currentSetNumber: (extra?['currentSetNumber'] as int?) ?? 1,
           );
+        },
+      ),
+
       // Coach Program Routes
       GoRoute(
         path: AppRoutes.coachPrograms,
@@ -385,6 +397,31 @@ GoRouter router(Ref ref) {
           final userName = state.uri.queryParameters['name'];
           return ClientAssignmentsScreen(userId: userId, userName: userName);
         },
+      ),
+      GoRoute(
+        path: AppRoutes.coachRoster,
+        builder: (context, state) => const CoachRosterScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.coachSettings,
+        builder: (context, state) => const CoachSettingsScreen(),
+      ),
+
+      // Coach Discovery Routes (Client-Facing)
+      GoRoute(
+        path: AppRoutes.discoverCoaches,
+        builder: (context, state) => const CoachDiscoveryScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.coachProfile,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return CoachProfileScreen(coachId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.subscribedCoaches,
+        builder: (context, state) => const SubscribedCoachesScreen(),
       ),
     ],
 
