@@ -50,21 +50,30 @@ lib/
 
 ## Essential Commands
 
+### When using FLUTTER/DART commands
+
+```bash
+# Always USE the fvm prefix
+fvm flutter
+fvm dart
+```
+
+
 ### Code Generation (REQUIRED after model/provider changes)
 
 ```bash
 # Generate all code (freezed, json_serializable, riverpod, drift)
-dart run build_runner build --delete-conflicting-outputs
+fvm dart run build_runner build --delete-conflicting-outputs
 
 # Watch mode (auto-regenerate on save)
-dart run build_runner watch --delete-conflicting-outputs
+fvm dart run build_runner watch --delete-conflicting-outputs
 ```
 
 ### Drift Database Commands
 
 ```bash
 # Generate database code
-dart run build_runner build --delete-conflicting-outputs
+fvm dart run build_runner build --delete-conflicting-outputs
 
 # Generate migration (after schema changes)
 # 1. Increment schemaVersion in app_database.dart
@@ -76,16 +85,16 @@ dart run build_runner build --delete-conflicting-outputs
 
 ```bash
 # Get dependencies
-flutter pub get
+fvm flutter pub get
 
 # Run app
-flutter run
+fvm flutter run
 
 # Build APK
-flutter build apk --release
+fvm flutter build apk --release
 
 # Analyze code
-flutter analyze
+fvm flutter analyze
 ```
 
 ---
@@ -452,6 +461,28 @@ drift_dev: ^2.29.0
 5. **Result type**: Use `when()` for exhaustive handling, `valueOrNull` for quick access
 
 6. **Database migrations**: Increment `schemaVersion` and add migration logic before deploying
+
+7. **Query parameters are always strings in URLs** — the server's `validateRequest` middleware
+   now correctly coerces URL query strings into their proper types (booleans, numbers, dates)
+   via Zod before they reach controllers. The Flutter app sends query parameters as plain strings
+   (standard HTTP behaviour) and does **not** need to change. Boolean flags like
+   `?includeInactive=false` and pagination like `?limit=20&offset=0` will be interpreted
+   correctly by the server. Do not attempt to serialize booleans or numbers specially on the
+   app side.
+
+8. **Multipart/form-data: always send numeric fields as strings** — when building
+   `FormData` for multipart endpoints (e.g. profile create/update), convert all numeric
+   values (`double`, `int`) to strings using `.toString()`. This is the standard
+   HTTP multipart behaviour and avoids floating-point precision loss in transport.
+   The server's Zod schemas use `z.preprocess(toNumber, z.number())` to coerce them
+   back before they reach Prisma. Never attempt to embed raw Dart numbers inside
+   `FormData` map values.
+
+9. **FormData cannot be retried** — Dio's `FormData` is finalized (streams consumed)
+   after the first send. The `RetryInterceptor` automatically skips retry for any
+   request whose `data` is a `FormData` instance. If a multipart request fails with
+   a transient error, the caller is responsible for rebuilding `FormData` and
+   re-issuing the request (not relying on automatic retry).
 
 ---
 
