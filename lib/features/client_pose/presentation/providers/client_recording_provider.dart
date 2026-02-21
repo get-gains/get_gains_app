@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -118,7 +119,9 @@ class ClientRecording extends _$ClientRecording {
   late final FormComparisonService _comparisonService;
 
   // Recording state
-  final List<LandmarkFrame> _clientLandmarks = [];
+  final List<LandmarkFrame> _clientLandmarks = []; // Raw 0-1 coords for display
+  final List<LandmarkFrame> _clientNormalizedLandmarks =
+      []; // Procrustes-normalized for comparison
   final List<FeatureFrame> _clientFeatures = [];
   List<FeatureFrame> _referenceFeatures = [];
   List<LandmarkFrame> _referenceLandmarks = [];
@@ -128,6 +131,15 @@ class ClientRecording extends _$ClientRecording {
   String? _coachName;
   PoseConfigModel? _poseConfig;
   int _recordingStartMs = 0;
+  Map<String, LandmarkPoint> _lastDisplayLandmarks = {};
+
+  // Velocity-adaptive EMA parameters
+  static const double _emaAlphaMin = 0.12; // heavy smoothing for noise
+  static const double _emaAlphaMax = 0.55; // light smoothing for real movement
+  static const double _noiseGate = 0.005; // movement below this is clamped to 0
+  static const double _velocitySaturation =
+      0.06; // movement above this gets max alpha
+  static const double _minDisplayConfidence = 0.5;
 
   @override
   ClientRecordingState build(String exerciseId) {
@@ -210,6 +222,9 @@ class ClientRecording extends _$ClientRecording {
             }
           }
 
+          // Tell the rep counter which exercise this is
+          _repCounter.configure(exerciseName: _exerciseName);
+
           state = ClientRecordingReady(
             exerciseName: _exerciseName ?? 'Exercise',
             referenceFrames: referenceFrames,
@@ -239,7 +254,9 @@ class ClientRecording extends _$ClientRecording {
   /// Step 2: Start recording
   void startRecording() {
     _clientLandmarks.clear();
+    _clientNormalizedLandmarks.clear();
     _clientFeatures.clear();
+    _lastDisplayLandmarks = {};
     _repCounter.reset();
     _recordingStartMs = DateTime.now().millisecondsSinceEpoch;
 
@@ -262,11 +279,15 @@ class ClientRecording extends _$ClientRecording {
   void processFrame(LandmarkFrame landmarkFrame) {
     if (state is! ClientRecordingActive) return;
 
-    // Normalize landmarks
-    final normalized = _preprocessor.normalize(landmarkFrame);
-    _clientLandmarks.add(normalized);
+    // Stabilize raw landmarks for smooth display (keeps 0-1 range)
+    final stabilized = _stabilizeForDisplay(landmarkFrame);
+    _clientLandmarks.add(stabilized);
 
-    // Extract features
+    // Normalize for comparison (Procrustes: centered around 0, unit scale)
+    final normalized = _preprocessor.normalize(stabilized);
+    _clientNormalizedLandmarks.add(normalized);
+
+    // Extract features from normalized landmarks
     final features = _featureExtractor.extractFrame(normalized);
     _clientFeatures.add(features);
 
@@ -336,7 +357,10 @@ class ClientRecording extends _$ClientRecording {
         repCount: repCount,
         uploadSuccess: uploadSuccess,
         referenceLandmarkFrames: List.unmodifiable(_referenceLandmarks),
-        clientLandmarkFrames: List.unmodifiable(_clientLandmarks),
+        // Apply batch smoothing to client landmarks for clean results playback
+        clientLandmarkFrames: List.unmodifiable(
+          _preprocessor.smoothFrames(_clientLandmarks),
+        ),
         exerciseName: _exerciseName,
       );
     } catch (e) {
@@ -352,7 +376,9 @@ class ClientRecording extends _$ClientRecording {
   /// Reset to initial state for another attempt
   void resetForNewAttempt() {
     _clientLandmarks.clear();
+    _clientNormalizedLandmarks.clear();
     _clientFeatures.clear();
+    _lastDisplayLandmarks = {};
     _repCounter.reset();
 
     if (_formId != null) {
@@ -368,5 +394,74 @@ class ClientRecording extends _$ClientRecording {
     } else {
       state = const ClientRecordingInitial();
     }
+  }
+
+  /// Velocity-adaptive EMA stabilization for smooth, jitter-free display.
+  ///
+  /// Instead of a fixed alpha, the blend factor scales with how much each
+  /// landmark actually moved. Tiny movements (noise) get heavy smoothing,
+  /// large movements (real motion) pass through quickly.
+  LandmarkFrame _stabilizeForDisplay(LandmarkFrame frame) {
+    final filtered = _preprocessor.filterByConfidence(frame);
+
+    final current = filtered.landmarks;
+    final prev = _lastDisplayLandmarks;
+    final allKeys = <String>{...current.keys, ...prev.keys};
+    final stabilized = <String, LandmarkPoint>{};
+
+    for (final key in allKeys) {
+      final curr = current[key];
+      final old = prev[key];
+
+      if (curr != null && old != null) {
+        // Compute per-landmark velocity (Euclidean distance)
+        final dx = curr.x - old.x;
+        final dy = curr.y - old.y;
+        final velocity = math.sqrt(dx * dx + dy * dy);
+
+        // Below noise gate → snap to previous (no jitter)
+        if (velocity < _noiseGate) {
+          stabilized[key] = old;
+          continue;
+        }
+
+        // Adaptive alpha: scales linearly from min to max based on velocity
+        final t = ((velocity - _noiseGate) / (_velocitySaturation - _noiseGate))
+            .clamp(0.0, 1.0);
+        final alpha = _emaAlphaMin + t * (_emaAlphaMax - _emaAlphaMin);
+
+        final x = (curr.x * alpha) + (old.x * (1 - alpha));
+        final y = (curr.y * alpha) + (old.y * (1 - alpha));
+        final z = (curr.z * alpha) + (old.z * (1 - alpha));
+        stabilized[key] = LandmarkPoint(
+          x: x.clamp(0.0, 1.0),
+          y: y.clamp(0.0, 1.0),
+          z: z,
+          confidence: curr.confidence,
+        );
+      } else if (curr != null) {
+        // New landmark — use as-is
+        stabilized[key] = LandmarkPoint(
+          x: curr.x.clamp(0.0, 1.0),
+          y: curr.y.clamp(0.0, 1.0),
+          z: curr.z,
+          confidence: curr.confidence,
+        );
+      } else if (old != null) {
+        // Landmark disappeared — hold with decaying confidence
+        final decayedConfidence = old.confidence * 0.92;
+        if (decayedConfidence >= _minDisplayConfidence) {
+          stabilized[key] = LandmarkPoint(
+            x: old.x,
+            y: old.y,
+            z: old.z,
+            confidence: decayedConfidence,
+          );
+        }
+      }
+    }
+
+    _lastDisplayLandmarks = stabilized;
+    return LandmarkFrame(timestampMs: frame.timestampMs, landmarks: stabilized);
   }
 }
