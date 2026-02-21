@@ -6,11 +6,17 @@ import '../core/utils/logger.dart';
 import '../features/auth/auth.dart';
 import '../features/client_pose/client_pose.dart';
 import '../features/coach_pose/coach_pose.dart';
+import '../features/coach_programs/coach_programs.dart';
 import '../features/home/home.dart';
 import '../features/profile/profile.dart';
 import '../features/workout/workout.dart';
 import '../features/unity/unity.dart';
 import 'auth_state_provider.dart';
+import '../features/programs/screens/program_screen.dart';
+import '../features/programs/screens/program_details_screen.dart';
+import '../features/programs/screens/calendar_screen.dart';
+import '../features/programs/screens/create_program_screen.dart';
+
 import 'deep_link_provider.dart';
 
 part 'router_provider.g.dart';
@@ -29,6 +35,7 @@ class AppRoutes {
   static const String emailVerified = '/email-verified';
   static const String home = '/home';
   static const String profile = '/profile';
+  static const String editProfile = '/profile/edit';
   static const String settings = '/settings';
 
   // Workout routes
@@ -36,6 +43,10 @@ class AppRoutes {
   static const String routineDetail = '/routines/:id';
   static const String workoutSession = '/workout-session';
   static const String unityTest = '/unity-test';
+  static const String programs = '/programs';
+  static const String createProgram = '/create-program';
+  static const String programDetails = '/program-details';
+  static const String calendar = '/calendar';
 
   // Coach Pose routes
   static const String coachExercises = '/coach/exercises';
@@ -47,6 +58,16 @@ class AppRoutes {
   static const String clientViewForm = '/client/exercise/:id/view-form';
   static const String clientCompareForm = '/client/exercise/:id/compare';
   static const String clientUnityRecord = '/client/exercise/:id/unity-record';
+  // Coach Program routes
+  static const String coachPrograms = '/coach/programs';
+  static const String coachCreateProgram = '/coach/programs/create';
+  static const String coachEditProgram = '/coach/programs/:id/edit';
+  static const String coachProgramDetail = '/coach/programs/:id';
+  static const String coachRoutines = '/coach/routines';
+  static const String coachCreateRoutine = '/coach/routines/create';
+  static const String coachEditRoutine = '/coach/routines/:id/edit';
+  static const String coachRoutineDetail = '/coach/routines/:id';
+  static const String clientAssignments = '/coach/clients/:userId/programs';
 }
 
 /// Router Provider
@@ -186,9 +207,18 @@ GoRouter router(Ref ref) {
         path: AppRoutes.home,
         builder: (context, state) => const HomeScreen(),
       ),
+
+      // GoRoute(
+      //   path: AppRoutes.home,
+      //   builder: (context, state) => const ProgramsScreen(),
+      // ),
       GoRoute(
         path: AppRoutes.profile,
         builder: (context, state) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.editProfile,
+        builder: (context, state) => const EditProfileScreen(),
       ),
       GoRoute(
         path: AppRoutes.settings,
@@ -225,6 +255,28 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: AppRoutes.unityTest,
         builder: (context, state) => const UnityTestScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.programs,
+        builder: (context, state) => const ProgramsScreen(),
+      ),
+
+      GoRoute(
+        path: AppRoutes.createProgram,
+        builder: (context, state) => const CreateProgramScreen(),
+      ),
+
+      GoRoute(
+        path: AppRoutes.programDetails,
+        builder: (context, state) {
+          final program = state.extra as Map;
+          return ProgramDetailsScreen(program: program);
+        },
+      ),
+
+      GoRoute(
+        path: AppRoutes.calendar,
+        builder: (context, state) => const CalendarScreen(),
       ),
 
       // Coach Pose Routes
@@ -281,6 +333,57 @@ GoRouter router(Ref ref) {
             currentExerciseIndex: (extra?['currentExerciseIndex'] as int?) ?? 0,
             currentSetNumber: (extra?['currentSetNumber'] as int?) ?? 1,
           );
+      // Coach Program Routes
+      GoRoute(
+        path: AppRoutes.coachPrograms,
+        builder: (context, state) => const CoachProgramsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.coachCreateProgram,
+        builder: (context, state) => const CoachProgramFormScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.coachProgramDetail,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return CoachProgramDetailScreen(programId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.coachEditProgram,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return CoachProgramFormScreen(programId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.coachRoutines,
+        builder: (context, state) => const CoachRoutinesScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.coachCreateRoutine,
+        builder: (context, state) => const CoachRoutineFormScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.coachRoutineDetail,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return CoachRoutineDetailScreen(routineId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.coachEditRoutine,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return CoachRoutineFormScreen(routineId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.clientAssignments,
+        builder: (context, state) {
+          final userId = state.pathParameters['userId']!;
+          final userName = state.uri.queryParameters['name'];
+          return ClientAssignmentsScreen(userId: userId, userName: userName);
         },
       ),
     ],

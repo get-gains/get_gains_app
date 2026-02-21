@@ -8,6 +8,7 @@ library;
 
 export 'api/api_client.dart';
 export 'api/interceptors.dart';
+export 'connectivity/connectivity_service.dart';
 export 'database/app_database.dart';
 export 'storage/secure_storage_service.dart';
 export 'sync/sync_service.dart';
