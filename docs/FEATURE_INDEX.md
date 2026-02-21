@@ -41,6 +41,7 @@
 | [features/REGISTER.md](features/REGISTER.md) | Registration feature documentation |
 | [features/PROFILE.md](features/PROFILE.md) | Profile viewing and management documentation |
 | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) | Pose detection, form analysis, on-device ML |
+| [features/PROGRAM.md](features/PROGRAM.md) | Coach programs, routines, exercises, assignments |
 
 ---
 
@@ -107,6 +108,25 @@
 - `/lib/features/pose_detection/data/` - Models, repository
 - `/lib/features/pose_detection/services/` - MLKit, DTW, feature extraction
 - `/lib/features/pose_detection/presentation/` - Screens, providers, widgets
+
+### Coach Programs *(Documented in [features/PROGRAM.md](features/PROGRAM.md))*
+
+| Feature | Description | Status | Documentation |
+|---------|-------------|--------|---------------|
+| Programs CRUD | Create, list, update, delete programs | ✅ Data/Services | [features/PROGRAM.md](features/PROGRAM.md) |
+| Routines CRUD | Create, list, update, delete routines | ✅ Data/Services | [features/PROGRAM.md](features/PROGRAM.md) |
+| ProgramRoutine Junctions | Assign/reorder/remove routines in programs | ✅ Data/Services | [features/PROGRAM.md](features/PROGRAM.md) |
+| RoutineExercise Junctions | Add/update/remove exercises in routines | ✅ Data/Services | [features/PROGRAM.md](features/PROGRAM.md) |
+| Program Assignments | Assign programs to clients, manage assignments | ✅ Data/Services | [features/PROGRAM.md](features/PROGRAM.md) |
+
+**Primary Files:**
+- `/lib/features/coach_programs/coach_programs.dart` - Feature barrel export
+- `/lib/features/coach_programs/data/coach_program_repository.dart` - All API calls
+- `/lib/features/coach_programs/data/models/program_model.dart` - Program, routine summary, assignment models
+- `/lib/features/coach_programs/data/models/program_request_models.dart` - Request models
+- `/lib/features/coach_programs/presentation/providers/coach_program_provider.dart` - Programs list + detail
+- `/lib/features/coach_programs/presentation/providers/coach_routine_provider.dart` - Routines list + detail
+- `/lib/features/coach_programs/presentation/providers/coach_assignment_provider.dart` - Client assignments
 
 ### Future Domain Features *(Needs Implementation)*
 
