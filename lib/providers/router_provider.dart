@@ -333,6 +333,9 @@ GoRouter router(Ref ref) {
             currentExerciseIndex: (extra?['currentExerciseIndex'] as int?) ?? 0,
             currentSetNumber: (extra?['currentSetNumber'] as int?) ?? 1,
           );
+        },
+      ),
+
       // Coach Program Routes
       GoRoute(
         path: AppRoutes.coachPrograms,
