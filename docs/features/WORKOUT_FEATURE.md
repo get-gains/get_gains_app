@@ -1,6 +1,7 @@
 # Workout Feature Documentation
 
 > **Created**: January 29-30, 2026  
+> **Updated**: February 19, 2026  
 > **Status**: Implemented  
 
 ---
@@ -9,10 +10,28 @@
 
 This feature allows users to:
 - View assigned workout routines
-- Start workout sessions
-- Log sets, reps, and weight for each exercise
+- Start workout sessions with **form recording** for each exercise
+- Compare exercise form against coach's reference (side-by-side skeleton, similarity score)
+- Log sets, reps, and weight from the comparison results screen
+- Navigate exercise-by-exercise through the routine recording flow
 - Track workout progress and completion
 - Mark exercises as done
+
+---
+
+## Workout Session Flow
+
+### Record-First Workflow (as of Feb 19, 2026)
+
+When a user presses **"Start Workout"** on a routine:
+
+1. **Session created** — `workoutSessionProvider.startSession()` creates a server-side workout session
+2. **First exercise → recording screen** — `RoutineDetailScreen._startWorkout()` navigates to `ClientUnityRecordingScreen` with workout context (`workoutSessionId`, `routineExerciseId`, `routineExercises`, `currentExerciseIndex: 0`)
+3. **Record** — User records their exercise form via device camera + MLKit pose detection
+4. **DTW comparison** — On-device comparison against coach's reference form
+5. **Results + set logging** — Side-by-side skeleton replay (coach cyan vs user green), overall similarity score, segment breakdown, corrections, and a **set logger** with auto-detected reps + weight input
+6. **Log & next** — User logs the set → navigates to the next exercise's recording screen
+7. **Final exercise** — After logging the last exercise's set, navigates to `WorkoutSessionScreen` for session completion
 
 ---
 
@@ -249,6 +268,16 @@ lib/features/home/
 ---
 
 ## Bug Fixes & Improvements
+
+### Start Workout → Recording Flow (Feb 19, 2026)
+- **Change**: "Start Workout" now navigates to the first exercise's `ClientUnityRecordingScreen` instead of directly to `WorkoutSessionScreen`
+- **Files modified**: `routine_detail_screen.dart` (`_startWorkout`), `router_provider.dart` (`clientUnityRecord` route), `client_unity_recording_screen.dart` (workout mode), `workout_session_provider.dart` (`logSet` override), `client_recording_provider.dart` (landmark frames in complete state)
+- **Workout context**: Passed via `go_router` `extra` map with `workoutSessionId`, `routineExerciseId`, `routineExercises`, `currentExerciseIndex`
+- **Set logging**: `logSet()` now accepts optional `routineExerciseIdOverride` so the recording screen can log sets for a specific exercise without relying on `currentExerciseIndex`
+
+### WorkoutSessionScreen Initial State Loop (Feb 18, 2026)
+- **Issue**: When navigating to `/workout-session` without an active session (i.e. `WorkoutSessionInitial` state), the screen showed "No Active Workout" with a "View Routines" button that sent users back to `/routines`, causing a loop instead of starting the session.
+- **Solution**: `WorkoutSessionInitial` now automatically redirects to `/routines` via `WidgetsBinding.addPostFrameCallback` and shows a spinner during the redirect. Users select a routine → start workout from `RoutineDetailScreen` → `_startWorkout` calls `workoutSessionProvider.startSession()` → navigates to `/workout-session` with an active session already in place.
 
 ### AppColors Usage
 - **Issue**: `AppColors.primary` is a method, not a static constant
