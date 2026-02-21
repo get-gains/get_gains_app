@@ -5,6 +5,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../core/utils/logger.dart';
 import '../features/auth/auth.dart';
 import '../features/coach_pose/coach_pose.dart';
+import '../features/coach_programs/coach_programs.dart';
 import '../features/home/home.dart';
 import '../features/profile/profile.dart';
 import '../features/workout/workout.dart';
@@ -50,6 +51,17 @@ class AppRoutes {
   static const String createExercise = '/coach/exercises/create';
   static const String exerciseDetail = '/coach/exercises/:id';
   static const String recordForm = '/coach/exercises/:id/record';
+
+  // Coach Program routes
+  static const String coachPrograms = '/coach/programs';
+  static const String coachCreateProgram = '/coach/programs/create';
+  static const String coachEditProgram = '/coach/programs/:id/edit';
+  static const String coachProgramDetail = '/coach/programs/:id';
+  static const String coachRoutines = '/coach/routines';
+  static const String coachCreateRoutine = '/coach/routines/create';
+  static const String coachEditRoutine = '/coach/routines/:id/edit';
+  static const String coachRoutineDetail = '/coach/routines/:id';
+  static const String clientAssignments = '/coach/clients/:userId/programs';
 }
 
 /// Router Provider
@@ -266,6 +278,60 @@ GoRouter router(Ref ref) {
         builder: (context, state) {
           final id = state.pathParameters['id']!;
           return FormRecordingScreen(exerciseId: id);
+        },
+      ),
+
+      // Coach Program Routes
+      GoRoute(
+        path: AppRoutes.coachPrograms,
+        builder: (context, state) => const CoachProgramsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.coachCreateProgram,
+        builder: (context, state) => const CoachProgramFormScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.coachProgramDetail,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return CoachProgramDetailScreen(programId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.coachEditProgram,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return CoachProgramFormScreen(programId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.coachRoutines,
+        builder: (context, state) => const CoachRoutinesScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.coachCreateRoutine,
+        builder: (context, state) => const CoachRoutineFormScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.coachRoutineDetail,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return CoachRoutineDetailScreen(routineId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.coachEditRoutine,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return CoachRoutineFormScreen(routineId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.clientAssignments,
+        builder: (context, state) {
+          final userId = state.pathParameters['userId']!;
+          final userName = state.uri.queryParameters['name'];
+          return ClientAssignmentsScreen(userId: userId, userName: userName);
         },
       ),
     ],
