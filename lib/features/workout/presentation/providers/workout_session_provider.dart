@@ -99,7 +99,7 @@ class WorkoutSessionError extends WorkoutSessionState {
 /// // Complete session
 /// await ref.read(workoutSessionProvider.notifier).completeSession();
 /// ```
-@riverpod
+@Riverpod(keepAlive: true)
 class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
   late WorkoutRepository _repository;
   late String? _userId;
@@ -120,12 +120,14 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
     if (_userId == null) return;
 
     final result = await _repository.getActiveSession(_userId!);
+    if (!ref.mounted) return;
     result.when(
       success: (session) async {
         if (session != null && session.routineId != null) {
-          final routineResult = await _repository.getRoutineById(
-            int.parse(session.routineId!),
+          final routineResult = await _repository.getRoutineByModelId(
+            session.routineId!,
           );
+          if (!ref.mounted) return;
           routineResult.when(
             success: (routine) {
               state = WorkoutSessionActive(
@@ -153,7 +155,7 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
 
   /// Start a new workout session
   Future<void> startSession({
-    required int routineId,
+    required String routineModelId,
     String? assignedProgramId,
   }) async {
     if (_userId == null) {
@@ -166,15 +168,18 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
     state = const WorkoutSessionLoading();
 
     // Get routine first
-    final routineResult = await _repository.getRoutineById(routineId);
+    final routineResult = await _repository.getRoutineByModelId(routineModelId);
+    if (!ref.mounted) return;
     final routine = routineResult.valueOrNull;
 
     // Start session
     final result = await _repository.startWorkoutSession(
       userId: _userId!,
-      routineId: routineId,
+      routineModelId: routineModelId,
       assignedProgramId: assignedProgramId,
     );
+
+    if (!ref.mounted) return;
 
     result.when(
       success: (session) {
@@ -197,14 +202,18 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
     double? weight,
     int? rpe,
     String? notes,
+    String? routineExerciseIdOverride,
   }) async {
     final currentState = state;
     if (currentState is! WorkoutSessionActive) return;
-    if (currentState.currentExercise == null) return;
+
+    final routineExerciseId =
+        routineExerciseIdOverride ?? currentState.currentExercise?.id;
+    if (routineExerciseId == null) return;
 
     final result = await _repository.logSet(
-      workoutSessionId: int.parse(currentState.session.id),
-      routineExerciseId: int.parse(currentState.currentExercise!.id),
+      workoutSessionModelId: currentState.session.id,
+      routineExerciseModelId: routineExerciseId,
       setNumber: setNumber,
       repsCompleted: reps,
       weightKg: weight,
@@ -270,6 +279,8 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
       sessionId: int.parse(currentState.session.id),
       notes: notes,
     );
+
+    if (!ref.mounted) return;
 
     result.when(
       success: (session) {
