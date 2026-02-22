@@ -8,10 +8,12 @@ part 'routine_model.g.dart';
 /// Routine Model
 ///
 /// Represents a workout routine containing multiple exercises.
+/// When created by a coach, [coachId] is populated with the owning coach's ID.
 @freezed
 abstract class RoutineModel with _$RoutineModel {
   const factory RoutineModel({
     required String id,
+    String? coachId,
     required String name,
     required String description,
     required int estimatedDurationMinutes,

@@ -3,11 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../data/models/models.dart';
 import '../../data/workout_repository.dart';
-import '../providers/workout_session_provider.dart';
 
 /// Routine List Screen
 ///
@@ -49,17 +47,8 @@ class _RoutineListScreenState extends ConsumerState<RoutineListScreen> {
     );
   }
 
-  Future<void> _startWorkout(RoutineModel routine) async {
-    final routineId = int.tryParse(routine.id);
-    if (routineId == null) return;
-
-    await ref
-        .read(workoutSessionProvider.notifier)
-        .startSession(routineId: routineId);
-
-    if (mounted) {
-      context.go(AppRoutes.workoutSession);
-    }
+  void _openRoutineDetail(RoutineModel routine) {
+    context.push('/routines/${routine.id}', extra: routine);
   }
 
   @override
@@ -111,7 +100,7 @@ class _RoutineListScreenState extends ConsumerState<RoutineListScreen> {
                 final routine = routines[index];
                 return _RoutineCard(
                   routine: routine,
-                  onStart: () => _startWorkout(routine),
+                  onTap: () => _openRoutineDetail(routine),
                 );
               },
             ),
@@ -123,17 +112,17 @@ class _RoutineListScreenState extends ConsumerState<RoutineListScreen> {
 }
 
 class _RoutineCard extends StatelessWidget {
-  const _RoutineCard({required this.routine, required this.onStart});
+  const _RoutineCard({required this.routine, required this.onTap});
 
   final RoutineModel routine;
-  final VoidCallback onStart;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return AppCard.elevated(
-      onTap: onStart,
+      onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -220,10 +209,10 @@ class _RoutineCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             AppButton.primary(
-              label: 'Start Workout',
-              icon: Icons.play_arrow,
+              label: 'View Exercises',
+              icon: Icons.arrow_forward,
               isFullWidth: true,
-              onPressed: onStart,
+              onPressed: onTap,
             ),
           ],
         ),

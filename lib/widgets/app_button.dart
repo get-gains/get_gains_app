@@ -206,11 +206,14 @@ class _AppButtonState extends State<AppButton>
 
     const gap = SizedBox(width: AppTheme.spacing2);
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: widget.iconPosition == IconPosition.leading
-          ? [iconWidget, gap, textWidget]
-          : [textWidget, gap, iconWidget],
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: widget.iconPosition == IconPosition.leading
+            ? [iconWidget, gap, textWidget]
+            : [textWidget, gap, iconWidget],
+      ),
     );
   }
 
