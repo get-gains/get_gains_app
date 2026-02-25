@@ -409,6 +409,18 @@ class AppDatabase extends _$AppDatabase {
     return (delete(workoutSessions)..where((ws) => ws.id.equals(id))).go();
   }
 
+  /// Update remoteId for a synced workout session
+  Future<bool> updateWorkoutSessionRemoteId(int id, String remoteId) {
+    return (update(workoutSessions)..where((ws) => ws.id.equals(id)))
+        .write(
+          WorkoutSessionsCompanion(
+            remoteId: Value(remoteId),
+            isSynced: const Value(true),
+          ),
+        )
+        .then((rows) => rows > 0);
+  }
+
   // ============== Performed Set Operations ==============
 
   /// Get performed sets for a workout session
@@ -476,6 +488,18 @@ class AppDatabase extends _$AppDatabase {
   /// Delete performed set
   Future<int> deletePerformedSet(int id) {
     return (delete(performedSets)..where((ps) => ps.id.equals(id))).go();
+  }
+
+  /// Update remoteId for a synced performed set
+  Future<bool> updatePerformedSetRemoteId(int id, String remoteId) {
+    return (update(performedSets)..where((ps) => ps.id.equals(id)))
+        .write(
+          PerformedSetsCompanion(
+            remoteId: Value(remoteId),
+            isSynced: const Value(true),
+          ),
+        )
+        .then((rows) => rows > 0);
   }
 
   /// Get completed sets count for a session
