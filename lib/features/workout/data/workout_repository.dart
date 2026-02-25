@@ -810,6 +810,345 @@ class WorkoutRepository {
       updatedAt: session.updatedAt,
     );
   }
+
+  // ============== Server-Only Operations (No Local Cache) ==============
+
+  /// Fetch today's scheduled routine from the server.
+  ///
+  /// Calls `GET /api/workout/today` which calculates the routine based on
+  /// the user's active assigned program and day-cycle logic.
+  ///
+  /// Returns [TodayRoutineModel] with `isRestDay` flag and optional routine.
+  Future<Result<TodayRoutineModel, AppError>> getTodayRoutine({
+    String? assignedProgramId,
+  }) async {
+    AppLogger.debug('Fetching today routine from server', tag: 'WorkoutRepo');
+
+    final queryParams = <String, dynamic>{
+      if (assignedProgramId != null) 'assignedProgramId': assignedProgramId,
+    };
+
+    final result = await _apiClient.get<Map<String, dynamic>>(
+      ApiConstants.todayWorkout,
+      queryParameters: queryParams.isNotEmpty ? queryParams : null,
+    );
+
+    return result.when(
+      success: (data) {
+        try {
+          final model = TodayRoutineModel.fromJson(data);
+          AppLogger.info(
+            'Today routine: ${model.isRestDay ? "Rest Day" : model.today?.routine.name}',
+            tag: 'WorkoutRepo',
+          );
+          return Success(model);
+        } catch (e) {
+          AppLogger.error(
+            'Failed to parse today routine',
+            tag: 'WorkoutRepo',
+            error: e,
+          );
+          return Failure(
+            UnknownError(
+              message: 'Failed to parse today routine: $e',
+              originalError: e,
+            ),
+          );
+        }
+      },
+      failure: (error) {
+        AppLogger.error(
+          'Failed to fetch today routine',
+          tag: 'WorkoutRepo',
+          error: error,
+        );
+        return Failure(error);
+      },
+    );
+  }
+
+  /// Fetch aggregated weekly workout statistics from the server.
+  ///
+  /// Calls `GET /api/workout/stats/weekly` with an optional `weekOf` date.
+  /// Returns workouts completed, total minutes, and streak days.
+  Future<Result<WeeklyStatsModel, AppError>> getWeeklyStats({
+    DateTime? weekOf,
+  }) async {
+    AppLogger.debug('Fetching weekly stats from server', tag: 'WorkoutRepo');
+
+    final queryParams = <String, dynamic>{
+      if (weekOf != null) 'weekOf': weekOf.toIso8601String(),
+    };
+
+    final result = await _apiClient.get<Map<String, dynamic>>(
+      ApiConstants.weeklyStats,
+      queryParameters: queryParams.isNotEmpty ? queryParams : null,
+    );
+
+    return result.when(
+      success: (data) {
+        try {
+          final statsJson = data['stats'] as Map<String, dynamic>;
+          final model = WeeklyStatsModel.fromJson(statsJson);
+          AppLogger.info(
+            'Weekly stats: ${model.workoutsCompleted} workouts, '
+            '${model.totalMinutes}min, ${model.streakDays} streak',
+            tag: 'WorkoutRepo',
+          );
+          return Success(model);
+        } catch (e) {
+          AppLogger.error(
+            'Failed to parse weekly stats',
+            tag: 'WorkoutRepo',
+            error: e,
+          );
+          return Failure(
+            UnknownError(
+              message: 'Failed to parse weekly stats: $e',
+              originalError: e,
+            ),
+          );
+        }
+      },
+      failure: (error) {
+        AppLogger.error(
+          'Failed to fetch weekly stats',
+          tag: 'WorkoutRepo',
+          error: error,
+        );
+        return Failure(error);
+      },
+    );
+  }
+
+  /// Fetch paginated workout session history from the server.
+  ///
+  /// Calls `GET /api/workout/sessions` with pagination and optional
+  /// date-range filters. Returns completed sessions with total set counts.
+  Future<Result<WorkoutHistoryResponse, AppError>> getSessionHistory({
+    int limit = 20,
+    int offset = 0,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    AppLogger.debug(
+      'Fetching session history: limit=$limit, offset=$offset',
+      tag: 'WorkoutRepo',
+    );
+
+    final queryParams = <String, dynamic>{
+      'limit': limit,
+      'offset': offset,
+      if (startDate != null) 'startDate': startDate.toIso8601String(),
+      if (endDate != null) 'endDate': endDate.toIso8601String(),
+    };
+
+    final result = await _apiClient.get<Map<String, dynamic>>(
+      ApiConstants.workoutSessions,
+      queryParameters: queryParams,
+    );
+
+    return result.when(
+      success: (data) {
+        try {
+          final response = WorkoutHistoryResponse.fromJson(data);
+          AppLogger.info(
+            'Fetched ${response.sessions.length} sessions '
+            '(total: ${response.pagination.total})',
+            tag: 'WorkoutRepo',
+          );
+          return Success(response);
+        } catch (e) {
+          AppLogger.error(
+            'Failed to parse session history',
+            tag: 'WorkoutRepo',
+            error: e,
+          );
+          return Failure(
+            UnknownError(
+              message: 'Failed to parse session history: $e',
+              originalError: e,
+            ),
+          );
+        }
+      },
+      failure: (error) {
+        AppLogger.error(
+          'Failed to fetch session history',
+          tag: 'WorkoutRepo',
+          error: error,
+        );
+        return Failure(error);
+      },
+    );
+  }
+
+  /// Start a workout session on the server.
+  ///
+  /// Calls `POST /api/workout/sessions`. The server validates subscription
+  /// status and rejects with 409 if an active session already exists.
+  Future<Result<WorkoutSessionModel, AppError>> startServerSession({
+    String? assignedProgramId,
+  }) async {
+    AppLogger.debug('Starting server session', tag: 'WorkoutRepo');
+
+    final result = await _apiClient.post<Map<String, dynamic>>(
+      ApiConstants.workoutSessions,
+      data: {
+        if (assignedProgramId != null) 'assignedProgramId': assignedProgramId,
+      },
+    );
+
+    return result.when(
+      success: (data) {
+        try {
+          final sessionJson = data['session'] as Map<String, dynamic>;
+          final model = WorkoutSessionModel.fromJson(sessionJson);
+          AppLogger.info(
+            'Server session started: ${model.id}',
+            tag: 'WorkoutRepo',
+          );
+          return Success(model);
+        } catch (e) {
+          AppLogger.error(
+            'Failed to parse server session',
+            tag: 'WorkoutRepo',
+            error: e,
+          );
+          return Failure(
+            UnknownError(
+              message: 'Failed to parse server session: $e',
+              originalError: e,
+            ),
+          );
+        }
+      },
+      failure: (error) {
+        AppLogger.error(
+          'Failed to start server session',
+          tag: 'WorkoutRepo',
+          error: error,
+        );
+        return Failure(error);
+      },
+    );
+  }
+
+  /// Complete a workout session on the server.
+  ///
+  /// Calls `POST /api/workout/sessions/:sessionId/complete`.
+  Future<Result<WorkoutSessionModel, AppError>> completeServerSession({
+    required String sessionId,
+    String? notes,
+  }) async {
+    AppLogger.debug(
+      'Completing server session: $sessionId',
+      tag: 'WorkoutRepo',
+    );
+
+    final result = await _apiClient.post<Map<String, dynamic>>(
+      '${ApiConstants.workoutSessions}/$sessionId/complete',
+      data: {if (notes != null) 'notes': notes},
+    );
+
+    return result.when(
+      success: (data) {
+        try {
+          final sessionJson = data['session'] as Map<String, dynamic>;
+          final model = WorkoutSessionModel.fromJson(sessionJson);
+          AppLogger.info(
+            'Server session completed: ${model.id}',
+            tag: 'WorkoutRepo',
+          );
+          return Success(model);
+        } catch (e) {
+          AppLogger.error(
+            'Failed to parse completed session',
+            tag: 'WorkoutRepo',
+            error: e,
+          );
+          return Failure(
+            UnknownError(
+              message: 'Failed to parse completed session: $e',
+              originalError: e,
+            ),
+          );
+        }
+      },
+      failure: (error) {
+        AppLogger.error(
+          'Failed to complete server session: $sessionId',
+          tag: 'WorkoutRepo',
+          error: error,
+        );
+        return Failure(error);
+      },
+    );
+  }
+
+  /// Batch-sync locally-recorded sets to the server.
+  ///
+  /// Calls `POST /api/workout/sets/sync` with the array of sets.
+  /// Returns per-set results mapping `localId` → `serverId`.
+  Future<Result<BatchSyncResult, AppError>> batchSyncSets({
+    required List<Map<String, dynamic>> sets,
+  }) async {
+    AppLogger.debug(
+      'Batch syncing ${sets.length} sets to server',
+      tag: 'WorkoutRepo',
+    );
+
+    final result = await _apiClient.post<Map<String, dynamic>>(
+      ApiConstants.performedSetsSync,
+      data: {'sets': sets},
+    );
+
+    return result.when(
+      success: (data) {
+        try {
+          final results = (data['results'] as List)
+              .map((r) => SetSyncResult.fromJson(r as Map<String, dynamic>))
+              .toList();
+          final summary = data['summary'] as Map<String, dynamic>?;
+          final model = BatchSyncResult(
+            results: results,
+            totalProcessed: summary?['total'] as int? ?? results.length,
+            successful:
+                summary?['successful'] as int? ??
+                results.where((r) => r.success).length,
+            failed:
+                summary?['failed'] as int? ??
+                results.where((r) => !r.success).length,
+          );
+          AppLogger.info(
+            'Batch sync: ${model.successful}/${model.totalProcessed} successful',
+            tag: 'WorkoutRepo',
+          );
+          return Success(model);
+        } catch (e) {
+          AppLogger.error(
+            'Failed to parse batch sync result',
+            tag: 'WorkoutRepo',
+            error: e,
+          );
+          return Failure(
+            UnknownError(
+              message: 'Failed to parse batch sync result: $e',
+              originalError: e,
+            ),
+          );
+        }
+      },
+      failure: (error) {
+        AppLogger.error(
+          'Failed to batch sync sets',
+          tag: 'WorkoutRepo',
+          error: error,
+        );
+        return Failure(error);
+      },
+    );
+  }
 }
 
 /// Provider for WorkoutRepository
@@ -819,4 +1158,45 @@ WorkoutRepository workoutRepository(Ref ref) {
     database: ref.watch(appDatabaseProvider),
     apiClient: ref.watch(apiClientProvider),
   );
+}
+
+/// Result of a batch set sync operation.
+class BatchSyncResult {
+  BatchSyncResult({
+    required this.results,
+    required this.totalProcessed,
+    required this.successful,
+    required this.failed,
+  });
+
+  final List<SetSyncResult> results;
+  final int totalProcessed;
+  final int successful;
+  final int failed;
+
+  bool get hasFailures => failed > 0;
+}
+
+/// Individual set sync result.
+class SetSyncResult {
+  SetSyncResult({
+    this.localId,
+    this.serverId,
+    required this.success,
+    this.error,
+  });
+
+  final String? localId;
+  final String? serverId;
+  final bool success;
+  final String? error;
+
+  factory SetSyncResult.fromJson(Map<String, dynamic> json) {
+    return SetSyncResult(
+      localId: json['localId'] as String?,
+      serverId: json['serverId'] as String?,
+      success: json['success'] as bool? ?? false,
+      error: json['error'] as String?,
+    );
+  }
 }
