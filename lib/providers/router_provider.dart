@@ -50,6 +50,13 @@ class AppRoutes {
   static const String programDetails = '/program-details';
   static const String calendar = '/calendar';
 
+  // Coach Hub
+  static const String coachHub = '/coach/hub';
+
+  // Workout History & Progress
+  static const String workoutHistory = '/workout/history';
+  static const String progress = '/progress';
+
   // Coach Pose routes
   static const String coachExercises = '/coach/exercises';
   static const String createExercise = '/coach/exercises/create';
@@ -286,6 +293,22 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: AppRoutes.calendar,
         builder: (context, state) => const CalendarScreen(),
+      ),
+
+      // Coach Hub
+      GoRoute(
+        path: AppRoutes.coachHub,
+        builder: (context, state) => const CoachHubScreen(),
+      ),
+
+      // Workout History & Progress
+      GoRoute(
+        path: AppRoutes.workoutHistory,
+        builder: (context, state) => const WorkoutHistoryScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.progress,
+        builder: (context, state) => const ProgressScreen(),
       ),
 
       // Coach Pose Routes
