@@ -3,6 +3,7 @@
 /// All screens for the coach programs feature.
 library;
 
+export 'coach_hub_screen.dart';
 export 'coach_programs_screen.dart';
 export 'coach_program_detail_screen.dart';
 export 'coach_roster_screen.dart';
