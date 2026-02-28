@@ -130,6 +130,57 @@ class PerformedSets extends Table {
   BoolColumn get isSynced => boolean().withDefault(const Constant(false))();
 }
 
+// ============== Standalone Program Tables ==============
+
+/// Standalone Programs table - User-owned training programs
+class StandalonePrograms extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get remoteId => text().nullable()();
+  TextColumn get userId => text()();
+  TextColumn get name => text()();
+  TextColumn get description => text()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  BoolColumn get isSynced => boolean().withDefault(const Constant(false))();
+}
+
+/// Standalone ProgramRoutines table - Day-slot junction linking
+/// a routine to a standalone program on a specific day number.
+class StandaloneProgramRoutines extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get remoteId => text().nullable()();
+  IntColumn get programId => integer().references(
+    StandalonePrograms,
+    #id,
+    onDelete: KeyAction.cascade,
+  )();
+  IntColumn get routineId =>
+      integer().references(Routines, #id, onDelete: KeyAction.cascade)();
+  IntColumn get dayNumber => integer()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  BoolColumn get isSynced => boolean().withDefault(const Constant(false))();
+}
+
+/// Standalone Assigned Programs table - Tracks the user's
+/// self-assigned (active/inactive) program.
+class StandaloneAssignedPrograms extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get remoteId => text().nullable()();
+  TextColumn get userId => text()();
+  IntColumn get programId => integer().references(
+    StandalonePrograms,
+    #id,
+    onDelete: KeyAction.cascade,
+  )();
+  DateTimeColumn get startDate => dateTime()();
+  DateTimeColumn get endDate => dateTime().nullable()();
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  BoolColumn get isSynced => boolean().withDefault(const Constant(false))();
+}
+
 // ============== Database Class ==============
 
 /// Application Database
@@ -150,6 +201,9 @@ class PerformedSets extends Table {
     RoutineExercises,
     WorkoutSessions,
     PerformedSets,
+    StandalonePrograms,
+    StandaloneProgramRoutines,
+    StandaloneAssignedPrograms,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -173,11 +227,12 @@ class AppDatabase extends _$AppDatabase {
           tag: 'Database',
         );
 
-        // Add migration logic here as needed
-        // Example:
-        // if (from < 2) {
-        //   await m.addColumn(users, users.newColumn);
-        // }
+        if (from < 2) {
+          // v2: Add standalone program tables
+          await m.createTable(standalonePrograms);
+          await m.createTable(standaloneProgramRoutines);
+          await m.createTable(standaloneAssignedPrograms);
+        }
       },
       beforeOpen: (details) async {
         // Enable foreign keys
@@ -512,6 +567,115 @@ class AppDatabase extends _$AppDatabase {
             ))
             .get();
     return result.length;
+  }
+
+  // ============== Standalone Program Operations ==============
+
+  /// Get all standalone programs for a user
+  Future<List<StandaloneProgram>> getStandalonePrograms(String userId) {
+    return (select(standalonePrograms)
+          ..where((p) => p.userId.equals(userId))
+          ..orderBy([(p) => OrderingTerm.desc(p.updatedAt)]))
+        .get();
+  }
+
+  /// Get standalone program by ID
+  Future<StandaloneProgram?> getStandaloneProgramById(int id) {
+    return (select(
+      standalonePrograms,
+    )..where((p) => p.id.equals(id))).getSingleOrNull();
+  }
+
+  /// Get standalone program by remote ID
+  Future<StandaloneProgram?> getStandaloneProgramByRemoteId(String remoteId) {
+    return (select(
+      standalonePrograms,
+    )..where((p) => p.remoteId.equals(remoteId))).getSingleOrNull();
+  }
+
+  /// Insert or update standalone program
+  Future<int> upsertStandaloneProgram(StandaloneProgramsCompanion program) {
+    return into(standalonePrograms).insertOnConflictUpdate(program);
+  }
+
+  /// Delete standalone program (cascade deletes program routines)
+  Future<int> deleteStandaloneProgram(int id) {
+    return (delete(standalonePrograms)..where((p) => p.id.equals(id))).go();
+  }
+
+  /// Delete all standalone programs for a user
+  Future<int> deleteAllStandalonePrograms(String userId) {
+    return (delete(
+      standalonePrograms,
+    )..where((p) => p.userId.equals(userId))).go();
+  }
+
+  // ============== Standalone ProgramRoutine Operations ==============
+
+  /// Get program routines for a standalone program, ordered by day number
+  Future<List<StandaloneProgramRoutine>> getStandaloneProgramRoutines(
+    int programId,
+  ) {
+    return (select(standaloneProgramRoutines)
+          ..where((pr) => pr.programId.equals(programId))
+          ..orderBy([(pr) => OrderingTerm.asc(pr.dayNumber)]))
+        .get();
+  }
+
+  /// Insert or update standalone program routine
+  Future<int> upsertStandaloneProgramRoutine(
+    StandaloneProgramRoutinesCompanion programRoutine,
+  ) {
+    return into(
+      standaloneProgramRoutines,
+    ).insertOnConflictUpdate(programRoutine);
+  }
+
+  /// Delete standalone program routine
+  Future<int> deleteStandaloneProgramRoutine(int id) {
+    return (delete(
+      standaloneProgramRoutines,
+    )..where((pr) => pr.id.equals(id))).go();
+  }
+
+  // ============== Standalone AssignedProgram Operations ==============
+
+  /// Get the active standalone assigned program for a user
+  Future<StandaloneAssignedProgram?> getActiveStandaloneAssignment(
+    String userId,
+  ) {
+    return (select(standaloneAssignedPrograms)
+          ..where((a) => a.userId.equals(userId) & a.isActive.equals(true)))
+        .getSingleOrNull();
+  }
+
+  /// Get all standalone assignments for a user
+  Future<List<StandaloneAssignedProgram>> getStandaloneAssignments(
+    String userId,
+  ) {
+    return (select(standaloneAssignedPrograms)
+          ..where((a) => a.userId.equals(userId))
+          ..orderBy([(a) => OrderingTerm.desc(a.startDate)]))
+        .get();
+  }
+
+  /// Insert or update a standalone assigned program
+  Future<int> upsertStandaloneAssignment(
+    StandaloneAssignedProgramsCompanion assignment,
+  ) {
+    return into(standaloneAssignedPrograms).insertOnConflictUpdate(assignment);
+  }
+
+  /// Deactivate all standalone assignments for a user
+  Future<int> deactivateAllStandaloneAssignments(String userId) {
+    return (update(
+      standaloneAssignedPrograms,
+    )..where((a) => a.userId.equals(userId) & a.isActive.equals(true))).write(
+      StandaloneAssignedProgramsCompanion(
+        isActive: const Value(false),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   // ============== Utility Methods ==============
