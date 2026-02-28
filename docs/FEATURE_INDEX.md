@@ -34,17 +34,18 @@
 
 ## Documentation Structure
 
-| Document                                                               | Purpose                                                     |
-| ---------------------------------------------------------------------- | ----------------------------------------------------------- |
-| [CONTEXT.md](CONTEXT.md)                                               | Core infrastructure, patterns, conventions                  |
-| [FEATURE_INDEX.md](FEATURE_INDEX.md)                                   | This file - navigation hub                                  |
-| [features/REGISTER.md](features/REGISTER.md)                           | Registration feature documentation                          |
-| [features/HOME.md](features/HOME.md)                                   | Home dashboard screen & widgets                             |
-| [features/POSE_DETECTION.md](features/POSE_DETECTION.md)               | Pose detection, form analysis, on-device ML                 |
-| [features/PROFILE.md](features/PROFILE.md)                             | Profile viewing and management documentation                |
-| [features/PROGRAM.md](features/PROGRAM.md)                             | Coach programs, routines, exercises, assignments            |
-| [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md) | Coach discovery, settings & missing links data layer        |
-| [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md)   | Coaches & Subscription presentation layer (screens, routes) |
+| Document                                                               | Purpose                                                      |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------ |
+| [CONTEXT.md](CONTEXT.md)                                               | Core infrastructure, patterns, conventions                   |
+| [FEATURE_INDEX.md](FEATURE_INDEX.md)                                   | This file - navigation hub                                   |
+| [features/REGISTER.md](features/REGISTER.md)                           | Registration feature documentation                           |
+| [features/HOME.md](features/HOME.md)                                   | Home dashboard screen & widgets                              |
+| [features/POSE_DETECTION.md](features/POSE_DETECTION.md)               | Pose detection, form analysis, on-device ML                  |
+| [features/PROFILE.md](features/PROFILE.md)                             | Profile viewing and management documentation                 |
+| [features/PROGRAM.md](features/PROGRAM.md)                             | Coach programs, routines, exercises, assignments             |
+| [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md) | Coach discovery, settings & missing links data layer         |
+| [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md)   | Coaches & Subscription presentation layer (screens, routes)  |
+| [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md)       | Standalone workout — exercises, routines, programs, sessions |
 
 ---
 
@@ -65,16 +66,16 @@
 
 ### Home Dashboard
 
-| Feature                | Description                                              | Status                    | Documentation                        |
-| ---------------------- | -------------------------------------------------------- | ------------------------- | ------------------------------------ |
-| Home Screen            | Dashboard with greeting, quick actions, weekly progress  | ✅ Complete               | [features/HOME.md](features/HOME.md) |
-| Quick Actions          | Start Workout, History, Coach Tools, Clients (coach)     | ✅ Complete               | [features/HOME.md](features/HOME.md) |
-| Today's Focus          | Dynamic routine from `GET /workout/today`                | ✅ Complete               | [features/HOME.md](features/HOME.md) |
-| Weekly Progress        | Dynamic stats from `GET /workout/stats/weekly`           | ✅ Complete               | [features/HOME.md](features/HOME.md) |
-| Recent Activity        | Dynamic workout history from `GET /workout/sessions`     | ✅ Complete               | [features/HOME.md](features/HOME.md) |
-| Home Status            | Composite provider (no coach / waiting / rest / routine) | ✅ Complete               | [features/HOME.md](features/HOME.md) |
-| Subscribed Coach Check | CTA: Find Coach / Waiting for Program                    | ✅ Complete               | [features/HOME.md](features/HOME.md) |
-| Bottom Navigation      | Home, Workouts, Progress, Profile tabs                   | ✅ Complete               | [features/HOME.md](features/HOME.md) |
+| Feature                | Description                                              | Status      | Documentation                        |
+| ---------------------- | -------------------------------------------------------- | ----------- | ------------------------------------ |
+| Home Screen            | Dashboard with greeting, quick actions, weekly progress  | ✅ Complete | [features/HOME.md](features/HOME.md) |
+| Quick Actions          | Start Workout, History, Coach Tools, Clients (coach)     | ✅ Complete | [features/HOME.md](features/HOME.md) |
+| Today's Focus          | Dynamic routine from `GET /workout/today`                | ✅ Complete | [features/HOME.md](features/HOME.md) |
+| Weekly Progress        | Dynamic stats from `GET /workout/stats/weekly`           | ✅ Complete | [features/HOME.md](features/HOME.md) |
+| Recent Activity        | Dynamic workout history from `GET /workout/sessions`     | ✅ Complete | [features/HOME.md](features/HOME.md) |
+| Home Status            | Composite provider (no coach / waiting / rest / routine) | ✅ Complete | [features/HOME.md](features/HOME.md) |
+| Subscribed Coach Check | CTA: Find Coach / Waiting for Program                    | ✅ Complete | [features/HOME.md](features/HOME.md) |
+| Bottom Navigation      | Home, Workouts, Progress, Profile tabs                   | ✅ Complete | [features/HOME.md](features/HOME.md) |
 
 **Primary Files:**
 
@@ -216,14 +217,40 @@
 - `/lib/features/coach_settings/presentation/providers/coach_settings_provider.dart` - Settings state + toggles
 - `/lib/features/coach_settings/presentation/screens/coach_settings_screen.dart` - Settings UI screen (ML-5)
 
+### Standalone Workout _(Documented in [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md))_
+
+| Feature            | Description                                                     | Status             | Documentation                                                    |
+| ------------------ | --------------------------------------------------------------- | ------------------ | ---------------------------------------------------------------- |
+| Exercise CRUD      | Create/update/delete personal exercises + browse public library | ✅ Data layer      | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Routine CRUD       | Build custom routines from any exercises                        | ✅ Data layer      | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Program CRUD       | Organise routines into a day-cycling program                    | ✅ Data layer      | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Self-assignment    | Activate / deactivate a standalone program                      | ✅ Data layer      | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Today's Routine    | Server day-cycling resolution (`GET /standalone/today`)         | ✅ Data layer      | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Session Lifecycle  | Start / complete sessions, view history                         | ✅ Data layer      | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Weekly Stats       | Aggregated weekly stats (`GET /standalone/stats/weekly`)        | ✅ Data layer      | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Presentation Layer | Providers, screens, routes                                      | 🔮 Not Implemented | —                                                                |
+
+**Primary Files:**
+
+- `/lib/features/standalone_workout/standalone_workout.dart` - Feature barrel export
+- `/lib/features/standalone_workout/data/standalone_workout_repository.dart` - Offline-first repository + provider
+- `/lib/features/standalone_workout/data/models/standalone_exercise_model.dart` - Exercise + list response
+- `/lib/features/standalone_workout/data/models/standalone_routine_model.dart` - Routine summary + list response
+- `/lib/features/standalone_workout/data/models/standalone_program_model.dart` - Program hierarchy models
+- `/lib/features/standalone_workout/data/models/standalone_today_model.dart` - Day-cycling today model
+- `/lib/features/standalone_workout/data/models/standalone_session_model.dart` - Session summary (re-exports WorkoutSessionModel, WeeklyStatsModel)
+- `/lib/features/standalone_workout/data/models/standalone_request_models.dart` - 12 CRUD request models
+
+---
+
 ### Future Domain Features _(Needs Implementation)_
 
-| Feature                 | Description                                                  | Status              |
-| ----------------------- | ------------------------------------------------------------ | ------------------- |
-| Workout History Screen  | Paginated completed session list                             | ✅ Complete         |
-| Progress / Stats Screen | Weekly stats, summary grid, recent workouts                  | ✅ Complete         |
-| Coach Hub Screen        | Central hub for coach tools (programs, routines, exercises)  | ✅ Complete         |
-| Workout Sync            | Dedicated workout sync service (sessions, sets, completions) | ✅ Data layer       |
+| Feature                 | Description                                                  | Status        |
+| ----------------------- | ------------------------------------------------------------ | ------------- |
+| Workout History Screen  | Paginated completed session list                             | ✅ Complete   |
+| Progress / Stats Screen | Weekly stats, summary grid, recent workouts                  | ✅ Complete   |
+| Coach Hub Screen        | Central hub for coach tools (programs, routines, exercises)  | ✅ Complete   |
+| Workout Sync            | Dedicated workout sync service (sessions, sets, completions) | ✅ Data layer |
 
 ### Workout Data Layer
 
@@ -461,4 +488,4 @@ lib/
 
 ---
 
-_Last updated: February 18, 2026_
+_Last updated: March 1, 2026_
