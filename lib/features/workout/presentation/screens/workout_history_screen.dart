@@ -16,17 +16,17 @@ import '../../data/workout_repository.dart';
 /// is the page number (0-based).
 final workoutHistoryPageProvider = FutureProvider.autoDispose
     .family<WorkoutHistoryResponse, int>((ref, page) async {
-  const pageSize = 20;
-  final repo = ref.watch(workoutRepositoryProvider);
-  final result = await repo.getSessionHistory(
-    limit: pageSize,
-    offset: page * pageSize,
-  );
-  return result.when(
-    success: (response) => response,
-    failure: (error) => throw error,
-  );
-});
+      const pageSize = 20;
+      final repo = ref.watch(workoutRepositoryProvider);
+      final result = await repo.getSessionHistory(
+        limit: pageSize,
+        offset: page * pageSize,
+      );
+      return result.when(
+        success: (response) => response,
+        failure: (error) => throw error,
+      );
+    });
 
 /// Workout History Screen (M-CL5)
 ///
@@ -58,8 +58,7 @@ class _WorkoutHistoryScreenState extends ConsumerState<WorkoutHistoryScreen> {
 
     // We trigger the provider and wait for its result
     try {
-      final response =
-          await ref.read(workoutHistoryPageProvider(page).future);
+      final response = await ref.read(workoutHistoryPageProvider(page).future);
       if (mounted) {
         setState(() {
           if (page == 0) _sessions.clear();
@@ -96,10 +95,9 @@ class _WorkoutHistoryScreenState extends ConsumerState<WorkoutHistoryScreen> {
               ),
               title: Text(
                 'Workout History',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
               backgroundColor: Colors.transparent,
               elevation: 0,
@@ -122,36 +120,32 @@ class _WorkoutHistoryScreenState extends ConsumerState<WorkoutHistoryScreen> {
             else ...[
               // Sessions list
               SliverPadding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
                 sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      if (index >= _sessions.length) {
-                        // Load more trigger
-                        if (_hasMore && !_isLoadingMore) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            _loadPage(_currentPage + 1);
-                          });
-                        }
-                        return _hasMore
-                            ? const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 16),
-                                child: Center(child: CircularProgressIndicator()),
-                              )
-                            : const SizedBox.shrink();
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    if (index >= _sessions.length) {
+                      // Load more trigger
+                      if (_hasMore && !_isLoadingMore) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          _loadPage(_currentPage + 1);
+                        });
                       }
-                      final session = _sessions[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _SessionCard(
-                          session: session,
-                          isDark: isDark,
-                        ),
-                      );
-                    },
-                    childCount: _sessions.length + (_hasMore ? 1 : 0),
-                  ),
+                      return _hasMore
+                          ? const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              child: Center(child: CircularProgressIndicator()),
+                            )
+                          : const SizedBox.shrink();
+                    }
+                    final session = _sessions[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _SessionCard(session: session, isDark: isDark),
+                    );
+                  }, childCount: _sessions.length + (_hasMore ? 1 : 0)),
                 ),
               ),
             ],
@@ -195,14 +189,15 @@ class _SessionCard extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: (session.isCompleted
-                        ? (isDark
-                            ? AppColors.accentDark
-                            : const Color(0xFF22C55E))
-                        : (isDark
-                            ? AppColors.primaryDark
-                            : AppColors.primaryLight))
-                    .withValues(alpha: 0.12),
+                color:
+                    (session.isCompleted
+                            ? (isDark
+                                  ? AppColors.accentDark
+                                  : const Color(0xFF22C55E))
+                            : (isDark
+                                  ? AppColors.primaryDark
+                                  : AppColors.primaryLight))
+                        .withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
@@ -210,12 +205,8 @@ class _SessionCard extends StatelessWidget {
                     ? Icons.check_circle_outline
                     : Icons.timer_outlined,
                 color: session.isCompleted
-                    ? (isDark
-                        ? AppColors.accentDark
-                        : const Color(0xFF22C55E))
-                    : (isDark
-                        ? AppColors.primaryDark
-                        : AppColors.primaryLight),
+                    ? (isDark ? AppColors.accentDark : const Color(0xFF22C55E))
+                    : (isDark ? AppColors.primaryDark : AppColors.primaryLight),
                 size: 22,
               ),
             ),
@@ -227,19 +218,18 @@ class _SessionCard extends StatelessWidget {
                 children: [
                   Text(
                     session.displayName,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600),
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     '$dateStr · $timeStr',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: isDark
-                              ? AppColors.textSecondaryDark
-                              : AppColors.textSecondaryLight,
-                        ),
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
+                    ),
                   ),
                 ],
               ),
@@ -250,19 +240,18 @@ class _SessionCard extends StatelessWidget {
               children: [
                 Text(
                   session.durationDisplay,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '${session.totalSets} sets',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isDark
-                            ? AppColors.textSecondaryDark
-                            : AppColors.textSecondaryLight,
-                      ),
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                  ),
                 ),
               ],
             ),

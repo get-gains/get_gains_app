@@ -263,8 +263,7 @@ class _ProfileContent extends StatelessWidget {
                       icon: Icons.history,
                       title: 'Workout History',
                       isDark: isDark,
-                      onTap: () =>
-                          context.push(AppRoutes.workoutHistory),
+                      onTap: () => context.push(AppRoutes.workoutHistory),
                     ),
                     _divider(isDark),
                     _NavLinkTile(
@@ -278,16 +277,14 @@ class _ProfileContent extends StatelessWidget {
                       icon: Icons.person_search,
                       title: 'Find Coaches',
                       isDark: isDark,
-                      onTap: () =>
-                          context.push(AppRoutes.discoverCoaches),
+                      onTap: () => context.push(AppRoutes.discoverCoaches),
                     ),
                     _divider(isDark),
                     _NavLinkTile(
                       icon: Icons.people,
                       title: 'My Coaches',
                       isDark: isDark,
-                      onTap: () =>
-                          context.push(AppRoutes.subscribedCoaches),
+                      onTap: () => context.push(AppRoutes.subscribedCoaches),
                     ),
                     if (isCoach) ...[
                       _divider(isDark),
@@ -295,16 +292,14 @@ class _ProfileContent extends StatelessWidget {
                         icon: Icons.sports,
                         title: 'Coach Tools',
                         isDark: isDark,
-                        onTap: () =>
-                            context.push(AppRoutes.coachHub),
+                        onTap: () => context.push(AppRoutes.coachHub),
                       ),
                       _divider(isDark),
                       _NavLinkTile(
                         icon: Icons.group,
                         title: 'Client Roster',
                         isDark: isDark,
-                        onTap: () =>
-                            context.push(AppRoutes.coachRoster),
+                        onTap: () => context.push(AppRoutes.coachRoster),
                       ),
                     ],
                   ],
@@ -789,6 +784,7 @@ class _ProfileError extends StatelessWidget {
     );
   }
 }
+
 Widget _divider(bool isDark) {
   return Divider(
     height: 1,
@@ -830,10 +826,9 @@ class _NavLinkTile extends StatelessWidget {
             Expanded(
               child: Text(
                 title,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w500),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
               ),
             ),
             Icon(

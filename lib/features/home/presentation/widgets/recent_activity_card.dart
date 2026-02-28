@@ -8,10 +8,7 @@ import '../../../workout/data/models/models.dart';
 
 /// Card displaying a single recent workout session on the home screen.
 class RecentActivityCard extends StatelessWidget {
-  const RecentActivityCard({
-    super.key,
-    required this.session,
-  });
+  const RecentActivityCard({super.key, required this.session});
 
   final WorkoutSessionSummary session;
 
@@ -29,14 +26,15 @@ class RecentActivityCard extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: (session.isCompleted
-                        ? (isDark
-                            ? AppColors.accentDark
-                            : const Color(0xFF22C55E))
-                        : (isDark
-                            ? AppColors.primaryDark
-                            : AppColors.primaryLight))
-                    .withValues(alpha: 0.12),
+                color:
+                    (session.isCompleted
+                            ? (isDark
+                                  ? AppColors.accentDark
+                                  : const Color(0xFF22C55E))
+                            : (isDark
+                                  ? AppColors.primaryDark
+                                  : AppColors.primaryLight))
+                        .withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
@@ -44,12 +42,8 @@ class RecentActivityCard extends StatelessWidget {
                     ? Icons.check_circle_outline
                     : Icons.timer_outlined,
                 color: session.isCompleted
-                    ? (isDark
-                        ? AppColors.accentDark
-                        : const Color(0xFF22C55E))
-                    : (isDark
-                        ? AppColors.primaryDark
-                        : AppColors.primaryLight),
+                    ? (isDark ? AppColors.accentDark : const Color(0xFF22C55E))
+                    : (isDark ? AppColors.primaryDark : AppColors.primaryLight),
                 size: 18,
               ),
             ),
@@ -60,10 +54,9 @@ class RecentActivityCard extends StatelessWidget {
                 children: [
                   Text(
                     session.displayName,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(fontWeight: FontWeight.w600),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -71,20 +64,19 @@ class RecentActivityCard extends StatelessWidget {
                   Text(
                     '$dateStr · ${session.totalSets} sets',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: isDark
-                              ? AppColors.textSecondaryDark
-                              : AppColors.textSecondaryLight,
-                        ),
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
+                    ),
                   ),
                 ],
               ),
             ),
             Text(
               session.durationDisplay,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(fontWeight: FontWeight.w600),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
             ),
           ],
         ),
