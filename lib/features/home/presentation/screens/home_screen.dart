@@ -202,8 +202,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
-                            onTap: () =>
-                                context.push(AppRoutes.workoutHistory),
+                            onTap: () => context.push(AppRoutes.workoutHistory),
                           ),
                         ),
                       ],
@@ -227,15 +226,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                       : const Color(0xFF22C55E),
                                   isDark
                                       ? AppColors.accentDark.withValues(
-                                          alpha: 0.7)
-                                      : const Color(0xFF22C55E)
-                                          .withValues(alpha: 0.7),
+                                          alpha: 0.7,
+                                        )
+                                      : const Color(
+                                          0xFF22C55E,
+                                        ).withValues(alpha: 0.7),
                                 ],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
-                              onTap: () =>
-                                  context.push(AppRoutes.coachHub),
+                              onTap: () => context.push(AppRoutes.coachHub),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -247,14 +247,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               gradient: LinearGradient(
                                 colors: [
                                   const Color(0xFF3B82F6),
-                                  const Color(0xFF3B82F6)
-                                      .withValues(alpha: 0.7),
+                                  const Color(
+                                    0xFF3B82F6,
+                                  ).withValues(alpha: 0.7),
                                 ],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
-                              onTap: () =>
-                                  context.push(AppRoutes.coachRoster),
+                              onTap: () => context.push(AppRoutes.coachRoster),
                             ),
                           ),
                         ],
@@ -342,8 +342,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         exerciseCount: 0,
                         estimatedMinutes: 0,
                         isPlaceholder: true,
-                        onStartPressed: () =>
-                            context.push(AppRoutes.routines),
+                        onStartPressed: () => context.push(AppRoutes.routines),
                       ),
                     ),
 
@@ -380,8 +379,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       title: 'Recent Activity',
                       isDark: isDark,
                       action: TextButton(
-                        onPressed: () =>
-                            context.push(AppRoutes.workoutHistory),
+                        onPressed: () => context.push(AppRoutes.workoutHistory),
                         child: const Text('See All'),
                       ),
                     ),
@@ -499,10 +497,11 @@ class _FindCoachCta extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: (isDark
-                              ? AppColors.primaryDark
-                              : AppColors.primaryLight)
-                          .withValues(alpha: 0.12),
+                      color:
+                          (isDark
+                                  ? AppColors.primaryDark
+                                  : AppColors.primaryLight)
+                              .withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
@@ -517,10 +516,9 @@ class _FindCoachCta extends StatelessWidget {
                   Expanded(
                     child: Text(
                       'Find a Coach',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],
@@ -529,10 +527,10 @@ class _FindCoachCta extends StatelessWidget {
               Text(
                 'Get personalized workout programs from a certified coach to reach your fitness goals.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
-                    ),
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                ),
               ),
               const SizedBox(height: 16),
               SizedBox(
@@ -540,8 +538,7 @@ class _FindCoachCta extends StatelessWidget {
                 child: AppButton.primary(
                   label: 'Discover Coaches',
                   icon: Icons.arrow_forward,
-                  onPressed: () =>
-                      context.push(AppRoutes.discoverCoaches),
+                  onPressed: () => context.push(AppRoutes.discoverCoaches),
                 ),
               ),
             ],
@@ -586,19 +583,18 @@ class _WaitingForProgramCard extends StatelessWidget {
                   children: [
                     Text(
                       'Waiting for Program',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w600),
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Your coach hasn\'t assigned a program yet. Check back soon!',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: isDark
-                                ? AppColors.textSecondaryDark
-                                : AppColors.textSecondaryLight,
-                          ),
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                      ),
                     ),
                   ],
                 ),

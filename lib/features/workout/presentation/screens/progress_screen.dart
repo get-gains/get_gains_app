@@ -44,17 +44,18 @@ class ProgressScreen extends ConsumerWidget {
                 ),
                 title: Text(
                   'Progress',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 backgroundColor: Colors.transparent,
                 elevation: 0,
               ),
               SliverPadding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
                     // ── Weekly Overview ──────────────────────────
@@ -95,8 +96,7 @@ class ProgressScreen extends ConsumerWidget {
                       title: 'Recent Workouts',
                       isDark: isDark,
                       action: TextButton(
-                        onPressed: () =>
-                            context.push(AppRoutes.workoutHistory),
+                        onPressed: () => context.push(AppRoutes.workoutHistory),
                         child: const Text('See All'),
                       ),
                     ),
@@ -106,15 +106,15 @@ class ProgressScreen extends ConsumerWidget {
                           ? AppEmptyState.compact(
                               icon: Icons.history,
                               title: 'No Recent Workouts',
-                              description:
-                                  'Complete a workout to see it here.',
+                              description: 'Complete a workout to see it here.',
                             )
                           : Column(
                               children: sessions
                                   .map(
                                     (s) => Padding(
-                                      padding:
-                                          const EdgeInsets.only(bottom: 10),
+                                      padding: const EdgeInsets.only(
+                                        bottom: 10,
+                                      ),
                                       child: _RecentSessionTile(
                                         session: s,
                                         isDark: isDark,
@@ -165,10 +165,9 @@ class _SectionHeader extends StatelessWidget {
       children: [
         Text(
           title,
-          style: Theme.of(context)
-              .textTheme
-              .titleMedium
-              ?.copyWith(fontWeight: FontWeight.bold),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
         ),
         if (action != null) action!,
       ],
@@ -193,10 +192,9 @@ class _SummaryStatsCard extends StatelessWidget {
           children: [
             Text(
               'Summary',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w600),
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 16),
             Row(
@@ -289,19 +287,18 @@ class _SummaryTile extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             value,
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 2),
           Text(
             label,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight,
-                ),
+              color: isDark
+                  ? AppColors.textSecondaryDark
+                  : AppColors.textSecondaryLight,
+            ),
           ),
         ],
       ),
@@ -330,12 +327,10 @@ class _RecentSessionTile extends StatelessWidget {
                   ? Icons.check_circle
                   : Icons.radio_button_unchecked,
               color: session.isCompleted
-                  ? (isDark
-                      ? AppColors.accentDark
-                      : const Color(0xFF22C55E))
+                  ? (isDark ? AppColors.accentDark : const Color(0xFF22C55E))
                   : (isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight),
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight),
               size: 20,
             ),
             const SizedBox(width: 12),
@@ -345,28 +340,26 @@ class _RecentSessionTile extends StatelessWidget {
                 children: [
                   Text(
                     session.displayName,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(fontWeight: FontWeight.w600),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   Text(
                     dateStr,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: isDark
-                              ? AppColors.textSecondaryDark
-                              : AppColors.textSecondaryLight,
-                        ),
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
+                    ),
                   ),
                 ],
               ),
             ),
             Text(
               session.durationDisplay,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(fontWeight: FontWeight.w600),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -400,7 +393,9 @@ class _StatsLoadingSkeleton extends StatelessWidget {
               width: double.infinity,
               height: 20,
               decoration: BoxDecoration(
-                color: isDark ? AppColors.surface2Dark : AppColors.surface2Light,
+                color: isDark
+                    ? AppColors.surface2Dark
+                    : AppColors.surface2Light,
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
@@ -409,7 +404,9 @@ class _StatsLoadingSkeleton extends StatelessWidget {
               width: double.infinity,
               height: 10,
               decoration: BoxDecoration(
-                color: isDark ? AppColors.surface2Dark : AppColors.surface2Light,
+                color: isDark
+                    ? AppColors.surface2Dark
+                    : AppColors.surface2Light,
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
@@ -420,7 +417,9 @@ class _StatsLoadingSkeleton extends StatelessWidget {
                   child: Container(
                     height: 40,
                     decoration: BoxDecoration(
-                      color: isDark ? AppColors.surface2Dark : AppColors.surface2Light,
+                      color: isDark
+                          ? AppColors.surface2Dark
+                          : AppColors.surface2Light,
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
@@ -430,7 +429,9 @@ class _StatsLoadingSkeleton extends StatelessWidget {
                   child: Container(
                     height: 40,
                     decoration: BoxDecoration(
-                      color: isDark ? AppColors.surface2Dark : AppColors.surface2Light,
+                      color: isDark
+                          ? AppColors.surface2Dark
+                          : AppColors.surface2Light,
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
@@ -440,7 +441,9 @@ class _StatsLoadingSkeleton extends StatelessWidget {
                   child: Container(
                     height: 40,
                     decoration: BoxDecoration(
-                      color: isDark ? AppColors.surface2Dark : AppColors.surface2Light,
+                      color: isDark
+                          ? AppColors.surface2Dark
+                          : AppColors.surface2Light,
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
