@@ -8,3 +8,6 @@ library;
 
 // Data
 export 'data/data.dart';
+
+// Presentation
+export 'presentation/presentation.dart';
