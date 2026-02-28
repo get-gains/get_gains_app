@@ -56,6 +56,16 @@ class ApiConstants {
   static const String coachClass = '/coach/class';
   static const String coachSettings = '/coach/settings';
 
+  // Standalone Workout Endpoints
+  static const String standaloneExercises = '/standalone/exercises';
+  static const String standaloneRoutines = '/standalone/routines';
+  static const String standalonePrograms = '/standalone/programs';
+  static const String standaloneActiveProgram = '/standalone/programs/active';
+  static const String standaloneToday = '/standalone/today';
+  static const String standaloneSessions = '/standalone/sessions';
+  static const String standaloneActiveSession = '/standalone/sessions/active';
+  static const String standaloneWeeklyStats = '/standalone/stats/weekly';
+
   // Coach Discovery Endpoints (Client-Facing)
   static const String discoverCoaches = '/user/coaches';
   static const String subscribedCoaches = '/user/coaches/subscribed';
