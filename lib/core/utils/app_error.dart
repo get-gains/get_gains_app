@@ -166,3 +166,17 @@ final class UnknownError extends AppError {
     super.originalError,
   });
 }
+
+/// Subscription required — the user attempted to access a coach-gated feature
+/// without an active subscription.
+///
+/// Catch this specific error to show a subscription upgrade modal instead of
+/// a generic error message. Do not navigate to the gated page if this is thrown.
+final class SubscriptionRequiredError extends AppError {
+  const SubscriptionRequiredError({
+    super.message =
+        'An active subscription is required to access this feature.',
+    super.code = 'SUBSCRIPTION_REQUIRED',
+    super.originalError,
+  });
+}
