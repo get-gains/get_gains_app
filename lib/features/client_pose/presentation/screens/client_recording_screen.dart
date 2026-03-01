@@ -39,6 +39,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
   bool _isCameraInitialized = false;
   bool _isCameraError = false;
   bool _isProcessingFrame = false;
+  bool _isFlipping = false;
   int _frameSkipCount = 0;
   static const _processEveryNFrames = 3; // Process every 3rd frame
 
@@ -160,6 +161,59 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
         .resetForNewAttempt();
   }
 
+  // ── Flip camera ──────────────────────────────────────────────────────────
+
+  /// Whether more than one camera is available (front + back).
+  bool get _canFlipCamera => _cameras.length >= 2;
+
+  /// Toggle between front and back cameras.
+  /// Only allowed while in the Ready (setup) state — not during recording.
+  Future<void> _flipCamera() async {
+    if (!_canFlipCamera || _isFlipping) return;
+
+    final state = ref.read(clientRecordingProvider(widget.exerciseId));
+    if (state is! ClientRecordingReady) return;
+
+    _isFlipping = true;
+
+    final currentDirection = _cameraController?.description.lensDirection;
+    final targetDirection = currentDirection == CameraLensDirection.back
+        ? CameraLensDirection.front
+        : CameraLensDirection.back;
+
+    final targetCamera = _cameras.firstWhere(
+      (c) => c.lensDirection == targetDirection,
+      orElse: () => _cameras.first,
+    );
+
+    AppLogger.info(
+      'Flipping camera: $currentDirection → $targetDirection',
+      tag: 'ClientRecording',
+    );
+
+    try {
+      await _cameraController?.dispose();
+      _cameraController = null;
+
+      if (mounted) setState(() => _isCameraInitialized = false);
+
+      final controller = CameraController(
+        targetCamera,
+        ResolutionPreset.medium,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.nv21,
+      );
+      _cameraController = controller;
+      await controller.initialize();
+
+      if (mounted) setState(() => _isCameraInitialized = true);
+    } catch (e) {
+      AppLogger.error('Flip camera failed', tag: 'ClientRecording', error: e);
+    } finally {
+      _isFlipping = false;
+    }
+  }
+
   @override
   void dispose() {
     WakelockPlus.disable();
@@ -184,6 +238,14 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
           icon: const Icon(Icons.close),
           onPressed: () => context.pop(),
         ),
+        actions: [
+          if (_canFlipCamera && state is ClientRecordingReady)
+            IconButton(
+              icon: const Icon(Icons.flip_camera_ios),
+              tooltip: 'Flip camera',
+              onPressed: _isFlipping ? null : _flipCamera,
+            ),
+        ],
       ),
       body: _buildBody(context, state, isDark),
     );
