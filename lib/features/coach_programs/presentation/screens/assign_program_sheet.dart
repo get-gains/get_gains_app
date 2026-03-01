@@ -237,8 +237,18 @@ class _AssignProgramSheetContentState
             AssignProgramRequest(
               userId: widget.userId,
               programId: _selectedProgramId!,
-              startDate: _startDate.toIso8601String().split('T').first,
-              endDate: _endDate?.toIso8601String().split('T').first,
+              startDate: DateTime.utc(
+                _startDate.year,
+                _startDate.month,
+                _startDate.day,
+              ).toIso8601String(),
+              endDate: _endDate != null
+                  ? DateTime.utc(
+                      _endDate!.year,
+                      _endDate!.month,
+                      _endDate!.day,
+                    ).toIso8601String()
+                  : null,
               notes: _notesController.text.trim().isEmpty
                   ? null
                   : _notesController.text.trim(),
