@@ -67,6 +67,17 @@ class CoachHubScreen extends ConsumerWidget {
                     isDark: isDark,
                     onTap: () => context.push(AppRoutes.coachRoster),
                   ),
+                  const SizedBox(height: 12),
+                  _HubTile(
+                    icon: Icons.insights_outlined,
+                    activeIcon: Icons.insights,
+                    title: 'Performance',
+                    subtitle: 'Client progress & adherence dashboard',
+                    color: const Color(0xFF3B82F6),
+                    isDark: isDark,
+                    onTap: () =>
+                        context.push(AppRoutes.coachPerformanceDashboard),
+                  ),
                   const SizedBox(height: 24),
 
                   // ── Content Management ─────────────────────────
