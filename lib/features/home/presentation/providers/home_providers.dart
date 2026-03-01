@@ -2,8 +2,11 @@ import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../../core/utils/app_error.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../coaches/data/coach_repository.dart';
 import '../../../coaches/data/models/models.dart';
+import '../../../standalone_workout/data/standalone_workout_repository.dart';
 import '../../../workout/data/models/models.dart';
 import '../../../workout/data/workout_repository.dart';
 
@@ -26,6 +29,51 @@ Future<TodayRoutineModel> todayRoutine(Ref ref) async {
     success: (model) => model,
     failure: (error) => throw error,
   );
+}
+
+// ──────────────────────────────────────────────────────────
+// Active Today (with standalone fallback)
+// ──────────────────────────────────────────────────────────
+
+/// Resolves today's routine, transparently falling back to the standalone
+/// workout program when the user has no active coach subscription.
+///
+/// - Has subscription → returns today from `GET /api/workout/today`
+/// - No subscription (403) → falls back to `GET /api/standalone/today`
+///   (converts [StandaloneTodayModel] fields into [TodayRoutineModel] so the
+///   home screen does not need to know which path was taken).
+///
+/// The [homeStatusProvider] separately surfaces [HomeStatus.noSubscription]
+/// so the CTA section can prompt the user to upgrade.
+@riverpod
+Future<TodayRoutineModel> activeToday(Ref ref) async {
+  try {
+    return await ref.watch(todayRoutineProvider.future);
+  } on SubscriptionRequiredError {
+    // Coach endpoint requires subscription — fall back to the user's own
+    // standalone program so the home screen always shows something useful.
+    AppLogger.info(
+      'No subscription — falling back to standalone today',
+      tag: 'HomeProviders',
+    );
+    final standaloneRepo = ref.watch(standaloneWorkoutRepositoryProvider);
+    final result = await standaloneRepo.getTodayRoutine();
+    return result.when(
+      success: (model) => TodayRoutineModel(
+        isRestDay: model.isRestDay,
+        today: model.today != null
+            ? TodayRoutineDetails(
+                programRoutineId: model.today!.programRoutineId,
+                dayNumber: model.today!.dayNumber,
+                assignedProgramId: model.today!.assignedProgramId,
+                programName: model.today!.programName,
+                routine: model.today!.routine,
+              )
+            : null,
+      ),
+      failure: (error) => throw error,
+    );
+  }
 }
 
 // ──────────────────────────────────────────────────────────
@@ -106,6 +154,9 @@ enum HomeStatus {
   /// User has no subscribed coach → show "Find a Coach" CTA.
   noCoach,
 
+  /// User has a coach but no active subscription → show upgrade CTA.
+  noSubscription,
+
   /// User has a coach but no active program → show "Waiting for program".
   waitingForProgram,
 
@@ -132,6 +183,9 @@ Future<HomeStatus> homeStatus(Ref ref) async {
     if (today.isRestDay) return HomeStatus.restDay;
     if (today.today != null) return HomeStatus.hasRoutine;
     return HomeStatus.waitingForProgram;
+  } on SubscriptionRequiredError {
+    // Coach endpoint blocked — user needs to subscribe.
+    return HomeStatus.noSubscription;
   } catch (_) {
     // If the today-routine call fails (e.g. no active program),
     // treat as waiting for program assignment.

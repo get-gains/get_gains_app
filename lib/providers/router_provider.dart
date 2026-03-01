@@ -6,6 +6,7 @@ import '../core/utils/logger.dart';
 import '../features/auth/auth.dart';
 import '../features/client_pose/client_pose.dart';
 import '../features/coach_pose/coach_pose.dart';
+import '../features/coach_client_progress/coach_client_progress.dart';
 import '../features/coach_programs/coach_programs.dart';
 import '../features/coach_settings/coach_settings.dart';
 import '../features/coaches/coaches.dart';
@@ -80,6 +81,16 @@ class AppRoutes {
   static const String clientAssignments = '/coach/clients/:userId/programs';
   static const String coachRoster = '/coach/roster';
   static const String coachSettings = '/coach/settings';
+
+  // Coach Client Progress routes
+  static const String clientProgress = '/coach/clients/:userId/progress';
+  static const String clientSessionDetail =
+      '/coach/clients/:userId/sessions/:sessionId';
+  static const String clientExerciseHistory =
+      '/coach/clients/:userId/exercises/:exerciseId/history';
+  static const String clientFormReview =
+      '/coach/clients/:userId/form-results/:resultId';
+  static const String coachPerformanceDashboard = '/coach/performance';
 
   // Coach Discovery routes (client-facing)
   static const String discoverCoaches = '/coaches/discover';
@@ -444,6 +455,54 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: AppRoutes.coachSettings,
         builder: (context, state) => const CoachSettingsScreen(),
+      ),
+
+      // Coach Client Progress Routes
+      GoRoute(
+        path: AppRoutes.clientProgress,
+        builder: (context, state) {
+          final userId = state.pathParameters['userId']!;
+          final userName = state.extra as String?;
+          return ClientProgressScreen(userId: userId, userName: userName);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.clientSessionDetail,
+        builder: (context, state) {
+          final userId = state.pathParameters['userId']!;
+          final sessionId = state.pathParameters['sessionId']!;
+          return SessionDetailScreen(userId: userId, sessionId: sessionId);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.clientExerciseHistory,
+        builder: (context, state) {
+          final userId = state.pathParameters['userId']!;
+          final exerciseId = state.pathParameters['exerciseId']!;
+          final exerciseName = state.extra as String?;
+          return ExerciseHistoryScreen(
+            userId: userId,
+            exerciseId: exerciseId,
+            exerciseName: exerciseName,
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.clientFormReview,
+        builder: (context, state) {
+          final userId = state.pathParameters['userId']!;
+          final resultId = state.pathParameters['resultId']!;
+          final result = state.extra as ClientFormResult?;
+          return FormReviewScreen(
+            userId: userId,
+            resultId: resultId,
+            result: result,
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.coachPerformanceDashboard,
+        builder: (context, state) => const PerformanceDashboardScreen(),
       ),
 
       // Coach Discovery Routes (Client-Facing)
