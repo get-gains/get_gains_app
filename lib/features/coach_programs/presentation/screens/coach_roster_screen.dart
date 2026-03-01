@@ -169,6 +169,10 @@ class _CoachRosterScreenState extends ConsumerState<CoachRosterScreen> {
                     '${AppRoutes.clientAssignments.replaceFirst(':userId', client.id)}?name=${Uri.encodeComponent(client.displayName)}',
                   ),
                   onRemove: () => _confirmRemoveClient(client),
+                  onViewProgress: () => context.push(
+                    AppRoutes.clientProgress.replaceFirst(':userId', client.id),
+                    extra: client.displayName,
+                  ),
                 );
               },
             ),
@@ -215,12 +219,14 @@ class _RosterClientCard extends StatelessWidget {
     required this.isDark,
     required this.onTap,
     required this.onRemove,
+    required this.onViewProgress,
   });
 
   final RosterClientModel client;
   final bool isDark;
   final VoidCallback onTap;
   final VoidCallback onRemove;
+  final VoidCallback onViewProgress;
 
   @override
   Widget build(BuildContext context) {
@@ -294,8 +300,19 @@ class _RosterClientCard extends StatelessWidget {
             ),
             onSelected: (value) {
               if (value == 'remove') onRemove();
+              if (value == 'progress') onViewProgress();
             },
             itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'progress',
+                child: Row(
+                  children: [
+                    Icon(Icons.insights_outlined, size: 20),
+                    SizedBox(width: 8),
+                    Text('View Progress'),
+                  ],
+                ),
+              ),
               const PopupMenuItem(
                 value: 'remove',
                 child: Row(
