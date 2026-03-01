@@ -56,6 +56,15 @@ class ApiConstants {
   static const String coachClass = '/coach/class';
   static const String coachSettings = '/coach/settings';
 
+  // Coach Client Progress Endpoints
+  // Sessions:         GET /coach/clients/:userId/sessions
+  // Session detail:   GET /coach/clients/:userId/sessions/:sessionId
+  // Weekly stats:     GET /coach/clients/:userId/stats/weekly
+  // Exercise history: GET /coach/clients/:userId/exercises/:exerciseId/history
+  // Form results:     GET /coach/clients/:userId/form-results
+  // (all built from coachClients base path)
+  static const String coachPerformanceDetailed = '/coach/performance/detailed';
+
   // Standalone Workout Endpoints
   static const String standaloneExercises = '/standalone/exercises';
   static const String standaloneRoutines = '/standalone/routines';
