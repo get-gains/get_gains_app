@@ -45,6 +45,7 @@
 | [features/PROGRAM.md](features/PROGRAM.md)                             | Coach programs, routines, exercises, assignments             |
 | [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md) | Coach discovery, settings & missing links data layer         |
 | [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md)   | Coaches & Subscription presentation layer (screens, routes)  |
+| [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md) | Coach client progress — sessions, stats, forms, presentation |
 | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md)       | Standalone workout — exercises, routines, programs, sessions |
 
 ---
@@ -216,6 +217,36 @@
 - `/lib/features/coach_settings/data/models/coach_settings_model.dart` - Settings model + update request
 - `/lib/features/coach_settings/presentation/providers/coach_settings_provider.dart` - Settings state + toggles
 - `/lib/features/coach_settings/presentation/screens/coach_settings_screen.dart` - Settings UI screen (ML-5)
+
+### Coach Client Progress _(Documented in [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md))_
+
+Coach-facing endpoints for viewing client workout data, progress metrics, and form analysis:
+
+| Feature                     | Description                                                 | Status      | Documentation                                                          |
+| --------------------------- | ----------------------------------------------------------- | ----------- | ---------------------------------------------------------------------- |
+| Client Session List         | Paginated list of client workout sessions                   | ✅ Complete | [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md) |
+| Client Session Detail       | Full session with exercises + sets grouped                  | ✅ Complete | [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md) |
+| Client Weekly Stats         | Weekly aggregates with previous-week deltas                 | ✅ Complete | [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md) |
+| Client Exercise History     | Per-exercise progress over time (best set, volume)          | ✅ Complete | [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md) |
+| Detailed Performance Report | All-clients report with volume, adherence, session duration | ✅ Complete | [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md) |
+| Client Form Results         | Form comparison history with segment scores and corrections | ✅ Complete | [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md) |
+| Presentation Layer          | 5 screens, routes, Coach Hub + Roster integration           | ✅ Complete | [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md) |
+
+**Primary Files:**
+
+- `/lib/features/coach_client_progress/coach_client_progress.dart` - Feature barrel export
+- `/lib/features/coach_client_progress/data/coach_client_progress_repository.dart` - All 6 API calls + provider
+- `/lib/features/coach_client_progress/data/models/client_session_model.dart` - Session summary + detail + sets
+- `/lib/features/coach_client_progress/data/models/weekly_stats_model.dart` - Weekly stats + delta
+- `/lib/features/coach_client_progress/data/models/exercise_history_model.dart` - Exercise history + summary
+- `/lib/features/coach_client_progress/data/models/detailed_performance_model.dart` - Performance entry + summary
+- `/lib/features/coach_client_progress/data/models/form_result_model.dart` - Form result + corrections
+- `/lib/features/coach_client_progress/presentation/providers/client_progress_providers.dart` - All 6 notifiers
+- `/lib/features/coach_client_progress/presentation/screens/client_progress_screen.dart` - Tabbed client detail
+- `/lib/features/coach_client_progress/presentation/screens/session_detail_screen.dart` - Session breakdown
+- `/lib/features/coach_client_progress/presentation/screens/exercise_history_screen.dart` - Exercise progress timeline
+- `/lib/features/coach_client_progress/presentation/screens/performance_dashboard_screen.dart` - All-client report
+- `/lib/features/coach_client_progress/presentation/screens/form_review_screen.dart` - Form result detail
 
 ### Standalone Workout _(Documented in [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md))_
 
