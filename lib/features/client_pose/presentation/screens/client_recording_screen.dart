@@ -12,7 +12,7 @@ import '../../../../core/utils/logger.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../coach_pose/services/pose_detection_service.dart';
 import '../providers/client_recording_provider.dart';
-import '../widgets/pose_skeleton_painter.dart';
+import '../widgets/pose_view_widget.dart';
 
 /// Client Recording Screen
 ///
@@ -321,8 +321,9 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
                         ),
                         const SizedBox(height: 4),
                         Expanded(
-                          child: PosePlaybackWidget(
+                          child: PoseViewWidget(
                             landmarkFrames: state.referenceFrames,
+                            mode: PoseViewMode.raw2D,
                             color: Colors.cyanAccent,
                             backgroundColor: const Color(0xFF0F0F1A),
                           ),
@@ -551,8 +552,9 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(7),
-                          child: PosePlaybackWidget(
+                          child: PoseViewWidget(
                             landmarkFrames: state.referenceLandmarkFrames,
+                            mode: PoseViewMode.raw2D,
                             color: Colors.cyanAccent,
                             backgroundColor: const Color(0xDD0F0F1A),
                             showControls: false,

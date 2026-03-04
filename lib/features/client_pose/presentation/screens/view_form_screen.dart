@@ -7,7 +7,7 @@ import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../coach_pose/data/models/landmark_models.dart';
 import '../../data/client_pose_repository.dart';
-import '../widgets/pose_skeleton_painter.dart';
+import '../widgets/pose_view_widget.dart';
 
 /// View Form Screen
 ///
@@ -119,6 +119,7 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
                     form['landmarkFrames'] as List?,
                   );
                   return _FormPlaybackCard(
+                    exerciseId: widget.exerciseId,
                     form: form,
                     landmarkFrames: landmarkFrames,
                     isDark: isDark,
@@ -160,11 +161,13 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
 /// Card showing form metadata + animated skeleton playback.
 class _FormPlaybackCard extends StatelessWidget {
   const _FormPlaybackCard({
+    required this.exerciseId,
     required this.form,
     required this.landmarkFrames,
     required this.isDark,
   });
 
+  final String exerciseId;
   final Map<String, dynamic> form;
   final List<LandmarkFrame> landmarkFrames;
   final bool isDark;
@@ -190,8 +193,9 @@ class _FormPlaybackCard extends StatelessWidget {
               SizedBox(
                 height: 280,
                 width: double.infinity,
-                child: PosePlaybackWidget(
+                child: PoseViewWidget(
                   landmarkFrames: landmarkFrames,
+                  mode: PoseViewMode.raw2D,
                   color: isDark ? Colors.cyanAccent : Colors.cyan,
                   backgroundColor: isDark
                       ? const Color(0xFF1A1A2E)
@@ -242,15 +246,51 @@ class _FormPlaybackCard extends StatelessWidget {
                             : AppColors.primaryLight,
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        'Version $version',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
+                      Flexible(
+                        child: Text(
+                          'Version $version',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      const Spacer(),
-                      AppBadge(
-                        label: _formatAngle(cameraAngle),
-                        variant: AppBadgeVariant.primary,
+                      const SizedBox(width: 8),
+                      if (landmarkFrames.isNotEmpty)
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              onPressed: () {
+                                context.push(
+                                  '/client/exercise/$exerciseId/form-3d-preview',
+                                  extra: {
+                                    'landmarkFrames': landmarkFrames,
+                                    'cameraAngle': cameraAngle,
+                                  },
+                                );
+                              },
+                              icon: const Icon(Icons.view_in_ar, size: 18),
+                              label: const Text('View in 3D'),
+                              style: TextButton.styleFrom(
+                                minimumSize: Size.zero,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (landmarkFrames.isNotEmpty) const SizedBox(width: 4),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: AppBadge(
+                            label: _formatAngle(cameraAngle),
+                            variant: AppBadgeVariant.primary,
+                          ),
+                        ),
                       ),
                     ],
                   ),

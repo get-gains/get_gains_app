@@ -67,6 +67,7 @@ class AppRoutes {
 
   // Client Pose routes
   static const String clientViewForm = '/client/exercise/:id/view-form';
+  static const String clientForm3DPreview = '/client/exercise/:id/form-3d-preview';
   static const String clientCompareForm = '/client/exercise/:id/compare';
   static const String clientUnityRecord = '/client/exercise/:id/unity-record';
   // Coach Program routes
@@ -369,6 +370,18 @@ GoRouter router(Ref ref) {
         builder: (context, state) {
           final id = state.pathParameters['id']!;
           return ViewFormScreen(exerciseId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.clientForm3DPreview,
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final frames = extra?['landmarkFrames'] as List<LandmarkFrame>? ?? [];
+          final angle = extra?['cameraAngle'] as String? ?? 'FRONT';
+          return Form3DPreviewScreen(
+            landmarkFrames: frames,
+            cameraAngle: angle,
+          );
         },
       ),
       GoRoute(
