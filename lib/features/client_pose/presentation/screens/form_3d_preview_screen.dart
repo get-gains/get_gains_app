@@ -99,6 +99,13 @@ class _Form3DPreviewScreenState extends State<Form3DPreviewScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.fullscreen_exit),
+            tooltip: 'Minimize',
+            onPressed: () => context.pop(),
+          ),
+        ],
       ),
       body: Stack(
         fit: StackFit.expand,

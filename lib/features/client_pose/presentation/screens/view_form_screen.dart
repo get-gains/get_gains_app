@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_embed_unity/flutter_embed_unity.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -6,6 +9,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../coach_pose/data/models/landmark_models.dart';
+import '../../../unity/data/unity_message_contract.dart';
 import '../../data/client_pose_repository.dart';
 import '../widgets/pose_view_widget.dart';
 
@@ -39,10 +43,8 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
         .then((result) => result.valueOrNull);
   }
 
-  /// Parse raw JSON landmark frames into typed [LandmarkFrame] list.
   List<LandmarkFrame> _parseLandmarkFrames(List<dynamic>? rawFrames) {
     if (rawFrames == null || rawFrames.isEmpty) return [];
-
     try {
       return rawFrames.map((f) {
         final frameMap = f as Map<String, dynamic>;
@@ -58,9 +60,8 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark
-          ? AppColors.backgroundDark
-          : AppColors.backgroundLight,
+      backgroundColor:
+          isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
       appBar: AppBar(title: const Text('Reference Form'), centerTitle: true),
       body: FutureBuilder<Map<String, dynamic>?>(
         future: _formFuture,
@@ -103,7 +104,6 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Exercise name header
                 Text(
                   exerciseName,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -111,8 +111,6 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                // Form cards with skeleton playback
                 ...forms.map((formData) {
                   final form = formData as Map<String, dynamic>;
                   final landmarkFrames = _parseLandmarkFrames(
@@ -125,16 +123,11 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
                     isDark: isDark,
                   );
                 }),
-
-                // Pose config info
                 if (poseConfig != null) ...[
                   const SizedBox(height: 16),
                   _PoseConfigInfo(config: poseConfig, isDark: isDark),
                 ],
-
                 const SizedBox(height: 24),
-
-                // Compare button — Unity 3D recording
                 AppButton.primary(
                   label: 'Compare My Form',
                   icon: Icons.view_in_ar,
@@ -158,8 +151,10 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
   }
 }
 
-/// Card showing form metadata + animated skeleton playback.
-class _FormPlaybackCard extends StatelessWidget {
+enum _PreviewMode { twoD, threeD }
+
+/// Card showing form metadata + animated skeleton or inline 3D Unity preview.
+class _FormPlaybackCard extends StatefulWidget {
   const _FormPlaybackCard({
     required this.exerciseId,
     required this.form,
@@ -173,14 +168,94 @@ class _FormPlaybackCard extends StatelessWidget {
   final bool isDark;
 
   @override
+  State<_FormPlaybackCard> createState() => _FormPlaybackCardState();
+}
+
+class _FormPlaybackCardState extends State<_FormPlaybackCard> {
+  _PreviewMode _mode = _PreviewMode.twoD;
+  bool _unityReady = false;
+  bool _poseSent = false;
+
+  String get _cameraAngle => widget.form['cameraAngle'] as String? ?? 'FRONT';
+
+  void _toggle3D() {
+    setState(() {
+      if (_mode == _PreviewMode.twoD) {
+        _mode = _PreviewMode.threeD;
+        _unityReady = false;
+        _poseSent = false;
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted && _mode == _PreviewMode.threeD && !_unityReady) {
+            setState(() => _unityReady = true);
+            _sendPoseToUnity();
+          }
+        });
+      } else {
+        _mode = _PreviewMode.twoD;
+      }
+    });
+  }
+
+  void _onMessageFromUnity(String message) {
+    if (!mounted || _mode != _PreviewMode.threeD) return;
+    if (message == UnityMessageContract.unityEventSceneLoaded) {
+      setState(() => _unityReady = true);
+      _sendPoseToUnity();
+    }
+  }
+
+  void _sendPoseToUnity() {
+    if (_poseSent || widget.landmarkFrames.isEmpty) return;
+    _poseSent = true;
+
+    final payload = jsonEncode({
+      'frames': widget.landmarkFrames.map((f) => f.toJson()).toList(),
+      'fps': 15,
+      'loop': true,
+    });
+
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodLoadPoseFrames,
+      payload,
+    );
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodSetCameraAngle,
+      _cameraAngle,
+    );
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodSetSkeletonColor,
+      '#00FFFF',
+    );
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodPlayPose,
+      '',
+    );
+  }
+
+  void _openFullscreen() {
+    context.push(
+      '/client/exercise/${widget.exerciseId}/form-3d-preview',
+      extra: {
+        'landmarkFrames': widget.landmarkFrames,
+        'cameraAngle': _cameraAngle,
+      },
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final cameraAngle = form['cameraAngle'] as String? ?? 'Unknown';
-    final coachName = form['coachName'] as String? ?? 'Coach';
-    final durationMs = form['durationMs'] as int? ?? 0;
-    final frameRate = form['frameRate'] as int? ?? 0;
-    final totalFrames = form['totalFrames'] as int? ?? 0;
-    final version = form['version'] as int? ?? 1;
+    final cameraAngle = _cameraAngle;
+    final coachName = widget.form['coachName'] as String? ?? 'Coach';
+    final durationMs = widget.form['durationMs'] as int? ?? 0;
+    final frameRate = widget.form['frameRate'] as int? ?? 0;
+    final totalFrames = widget.form['totalFrames'] as int? ?? 0;
+    final version = widget.form['version'] as int? ?? 1;
     final durationSec = (durationMs / 1000).toStringAsFixed(1);
+    final hasFrames = widget.landmarkFrames.isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -188,20 +263,111 @@ class _FormPlaybackCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Skeleton playback area
-            if (landmarkFrames.isNotEmpty)
+            // Preview area
+            if (hasFrames)
               SizedBox(
                 height: 280,
                 width: double.infinity,
-                child: PoseViewWidget(
-                  landmarkFrames: landmarkFrames,
-                  mode: PoseViewMode.raw2D,
-                  color: isDark ? Colors.cyanAccent : Colors.cyan,
-                  backgroundColor: isDark
-                      ? const Color(0xFF1A1A2E)
-                      : const Color(0xFF0F0F1A),
+                child: ClipRRect(
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(12),
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (_mode == _PreviewMode.twoD)
+                        PoseViewWidget(
+                          landmarkFrames: widget.landmarkFrames,
+                          mode: PoseViewMode.raw2D,
+                          color: widget.isDark
+                              ? Colors.cyanAccent
+                              : Colors.cyan,
+                          backgroundColor: widget.isDark
+                              ? const Color(0xFF1A1A2E)
+                              : const Color(0xFF0F0F1A),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(12),
+                          ),
+                        )
+                      else
+                        EmbedUnity(
+                          onMessageFromUnity: _onMessageFromUnity,
+                        ),
+
+                      // Mode toggle pill (top-right)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: _ViewModeToggle(
+                          mode: _mode,
+                          onToggle: _toggle3D,
+                        ),
+                      ),
+
+                      // Fullscreen button (only in 3D mode)
+                      if (_mode == _PreviewMode.threeD)
+                        Positioned(
+                          bottom: 8,
+                          right: 8,
+                          child: Material(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(8),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: _openFullscreen,
+                              child: const Padding(
+                                padding: EdgeInsets.all(8),
+                                child: Icon(
+                                  Icons.fullscreen,
+                                  color: Colors.white,
+                                  size: 22,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+
+                      // 3D loading indicator
+                      if (_mode == _PreviewMode.threeD && !_unityReady)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 8,
+                          child: Center(
+                            child: Material(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(16),
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Loading 3D...',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               )
@@ -209,7 +375,7 @@ class _FormPlaybackCard extends StatelessWidget {
               Container(
                 height: 120,
                 decoration: BoxDecoration(
-                  color: isDark
+                  color: widget.isDark
                       ? AppColors.surfaceDark
                       : AppColors.surfaceLight,
                   borderRadius: const BorderRadius.vertical(
@@ -241,7 +407,7 @@ class _FormPlaybackCard extends StatelessWidget {
                     children: [
                       Icon(
                         Icons.videocam,
-                        color: isDark
+                        color: widget.isDark
                             ? AppColors.primaryDark
                             : AppColors.primaryLight,
                       ),
@@ -249,39 +415,14 @@ class _FormPlaybackCard extends StatelessWidget {
                       Flexible(
                         child: Text(
                           'Version $version',
-                          style: Theme.of(context).textTheme.titleMedium
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
                               ?.copyWith(fontWeight: FontWeight.bold),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(width: 8),
-                      if (landmarkFrames.isNotEmpty)
-                        Flexible(
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerRight,
-                            child: TextButton.icon(
-                              onPressed: () {
-                                context.push(
-                                  '/client/exercise/$exerciseId/form-3d-preview',
-                                  extra: {
-                                    'landmarkFrames': landmarkFrames,
-                                    'cameraAngle': cameraAngle,
-                                  },
-                                );
-                              },
-                              icon: const Icon(Icons.view_in_ar, size: 18),
-                              label: const Text('View in 3D'),
-                              style: TextButton.styleFrom(
-                                minimumSize: Size.zero,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                            ),
-                          ),
-                        ),
-                      if (landmarkFrames.isNotEmpty) const SizedBox(width: 4),
                       Flexible(
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
@@ -295,21 +436,25 @@ class _FormPlaybackCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  _InfoRow(label: 'Coach', value: coachName, isDark: isDark),
+                  _InfoRow(
+                    label: 'Coach',
+                    value: coachName,
+                    isDark: widget.isDark,
+                  ),
                   _InfoRow(
                     label: 'Duration',
                     value: '${durationSec}s',
-                    isDark: isDark,
+                    isDark: widget.isDark,
                   ),
                   _InfoRow(
                     label: 'Frame Rate',
                     value: '$frameRate fps',
-                    isDark: isDark,
+                    isDark: widget.isDark,
                   ),
                   _InfoRow(
                     label: 'Total Frames',
                     value: '$totalFrames',
-                    isDark: isDark,
+                    isDark: widget.isDark,
                   ),
                 ],
               ),
@@ -330,6 +475,49 @@ class _FormPlaybackCard extends StatelessWidget {
               : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}',
         )
         .join(' ');
+  }
+}
+
+/// Compact toggle pill for switching between 2D and 3D preview.
+class _ViewModeToggle extends StatelessWidget {
+  const _ViewModeToggle({required this.mode, required this.onToggle});
+
+  final _PreviewMode mode;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final is3D = mode == _PreviewMode.threeD;
+    return Material(
+      color: Colors.black54,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onToggle,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                is3D ? Icons.view_in_ar : Icons.grid_on,
+                size: 16,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                is3D ? '3D' : '2D',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -395,13 +583,15 @@ class _PoseConfigInfo extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   'Setup Tips',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall
+                      ?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ],
             ),
-            if (setupInstructions != null && setupInstructions.isNotEmpty) ...[
+            if (setupInstructions != null &&
+                setupInstructions.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
                 setupInstructions,
