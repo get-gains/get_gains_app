@@ -6,12 +6,14 @@ import '../core/utils/logger.dart';
 import '../features/auth/auth.dart';
 import '../features/client_pose/client_pose.dart';
 import '../features/coach_pose/coach_pose.dart';
+import '../features/coach_client_progress/coach_client_progress.dart';
 import '../features/coach_programs/coach_programs.dart';
 import '../features/coach_settings/coach_settings.dart';
 import '../features/coaches/coaches.dart';
 import '../features/home/home.dart';
 import '../features/profile/profile.dart';
 import '../features/workout/workout.dart';
+import '../features/standalone_workout/standalone_workout.dart';
 import '../features/unity/unity.dart';
 import 'auth_state_provider.dart';
 import '../features/programs/screens/program_screen.dart';
@@ -50,6 +52,13 @@ class AppRoutes {
   static const String programDetails = '/program-details';
   static const String calendar = '/calendar';
 
+  // Coach Hub
+  static const String coachHub = '/coach/hub';
+
+  // Workout History & Progress
+  static const String workoutHistory = '/workout/history';
+  static const String progress = '/progress';
+
   // Coach Pose routes
   static const String coachExercises = '/coach/exercises';
   static const String createExercise = '/coach/exercises/create';
@@ -73,10 +82,35 @@ class AppRoutes {
   static const String coachRoster = '/coach/roster';
   static const String coachSettings = '/coach/settings';
 
+  // Coach Client Progress routes
+  static const String clientProgress = '/coach/clients/:userId/progress';
+  static const String clientSessionDetail =
+      '/coach/clients/:userId/sessions/:sessionId';
+  static const String clientExerciseHistory =
+      '/coach/clients/:userId/exercises/:exerciseId/history';
+  static const String clientFormReview =
+      '/coach/clients/:userId/form-results/:resultId';
+  static const String coachPerformanceDashboard = '/coach/performance';
+
   // Coach Discovery routes (client-facing)
   static const String discoverCoaches = '/coaches/discover';
   static const String coachProfile = '/coaches/:id';
   static const String subscribedCoaches = '/coaches/subscribed';
+
+  // Standalone Workout routes
+  static const String standaloneExercises = '/standalone/exercises';
+  static const String standaloneCreateExercise = '/standalone/exercises/create';
+  static const String standaloneExerciseEdit = '/standalone/exercises/:id/edit';
+  static const String standaloneRoutines = '/standalone/routines';
+  static const String standaloneCreateRoutine = '/standalone/routines/create';
+  static const String standaloneRoutineDetail = '/standalone/routines/:id';
+  static const String standaloneEditRoutine = '/standalone/routines/:id/edit';
+  static const String standalonePrograms = '/standalone/programs';
+  static const String standaloneCreateProgram = '/standalone/programs/create';
+  static const String standaloneProgramDetail = '/standalone/programs/:id';
+  static const String standaloneEditProgram = '/standalone/programs/:id/edit';
+  static const String standaloneToday = '/standalone/today';
+  static const String standaloneSessionHistory = '/standalone/sessions';
 }
 
 /// Router Provider
@@ -288,6 +322,22 @@ GoRouter router(Ref ref) {
         builder: (context, state) => const CalendarScreen(),
       ),
 
+      // Coach Hub
+      GoRoute(
+        path: AppRoutes.coachHub,
+        builder: (context, state) => const CoachHubScreen(),
+      ),
+
+      // Workout History & Progress
+      GoRoute(
+        path: AppRoutes.workoutHistory,
+        builder: (context, state) => const WorkoutHistoryScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.progress,
+        builder: (context, state) => const ProgressScreen(),
+      ),
+
       // Coach Pose Routes
       GoRoute(
         path: AppRoutes.coachExercises,
@@ -407,6 +457,54 @@ GoRouter router(Ref ref) {
         builder: (context, state) => const CoachSettingsScreen(),
       ),
 
+      // Coach Client Progress Routes
+      GoRoute(
+        path: AppRoutes.clientProgress,
+        builder: (context, state) {
+          final userId = state.pathParameters['userId']!;
+          final userName = state.extra as String?;
+          return ClientProgressScreen(userId: userId, userName: userName);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.clientSessionDetail,
+        builder: (context, state) {
+          final userId = state.pathParameters['userId']!;
+          final sessionId = state.pathParameters['sessionId']!;
+          return SessionDetailScreen(userId: userId, sessionId: sessionId);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.clientExerciseHistory,
+        builder: (context, state) {
+          final userId = state.pathParameters['userId']!;
+          final exerciseId = state.pathParameters['exerciseId']!;
+          final exerciseName = state.extra as String?;
+          return ExerciseHistoryScreen(
+            userId: userId,
+            exerciseId: exerciseId,
+            exerciseName: exerciseName,
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.clientFormReview,
+        builder: (context, state) {
+          final userId = state.pathParameters['userId']!;
+          final resultId = state.pathParameters['resultId']!;
+          final result = state.extra as ClientFormResult?;
+          return FormReviewScreen(
+            userId: userId,
+            resultId: resultId,
+            result: result,
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.coachPerformanceDashboard,
+        builder: (context, state) => const PerformanceDashboardScreen(),
+      ),
+
       // Coach Discovery Routes (Client-Facing)
       GoRoute(
         path: AppRoutes.discoverCoaches,
@@ -422,6 +520,75 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: AppRoutes.subscribedCoaches,
         builder: (context, state) => const SubscribedCoachesScreen(),
+      ),
+
+      // Standalone Workout Routes
+      GoRoute(
+        path: AppRoutes.standaloneExercises,
+        builder: (context, state) => const StandaloneExercisesScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.standaloneCreateExercise,
+        builder: (context, state) => const StandaloneExerciseFormScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.standaloneExerciseEdit,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return StandaloneExerciseFormScreen(exerciseId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.standaloneRoutines,
+        builder: (context, state) => const StandaloneRoutinesScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.standaloneCreateRoutine,
+        builder: (context, state) => const StandaloneRoutineFormScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.standaloneRoutineDetail,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return StandaloneRoutineDetailScreen(routineId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.standaloneEditRoutine,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return StandaloneRoutineFormScreen(routineId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.standalonePrograms,
+        builder: (context, state) => const StandaloneProgramsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.standaloneCreateProgram,
+        builder: (context, state) => const StandaloneProgramFormScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.standaloneProgramDetail,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return StandaloneProgramDetailScreen(programId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.standaloneEditProgram,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return StandaloneProgramFormScreen(programId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.standaloneToday,
+        builder: (context, state) => const StandaloneTodayScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.standaloneSessionHistory,
+        builder: (context, state) => const StandaloneSessionHistoryScreen(),
       ),
     ],
 

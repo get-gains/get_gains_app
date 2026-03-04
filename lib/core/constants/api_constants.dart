@@ -43,6 +43,10 @@ class ApiConstants {
   static const String routines = '/workout/routines';
   static const String workoutSessions = '/workout/sessions';
   static const String performedSets = '/workout/sets';
+  static const String performedSetsSync = '/workout/sets/sync';
+  static const String todayWorkout = '/workout/today';
+  static const String weeklyStats = '/workout/stats/weekly';
+  static const String activeSession = '/workout/sessions/active';
 
   // Coach Program Endpoints
   static const String coachPrograms = '/coach/programs';
@@ -51,6 +55,25 @@ class ApiConstants {
   static const String coachClients = '/coach/clients';
   static const String coachClass = '/coach/class';
   static const String coachSettings = '/coach/settings';
+
+  // Coach Client Progress Endpoints
+  // Sessions:         GET /coach/clients/:userId/sessions
+  // Session detail:   GET /coach/clients/:userId/sessions/:sessionId
+  // Weekly stats:     GET /coach/clients/:userId/stats/weekly
+  // Exercise history: GET /coach/clients/:userId/exercises/:exerciseId/history
+  // Form results:     GET /coach/clients/:userId/form-results
+  // (all built from coachClients base path)
+  static const String coachPerformanceDetailed = '/coach/performance/detailed';
+
+  // Standalone Workout Endpoints
+  static const String standaloneExercises = '/standalone/exercises';
+  static const String standaloneRoutines = '/standalone/routines';
+  static const String standalonePrograms = '/standalone/programs';
+  static const String standaloneActiveProgram = '/standalone/programs/active';
+  static const String standaloneToday = '/standalone/today';
+  static const String standaloneSessions = '/standalone/sessions';
+  static const String standaloneActiveSession = '/standalone/sessions/active';
+  static const String standaloneWeeklyStats = '/standalone/stats/weekly';
 
   // Coach Discovery Endpoints (Client-Facing)
   static const String discoverCoaches = '/user/coaches';

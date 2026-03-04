@@ -367,9 +367,14 @@ class ApiClient {
         final errors = data['errors'] as List<dynamic>?;
         if (errors != null && errors.isNotEmpty) {
           final errorMessage = data.allErrorMessages;
-          final firstError = errors.first as Map<String, dynamic>;
-          final field = firstError['field'] as String?;
           final statusCode = response.statusCode;
+
+          // 403 with a subscription-related message → specific error type so
+          // the UI can show an upgrade modal instead of a generic error.
+          if (statusCode == 403 &&
+              errorMessage.toLowerCase().contains('subscription')) {
+            return SubscriptionRequiredError(message: errorMessage);
+          }
 
           // Return the server's error message with the correct status code
           return NetworkError(

@@ -84,7 +84,7 @@ abstract class ExerciseModel with _$ExerciseModel {
 abstract class RoutineExerciseModel with _$RoutineExerciseModel {
   const factory RoutineExerciseModel({
     required String id,
-    required String routineId,
+    String? routineId,
     required String exerciseId,
     required int sets,
     required int repsMin,

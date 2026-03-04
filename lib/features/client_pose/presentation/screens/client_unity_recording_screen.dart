@@ -69,6 +69,7 @@ class _ClientUnityRecordingScreenState
   bool _isCameraInitialized = false;
   bool _isCameraError = false;
   bool _isProcessingFrame = false;
+  bool _isFlipping = false;
   int _frameSkipCount = 0;
   static const _processEveryNFrames = 3;
 
@@ -91,6 +92,12 @@ class _ClientUnityRecordingScreenState
   bool _isProcessingSetupFrame = false;
   bool _isSetupStreamActive = false;
   bool get _setupPassed => _setupValidation?.allPassed ?? false;
+
+  // ── Auto-start countdown ───────────────────────────────────────────────────
+  static const _autoStartSeconds = 3;
+  Timer? _autoStartTimer;
+  int _autoStartSecondsLeft = 0;
+  bool get _isAutoStarting => _autoStartSecondsLeft > 0;
 
   @override
   void initState() {
@@ -210,9 +217,16 @@ class _ClientUnityRecordingScreenState
       final frame = await poseService.processFrame(image, inputRotation, ts);
 
       if (mounted) {
+        final wasPassed = _setupPassed;
         setState(() {
           _setupValidation = _setupValidator.validate(frame);
         });
+        final isPassed = _setupPassed;
+        if (isPassed && !wasPassed && !_isAutoStarting) {
+          _startAutoStartCountdown();
+        } else if (!isPassed && _isAutoStarting) {
+          _cancelAutoStartCountdown();
+        }
       }
     } catch (e) {
       AppLogger.warning(
@@ -222,6 +236,36 @@ class _ClientUnityRecordingScreenState
     } finally {
       _isProcessingSetupFrame = false;
     }
+  }
+
+  // ── Auto-start helpers ──────────────────────────────────────────────────────────
+
+  void _startAutoStartCountdown() {
+    if (_isAutoStarting) return;
+    setState(() => _autoStartSecondsLeft = _autoStartSeconds);
+    _autoStartTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      // If setup is no longer passing, abort
+      if (!_setupPassed) {
+        t.cancel();
+        setState(() => _autoStartSecondsLeft = 0);
+        return;
+      }
+      setState(() => _autoStartSecondsLeft--);
+      if (_autoStartSecondsLeft <= 0) {
+        t.cancel();
+        _onStartRecording();
+      }
+    });
+  }
+
+  void _cancelAutoStartCountdown() {
+    _autoStartTimer?.cancel();
+    _autoStartTimer = null;
+    if (mounted) setState(() => _autoStartSecondsLeft = 0);
   }
 
   // ── Unity callbacks ──────────────────────────────────────────────────────
@@ -381,6 +425,7 @@ class _ClientUnityRecordingScreenState
   }
 
   void _onTryAgain() {
+    _cancelAutoStartCountdown();
     ref
         .read(clientRecordingProvider(widget.exerciseId).notifier)
         .resetForNewAttempt();
@@ -393,9 +438,76 @@ class _ClientUnityRecordingScreenState
     _startSetupStream();
   }
 
+  // ── Flip camera ──────────────────────────────────────────────────────────
+
+  /// Whether more than one camera is available (front + back).
+  bool get _canFlipCamera => _cameras.length >= 2;
+
+  /// Toggle between front and back cameras.
+  /// Only allowed while in the Ready (setup) state — not during recording.
+  Future<void> _flipCamera() async {
+    if (!_canFlipCamera || _isFlipping) return;
+
+    final state = ref.read(clientRecordingProvider(widget.exerciseId));
+    // Block flipping once recording has started
+    if (state is! ClientRecordingReady) return;
+
+    _cancelAutoStartCountdown();
+    _isFlipping = true;
+
+    final currentDirection = _cameraController?.description.lensDirection;
+    final targetDirection = currentDirection == CameraLensDirection.back
+        ? CameraLensDirection.front
+        : CameraLensDirection.back;
+
+    final targetCamera = _cameras.firstWhere(
+      (c) => c.lensDirection == targetDirection,
+      orElse: () => _cameras.first,
+    );
+
+    AppLogger.info(
+      'Flipping camera: $currentDirection → $targetDirection',
+      tag: 'ClientUnityRecording',
+    );
+
+    try {
+      _stopSetupStream();
+      await _cameraController?.dispose();
+      _cameraController = null;
+
+      if (mounted) setState(() => _isCameraInitialized = false);
+
+      final controller = CameraController(
+        targetCamera,
+        ResolutionPreset.medium,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.nv21,
+      );
+      _cameraController = controller;
+      await controller.initialize();
+
+      if (mounted) {
+        setState(() {
+          _isCameraInitialized = true;
+          _setupValidation = _setupValidator.validate(null);
+        });
+        _startSetupStream();
+      }
+    } catch (e) {
+      AppLogger.error(
+        'Flip camera failed',
+        tag: 'ClientUnityRecording',
+        error: e,
+      );
+    } finally {
+      _isFlipping = false;
+    }
+  }
+
   @override
   void dispose() {
     WakelockPlus.disable();
+    _autoStartTimer?.cancel();
     _stopSetupStream();
     _stopImageStream();
     _cameraController?.dispose();
@@ -429,6 +541,13 @@ class _ClientUnityRecordingScreenState
           onPressed: _handleCloseTap,
         ),
         actions: [
+          // Flip camera (only during setup/ready phase)
+          if (_canFlipCamera && state is ClientRecordingReady)
+            IconButton(
+              icon: const Icon(Icons.flip_camera_ios),
+              tooltip: 'Flip camera',
+              onPressed: _isFlipping ? null : _flipCamera,
+            ),
           // Toggle Unity ↔ 2D skeleton
           IconButton(
             icon: Icon(_showUnity ? Icons.view_in_ar : Icons.grain),
@@ -819,21 +938,47 @@ class _ClientUnityRecordingScreenState
           children: [
             // Record button (mirroring coach style)
             _RecordButton(
-              enabled: canRecord,
-              onPressed: _onStartRecording,
+              enabled: canRecord && !_isAutoStarting,
+              onPressed: _isAutoStarting ? null : _onStartRecording,
               isDark: isDark,
             ),
             const SizedBox(height: 8),
-            Text(
-              canRecord
-                  ? 'All checks passed — tap to record'
-                  : 'Complete all setup checks to begin',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: isDark
-                    ? AppColors.mutedForegroundDark
-                    : AppColors.mutedForegroundLight,
+            if (_isAutoStarting)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Starting in $_autoStartSecondsLeft…',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: isDark
+                          ? AppColors.primaryDark
+                          : AppColors.primaryLight,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: _cancelAutoStartCountdown,
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              )
+            else
+              Text(
+                canRecord
+                    ? 'All checks passed — tap to record'
+                    : 'Complete all setup checks to begin',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: isDark
+                      ? AppColors.mutedForegroundDark
+                      : AppColors.mutedForegroundLight,
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -1553,7 +1698,7 @@ class _RecordButton extends StatelessWidget {
   });
 
   final bool enabled;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final bool isDark;
 
   @override
