@@ -1549,7 +1549,7 @@ class StandaloneWorkoutRepository {
         RoutineExerciseModel(
           id: re.remoteId ?? re.id.toString(),
           routineId: re.routineId.toString(),
-          exerciseId: re.exerciseId.toString(),
+          exerciseId: exercise?.remoteId ?? re.exerciseId.toString(),
           sets: re.sets,
           repsMin: re.repsMin,
           repsMax: re.repsMax,
