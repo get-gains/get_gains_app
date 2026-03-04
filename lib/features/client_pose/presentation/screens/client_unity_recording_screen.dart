@@ -22,7 +22,7 @@ import '../../../unity/data/unity_message_contract.dart';
 import '../../../workout/data/models/models.dart';
 import '../../../workout/presentation/providers/workout_session_provider.dart';
 import '../providers/client_recording_provider.dart';
-import '../widgets/pose_skeleton_painter.dart';
+import '../widgets/pose_view_widget.dart';
 
 /// Client Unity Recording Screen
 ///
@@ -850,8 +850,9 @@ class _ClientUnityRecordingScreenState
       );
     }
 
-    return PosePlaybackWidget(
+    return PoseViewWidget(
       landmarkFrames: referenceFrames,
+      mode: PoseViewMode.raw2D,
       color: Colors.cyanAccent,
       backgroundColor: const Color(0xFF0F0F1A),
     );
@@ -1100,8 +1101,9 @@ class _ClientUnityRecordingScreenState
                         const SizedBox(height: 4),
                         Expanded(
                           child: state.referenceLandmarkFrames.isNotEmpty
-                              ? PosePlaybackWidget(
+                              ? PoseViewWidget(
                                   landmarkFrames: state.referenceLandmarkFrames,
+                                  mode: PoseViewMode.raw2D,
                                   color: Colors.cyanAccent,
                                   backgroundColor: const Color(0xFF0F0F1A),
                                   showControls: false,
@@ -1136,8 +1138,9 @@ class _ClientUnityRecordingScreenState
                         const SizedBox(height: 4),
                         Expanded(
                           child: state.clientLandmarkFrames.isNotEmpty
-                              ? PosePlaybackWidget(
+                              ? PoseViewWidget(
                                   landmarkFrames: state.clientLandmarkFrames,
+                                  mode: PoseViewMode.raw2D,
                                   color: Colors.greenAccent,
                                   backgroundColor: const Color(0xFF0F0F1A),
                                   showControls: false,
