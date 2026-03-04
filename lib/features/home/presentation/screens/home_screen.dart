@@ -11,6 +11,8 @@ import '../../../../services/api/api_client.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../profile/profile.dart';
 import '../../../subscription/subscription.dart';
+import '../../../workout/data/models/models.dart';
+import '../providers/home_providers.dart';
 import '../widgets/widgets.dart';
 
 final isCoachProvider = FutureProvider.autoDispose<bool>((ref) async {
@@ -88,11 +90,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final authState = ref.watch(authStateProvider);
     final isCoachAsync = ref.watch(isCoachProvider);
+    final homeStatusAsync = ref.watch(homeStatusProvider);
+    final todayAsync = ref.watch(activeTodayProvider);
+    final weeklyAsync = ref.watch(weeklyStatsProvider);
+    final recentAsync = ref.watch(recentActivityProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Extract name from email or use default
     final email = authState.email ?? '';
     final userName = email.isNotEmpty ? email.split('@').first : 'Athlete';
     final greeting = _getGreeting();
+    final isCoach = isCoachAsync.asData?.value ?? false;
 
     return Scaffold(
       body: SafeArea(
@@ -144,7 +151,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 padding: const EdgeInsets.all(16),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
-                    // Quick Actions Section
+                    // ── Quick Actions Section ────────────────────
                     _SectionHeader(title: 'Quick Actions', isDark: isDark),
                     const SizedBox(height: 12),
                     Row(
@@ -195,9 +202,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
-                            onTap: () {
-                              // TODO: Navigate to workout history
-                            },
+                            onTap: () => context.push(AppRoutes.workoutHistory),
                           ),
                         ),
                       ],
@@ -205,33 +210,79 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                     const SizedBox(height: 12),
 
-                    // Coach Tools Quick Action
-                    if (isCoachAsync.asData?.value ?? false) ...[
-                      QuickActionCard(
-                        icon: Icons.sports,
-                        title: 'Coach Tools',
-                        subtitle: 'Exercise library & form recording',
-                        gradient: LinearGradient(
-                          colors: [
-                            isDark
-                                ? AppColors.accentDark
-                                : const Color(0xFF22C55E),
-                            isDark
-                                ? AppColors.accentDark.withValues(alpha: 0.7)
-                                : const Color(
-                                    0xFF22C55E,
+                    // Coach-only quick actions (M-CF1-1 + M-CF1-2)
+                    if (isCoach) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: QuickActionCard(
+                              icon: Icons.sports,
+                              title: 'Coach Tools',
+                              subtitle: 'Programs & exercises',
+                              gradient: LinearGradient(
+                                colors: [
+                                  isDark
+                                      ? AppColors.accentDark
+                                      : const Color(0xFF22C55E),
+                                  isDark
+                                      ? AppColors.accentDark.withValues(
+                                          alpha: 0.7,
+                                        )
+                                      : const Color(
+                                          0xFF22C55E,
+                                        ).withValues(alpha: 0.7),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              onTap: () => context.push(AppRoutes.coachHub),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: QuickActionCard(
+                              icon: Icons.people,
+                              title: 'Clients',
+                              subtitle: 'Manage your roster',
+                              gradient: LinearGradient(
+                                colors: [
+                                  const Color(0xFF3B82F6),
+                                  const Color(
+                                    0xFF3B82F6,
                                   ).withValues(alpha: 0.7),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        onTap: () => context.push(AppRoutes.coachExercises),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              onTap: () => context.push(AppRoutes.coachRoster),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 24),
                     ] else
                       const SizedBox(height: 24),
 
-                    // Today's Focus Section
+                    // ── Home Status CTA (M-CL1 / M-CL7) ────────
+                    homeStatusAsync.when(
+                      data: (status) {
+                        switch (status) {
+                          case HomeStatus.noCoach:
+                            return _FindCoachCta(isDark: isDark);
+                          case HomeStatus.noSubscription:
+                            return _SubscriptionRequiredCta(isDark: isDark);
+                          case HomeStatus.waitingForProgram:
+                            return _WaitingForProgramCard(isDark: isDark);
+                          case HomeStatus.restDay:
+                          case HomeStatus.hasRoutine:
+                            return const SizedBox.shrink();
+                        }
+                      },
+                      loading: () => const SizedBox.shrink(),
+                      error: (_, __) => const SizedBox.shrink(),
+                    ),
+
+                    // ── Today's Focus Section (M-CL2) ───────────
                     _SectionHeader(
                       title: 'Today\'s Focus',
                       isDark: isDark,
@@ -241,37 +292,133 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    WorkoutSummaryCard(
-                      routineName: 'No Routine Assigned',
-                      description:
-                          'Your coach will assign your workout routines. Check back soon!',
-                      exerciseCount: 0,
-                      estimatedMinutes: 0,
-                      isPlaceholder: true,
-                      onStartPressed: () => context.push(AppRoutes.routines),
+                    todayAsync.when(
+                      data: (today) {
+                        if (today.isRestDay) {
+                          return WorkoutSummaryCard(
+                            routineName: 'Rest Day 🧘',
+                            description:
+                                'No routine scheduled today. Recovery is part of the process!',
+                            exerciseCount: 0,
+                            estimatedMinutes: 0,
+                            isPlaceholder: true,
+                            onStartPressed: () =>
+                                context.push(AppRoutes.routines),
+                          );
+                        }
+                        if (today.hasRoutine) {
+                          final details = today.today!;
+                          return WorkoutSummaryCard(
+                            routineName: today.displayName,
+                            description:
+                                '${details.programName} · Day ${details.dayNumber}',
+                            exerciseCount: today.exerciseCount,
+                            estimatedMinutes: today.estimatedMinutes,
+                            isPlaceholder: false,
+                            onStartPressed: () =>
+                                context.push(AppRoutes.routines),
+                          );
+                        }
+                        // No program / no routine
+                        return WorkoutSummaryCard(
+                          routineName: 'No Routine Assigned',
+                          description:
+                              'Your coach will assign your workout routines. Check back soon!',
+                          exerciseCount: 0,
+                          estimatedMinutes: 0,
+                          isPlaceholder: true,
+                          onStartPressed: () =>
+                              context.push(AppRoutes.routines),
+                        );
+                      },
+                      loading: () => const AppCard(
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(child: CircularProgressIndicator()),
+                        ),
+                      ),
+                      error: (_, __) => WorkoutSummaryCard(
+                        routineName: 'No Routine Assigned',
+                        description:
+                            'Your coach will assign your workout routines. Check back soon!',
+                        exerciseCount: 0,
+                        estimatedMinutes: 0,
+                        isPlaceholder: true,
+                        onStartPressed: () => context.push(AppRoutes.routines),
+                      ),
                     ),
 
                     const SizedBox(height: 24),
 
-                    // Weekly Progress Section
+                    // ── Weekly Progress Section (M-CL3) ─────────
                     _SectionHeader(title: 'This Week', isDark: isDark),
                     const SizedBox(height: 12),
-                    const WeeklyProgressCard(
-                      workoutsCompleted: 0,
-                      workoutsGoal: 4,
-                      totalMinutes: 0,
-                      streakDays: 0,
+                    weeklyAsync.when(
+                      data: (stats) => WeeklyProgressCard(
+                        workoutsCompleted: stats.workoutsCompleted,
+                        workoutsGoal: 4, // TODO: make configurable
+                        totalMinutes: stats.totalMinutes,
+                        streakDays: stats.streakDays,
+                      ),
+                      loading: () => const WeeklyProgressCard(
+                        workoutsCompleted: 0,
+                        workoutsGoal: 4,
+                        totalMinutes: 0,
+                        streakDays: 0,
+                      ),
+                      error: (_, __) => const WeeklyProgressCard(
+                        workoutsCompleted: 0,
+                        workoutsGoal: 4,
+                        totalMinutes: 0,
+                        streakDays: 0,
+                      ),
                     ),
 
                     const SizedBox(height: 24),
 
-                    // Recent Activity Section
-                    _SectionHeader(title: 'Recent Activity', isDark: isDark),
+                    // ── Recent Activity Section (M-CL4) ─────────
+                    _SectionHeader(
+                      title: 'Recent Activity',
+                      isDark: isDark,
+                      action: TextButton(
+                        onPressed: () => context.push(AppRoutes.workoutHistory),
+                        child: const Text('See All'),
+                      ),
+                    ),
                     const SizedBox(height: 12),
-                    AppEmptyState.compact(
-                      icon: Icons.history,
-                      title: 'No Recent Workouts',
-                      description: 'Your completed workouts will appear here.',
+                    recentAsync.when(
+                      data: (sessions) {
+                        if (sessions.isEmpty) {
+                          return AppEmptyState.compact(
+                            icon: Icons.history,
+                            title: 'No Recent Workouts',
+                            description:
+                                'Your completed workouts will appear here.',
+                          );
+                        }
+                        return Column(
+                          children: sessions
+                              .map(
+                                (s) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: RecentActivityCard(session: s),
+                                ),
+                              )
+                              .toList(),
+                        );
+                      },
+                      loading: () => AppEmptyState.compact(
+                        icon: Icons.history,
+                        title: 'No Recent Workouts',
+                        description:
+                            'Your completed workouts will appear here.',
+                      ),
+                      error: (_, __) => AppEmptyState.compact(
+                        icon: Icons.history,
+                        title: 'No Recent Workouts',
+                        description:
+                            'Your completed workouts will appear here.',
+                      ),
                     ),
 
                     const SizedBox(height: 32),
@@ -294,7 +441,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               context.push(AppRoutes.routines);
               break;
             case 2:
-              // TODO: Progress/Stats screen
+              context.push(AppRoutes.progress);
               break;
             case 3:
               context.push(AppRoutes.profile);
@@ -318,8 +465,222 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _onRefresh() async {
     ref.invalidate(isCoachProvider);
-    // TODO: Refresh data from server
-    await Future.delayed(const Duration(seconds: 1));
+    ref.invalidate(homeStatusProvider);
+    ref.invalidate(todayRoutineProvider);
+    ref.invalidate(activeTodayProvider);
+    ref.invalidate(weeklyStatsProvider);
+    ref.invalidate(recentActivityProvider);
+    ref.invalidate(hasSubscribedCoachProvider);
+    // Wait for the key providers to re-fetch
+    await Future.wait<void>([
+      ref.read(homeStatusProvider.future).then((_) {}),
+      ref.read(weeklyStatsProvider.future).then((_) {}),
+    ]);
+  }
+}
+
+/// CTA card shown when user has no subscribed coach (M-CL7).
+class _FindCoachCta extends StatelessWidget {
+  const _FindCoachCta({required this.isDark});
+
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: AppCard(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color:
+                          (isDark
+                                  ? AppColors.primaryDark
+                                  : AppColors.primaryLight)
+                              .withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.person_search,
+                      color: isDark
+                          ? AppColors.primaryDark
+                          : AppColors.primaryLight,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Find a Coach',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Get personalized workout programs from a certified coach to reach your fitness goals.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: AppButton.primary(
+                  label: 'Discover Coaches',
+                  icon: Icons.arrow_forward,
+                  onPressed: () => context.push(AppRoutes.discoverCoaches),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// CTA card shown when the user has a subscribed coach but no active
+/// subscription plan — prompts them to upgrade to unlock coach workouts.
+class _SubscriptionRequiredCta extends StatelessWidget {
+  const _SubscriptionRequiredCta({required this.isDark});
+
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: AppCard(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.workspace_premium,
+                      color: Colors.amber,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Unlock Coach Workouts',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Subscribe to receive personalised programs from your coach and track your progress together.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: AppButton.primary(
+                  label: 'View Plans',
+                  icon: Icons.workspace_premium_outlined,
+                  onPressed: () => showUpgradeSheet(
+                    context: context,
+                    requiredTier: 1,
+                    title: 'Subscribe to access coach workouts',
+                    description:
+                        'Get your personalised program delivered by a certified coach.',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Card shown when user has a coach but no program yet.
+class _WaitingForProgramCard extends StatelessWidget {
+  const _WaitingForProgramCard({required this.isDark});
+
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: AppCard(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.hourglass_top,
+                  color: Colors.orange,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Waiting for Program',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Your coach hasn\'t assigned a program yet. Check back soon!',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

@@ -11,6 +11,8 @@ import '../../../../providers/auth_state_provider.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../auth/data/models/user_model.dart';
+import '../../../home/presentation/screens/home_screen.dart'
+    show isCoachProvider;
 import '../../data/models/user_profile_model.dart';
 import '../providers/profile_provider.dart';
 import '../providers/user_profile_provider.dart';
@@ -83,6 +85,8 @@ class ProfileScreen extends ConsumerWidget {
     final fitnessProfileAsync = ref.watch(userProfileProvider);
     final canEdit = ref.watch(canEditProfileProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isCoachAsync = ref.watch(isCoachProvider);
+    final isCoach = isCoachAsync.asData?.value ?? false;
 
     return Scaffold(
       body: SafeArea(
@@ -97,6 +101,7 @@ class ProfileScreen extends ConsumerWidget {
               fitnessProfile: fitnessProfileAsync.value,
               canEdit: canEdit,
               isDark: isDark,
+              isCoach: isCoach,
             ),
             loading: () => const _ProfileLoading(),
             error: (error, _) => _ProfileError(
@@ -116,12 +121,14 @@ class _ProfileContent extends StatelessWidget {
     required this.fitnessProfile,
     required this.canEdit,
     required this.isDark,
+    this.isCoach = false,
   });
 
   final UserModel user;
   final UserProfileModel? fitnessProfile;
   final bool canEdit;
   final bool isDark;
+  final bool isCoach;
 
   @override
   Widget build(BuildContext context) {
@@ -238,6 +245,61 @@ class _ProfileContent extends StatelessWidget {
                         label: 'Member since',
                         value: memberSince,
                         isDark: isDark,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // ── Quick Navigation Links (M-CF1-5) ──────────────
+              _SectionHeader(title: 'Quick Links', isDark: isDark),
+              const SizedBox(height: 12),
+              AppCard(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  children: [
+                    _NavLinkTile(
+                      icon: Icons.history,
+                      title: 'Workout History',
+                      isDark: isDark,
+                      onTap: () => context.push(AppRoutes.workoutHistory),
+                    ),
+                    _divider(isDark),
+                    _NavLinkTile(
+                      icon: Icons.bar_chart,
+                      title: 'Progress & Stats',
+                      isDark: isDark,
+                      onTap: () => context.push(AppRoutes.progress),
+                    ),
+                    _divider(isDark),
+                    _NavLinkTile(
+                      icon: Icons.person_search,
+                      title: 'Find Coaches',
+                      isDark: isDark,
+                      onTap: () => context.push(AppRoutes.discoverCoaches),
+                    ),
+                    _divider(isDark),
+                    _NavLinkTile(
+                      icon: Icons.people,
+                      title: 'My Coaches',
+                      isDark: isDark,
+                      onTap: () => context.push(AppRoutes.subscribedCoaches),
+                    ),
+                    if (isCoach) ...[
+                      _divider(isDark),
+                      _NavLinkTile(
+                        icon: Icons.sports,
+                        title: 'Coach Tools',
+                        isDark: isDark,
+                        onTap: () => context.push(AppRoutes.coachHub),
+                      ),
+                      _divider(isDark),
+                      _NavLinkTile(
+                        icon: Icons.group,
+                        title: 'Client Roster',
+                        isDark: isDark,
+                        onTap: () => context.push(AppRoutes.coachRoster),
                       ),
                     ],
                   ],
@@ -719,6 +781,66 @@ class _ProfileError extends StatelessWidget {
       description: message,
       actionLabel: 'Retry',
       onAction: onRetry,
+    );
+  }
+}
+
+Widget _divider(bool isDark) {
+  return Divider(
+    height: 1,
+    thickness: 0.5,
+    indent: 56,
+    color: isDark ? AppColors.borderDark : AppColors.borderLight,
+  );
+}
+
+class _NavLinkTile extends StatelessWidget {
+  const _NavLinkTile({
+    required this.icon,
+    required this.title,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 22,
+              color: isDark
+                  ? AppColors.textSecondaryDark
+                  : AppColors.textSecondaryLight,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                title,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+              ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              size: 20,
+              color: isDark
+                  ? AppColors.textSecondaryDark
+                  : AppColors.textSecondaryLight,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
