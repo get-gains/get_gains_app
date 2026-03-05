@@ -10,18 +10,25 @@
 
 ### Technology Stack
 
-| Technology                 | Version | Purpose                  |
-| -------------------------- | ------- | ------------------------ |
-| **Flutter**                | 3.x     | UI framework             |
-| **Dart SDK**               | ^3.9.0  | Programming language     |
-| **Riverpod**               | ^3.0.3  | State management         |
-| **Drift**                  | ^2.29.0 | Local SQLite database    |
-| **Dio**                    | ^5.9.0  | HTTP client              |
-| **go_router**              | ^17.0.1 | Navigation               |
-| **flutter_secure_storage** | ^10.0.0 | Secure token storage     |
-| **google_sign_in**         | ^6.2.2  | Google OAuth             |
-| **hive**                   | ^2.2.3  | User preferences (NoSQL) |
-| **hive_flutter**           | ^1.1.0  | Flutter Hive integration |
+| Technology                       | Version | Purpose                          |
+| -------------------------------- | ------- | -------------------------------- |
+| **Flutter**                      | 3.x     | UI framework                     |
+| **Dart SDK**                     | ^3.9.0  | Programming language             |
+| **Riverpod**                     | ^3.0.3  | State management                 |
+| **Drift**                        | ^2.29.0 | Local SQLite database            |
+| **Dio**                          | ^5.9.0  | HTTP client                      |
+| **go_router**                    | ^17.0.1 | Navigation                       |
+| **flutter_secure_storage**       | ^10.0.0 | Secure token storage             |
+| **google_sign_in**               | ^6.2.2  | Google OAuth                     |
+| **hive**                         | ^2.2.3  | User preferences (NoSQL)         |
+| **hive_flutter**                 | ^1.1.0  | Flutter Hive integration         |
+| **camera**                       | ^0.11.3 | Pose recording camera preview    |
+| **google_mlkit_pose_detection**  | ^0.14.0 | On-device pose landmark ML       |
+| **flutter_embed_unity**          | ^1.4.0  | Unity 3D integration             |
+| **in_app_purchase**              | ^3.2.3  | App Store / Play Store billing   |
+| **app_links**                    | ^6.3.3  | Deep links (email verify / reset)|
+| **connectivity_plus**            | ^7.0.0  | Network connectivity monitoring  |
+| **sentry_flutter**               | ^9.11.0 | Error tracking & performance APM |
 
 ### Architecture Approach
 
@@ -34,19 +41,29 @@
 
 ## Documentation Structure
 
-| Document                                                               | Purpose                                                      |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------ |
-| [CONTEXT.md](CONTEXT.md)                                               | Core infrastructure, patterns, conventions                   |
-| [FEATURE_INDEX.md](FEATURE_INDEX.md)                                   | This file - navigation hub                                   |
-| [features/REGISTER.md](features/REGISTER.md)                           | Registration feature documentation                           |
-| [features/HOME.md](features/HOME.md)                                   | Home dashboard screen & widgets                              |
-| [features/POSE_DETECTION.md](features/POSE_DETECTION.md)               | Pose detection, form analysis, on-device ML                  |
-| [features/PROFILE.md](features/PROFILE.md)                             | Profile viewing and management documentation                 |
-| [features/PROGRAM.md](features/PROGRAM.md)                             | Coach programs, routines, exercises, assignments             |
-| [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md) | Coach discovery, settings & missing links data layer         |
-| [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md)   | Coaches & Subscription presentation layer (screens, routes)  |
-| [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md) | Coach client progress — sessions, stats, forms, presentation |
-| [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md)       | Standalone workout — exercises, routines, programs, sessions |
+| Document                                                                 | Purpose                                                      |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| [CONTEXT.md](CONTEXT.md)                                                 | Core infrastructure, patterns, conventions                   |
+| [FEATURE_INDEX.md](FEATURE_INDEX.md)                                     | This file - navigation hub                                   |
+| [DESIGN_STYLE.md](DESIGN_STYLE.md)                                       | Design system: colors, typography, spacing, patterns         |
+| [COMPONENTS_INDEX.md](COMPONENTS_INDEX.md)                               | Component library index (buttons, cards, inputs, layout)     |
+| [COMPONENTS_ARCHIVE.md](COMPONENTS_ARCHIVE.md)                           | Legacy component specs and implementation details            |
+| [features/REGISTER.md](features/REGISTER.md)                             | Registration feature documentation                           |
+| [features/AUTH_PRESENTATION.md](features/AUTH_PRESENTATION.md)           | Auth presentation screens (login, register, flows)           |
+| [features/VERIFY_RESET_FLOW.md](features/VERIFY_RESET_FLOW.md)           | Email verification + password reset deep link flows          |
+| [features/HOME.md](features/HOME.md)                                     | Home dashboard screen & widgets                              |
+| [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)               | Workout feature: routines, sessions, form recording          |
+| [features/POSE_DETECTION.md](features/POSE_DETECTION.md)                 | Pose detection, form analysis, on-device ML                  |
+| [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md)     | Coach exercise library + reference form recording            |
+| [features/CLIENT_POSE.md](features/CLIENT_POSE.md)                       | Client pose comparison + form review                         |
+| [features/PROFILE.md](features/PROFILE.md)                               | Profile viewing and management documentation                 |
+| [features/PROGRAM.md](features/PROGRAM.md)                               | Coach programs, routines, exercises, assignments             |
+| [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md)   | Coach discovery, settings & missing links data layer         |
+| [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md)     | Coaches & Subscription presentation layer (screens, routes)  |
+| [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md)   | Coach client progress — sessions, stats, forms, presentation |
+| [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md)         | Standalone workout — exercises, routines, programs, sessions |
+| [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                     | Subscription tiers, IAP, guards, upgrade prompts             |
+| [unity/SETUP.md](unity/SETUP.md)                                         | Unity integration setup for 3D pose flows                    |
 
 ---
 
@@ -138,6 +155,35 @@
 - `/lib/features/client_pose/presentation/screens/client_unity_recording_screen.dart` - 3D Unity screen
 - `/lib/features/client_pose/presentation/screens/view_form_screen.dart` - Reference form viewer
 - `/lib/features/client_pose/presentation/screens/client_recording_screen.dart` - Legacy 2D screen
+
+### Coach Pose Recording _(Documented in [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md))_
+
+| Feature                 | Description                                           | Status      | Documentation                                                  |
+| ----------------------- | ----------------------------------------------------- | ----------- | -------------------------------------------------------------- |
+| Exercise Library        | Browse/search/filter exercises for pose recording     | ✅ Complete | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md) |
+| Create Exercise         | Create new exercises with muscle groups & equipment   | ✅ Complete | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md) |
+| Exercise Detail         | View exercise info, active forms, and form history    | ✅ Complete | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md) |
+| Reference Form Recording| Record reference forms with camera + MLKit landmarks | ✅ Complete | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md) |
+| Pose Config             | Configure pose segments and tracking per exercise     | ✅ Complete | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md) |
+
+**Primary Files:**
+
+- `/lib/features/coach_pose/coach_pose.dart` - Feature barrel export
+- `/lib/features/coach_pose/data/coach_pose_repository.dart` - Exercise + form API calls
+- `/lib/features/coach_pose/data/models/exercise_form_model.dart` - Reference form models
+- `/lib/features/coach_pose/data/models/pose_config_model.dart` - Per-exercise pose configuration
+- `/lib/features/coach_pose/data/models/landmark_models.dart` - LandmarkPoint/LandmarkFrame models
+- `/lib/features/coach_pose/data/models/feature_frame_model.dart` - Feature frame models for DTW
+- `/lib/features/coach_pose/services/pose_detection_service.dart` - MLKit pose detection wrapper
+- `/lib/features/coach_pose/services/setup_validation_service.dart` - Recording setup validation
+- `/lib/features/coach_pose/presentation/providers/exercise_list_provider.dart` - Exercise list state
+- `/lib/features/coach_pose/presentation/providers/create_exercise_provider.dart` - Create exercise state
+- `/lib/features/coach_pose/presentation/providers/exercise_detail_provider.dart` - Detail + forms
+- `/lib/features/coach_pose/presentation/providers/form_recording_provider.dart` - Recording state machine
+- `/lib/features/coach_pose/presentation/screens/exercise_list_screen.dart` - Exercise list screen
+- `/lib/features/coach_pose/presentation/screens/create_exercise_screen.dart` - Create exercise screen
+- `/lib/features/coach_pose/presentation/screens/exercise_detail_screen.dart` - Exercise detail screen
+- `/lib/features/coach_pose/presentation/screens/form_recording_screen.dart` - Reference form recording screen
 
 ### Pose Detection & Form Analysis _(Documented in [features/POSE_DETECTION.md](features/POSE_DETECTION.md))_
 
@@ -303,6 +349,29 @@ Coach-facing endpoints for viewing client workout data, progress metrics, and fo
 - `/lib/features/workout/data/models/workout_history_model.dart` - Session history + pagination models
 - `/lib/services/sync/workout_sync_service.dart` - Dedicated workout sync with correct endpoint mapping
 
+### Workout Presentation _(Documented in [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md))_
+
+| Feature                | Description                                                              | Status      | Documentation                                        |
+| ---------------------- | ------------------------------------------------------------------------ | ----------- | ---------------------------------------------------- |
+| Routine List Screen    | List available workout routines with summaries                           | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md) |
+| Routine Detail Screen  | Show routine exercises and start workout entrypoint                     | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md) |
+| Workout Session Screen | Active workout logging (sets, reps, weight, navigation between exercises)| ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md) |
+| Workout History Screen | Paginated history of completed workout sessions                         | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md) |
+| Progress / Stats       | Weekly stats, summary grid, recent workouts                             | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md) |
+
+**Primary Files (Presentation):**
+
+- `/lib/features/workout/presentation/providers/workout_session_provider.dart` - Workout session state
+- `/lib/features/workout/presentation/providers/exercise_log_provider.dart` - Per-exercise set logging
+- `/lib/features/workout/presentation/screens/routine_list_screen.dart` - Routine list UI
+- `/lib/features/workout/presentation/screens/routine_detail_screen.dart` - Routine detail UI
+- `/lib/features/workout/presentation/screens/workout_session_screen.dart` - Active workout UI
+- `/lib/features/workout/presentation/screens/workout_history_screen.dart` - Workout history UI
+- `/lib/features/workout/presentation/screens/progress_screen.dart` - Progress & stats UI
+- `/lib/features/workout/presentation/widgets/exercise_tab_bar.dart` - Exercise navigation tabs
+- `/lib/features/workout/presentation/widgets/exercise_log_card.dart` - Exercise + sets card
+- `/lib/features/workout/presentation/widgets/set_input_row.dart` - Set input row with controls
+
 ---
 
 ## App Routes Summary
@@ -342,8 +411,12 @@ Coach-facing endpoints for viewing client workout data, progress metrics, and fo
 ### How to Navigate Documentation
 
 1. **New to the codebase?** Start with [CONTEXT.md](CONTEXT.md) for patterns
-2. **Working on auth?** See [features/REGISTER.md](features/REGISTER.md)
-3. **Adding a new feature?** Follow the folder structure in CONTEXT.md
+2. **Working on auth?** See [features/AUTH_PRESENTATION.md](features/AUTH_PRESENTATION.md) and [features/VERIFY_RESET_FLOW.md](features/VERIFY_RESET_FLOW.md)
+3. **Working on workout flows?** See [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)
+4. **Working on subscription or paywalls?** See [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)
+5. **Working on pose features?** See [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md) and [features/CLIENT_POSE.md](features/CLIENT_POSE.md)
+6. **Design or components?** See [DESIGN_STYLE.md](DESIGN_STYLE.md) and [COMPONENTS_INDEX.md](COMPONENTS_INDEX.md)
+7. **Adding a new feature?** Follow the folder structure in CONTEXT.md
 
 ### Common Workflows
 
@@ -410,23 +483,30 @@ ref.read(registerNotifierProvider.notifier).registerWithEmailPassword(
 
 ### Where to Find Information
 
-| Looking for...        | Go to...                                                                    |
-| --------------------- | --------------------------------------------------------------------------- |
-| Project architecture  | [CONTEXT.md](CONTEXT.md)                                                    |
-| Creating providers    | [CONTEXT.md](CONTEXT.md) → Creating Riverpod Providers                      |
-| Data models           | [CONTEXT.md](CONTEXT.md) → Creating Models                                  |
-| API calls             | [CONTEXT.md](CONTEXT.md) → Making API Calls                                 |
-| Error handling        | [CONTEXT.md](CONTEXT.md) → Using Result Type                                |
-| Home dashboard        | [features/HOME.md](features/HOME.md)                                        |
-| Client pose recording | [features/CLIENT_POSE.md](features/CLIENT_POSE.md)                          |
-| Reference form source | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) → Reference Form Source  |
-| Unity 3D skeleton     | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) → Unity Message Contract |
-| Registration flow     | [features/REGISTER.md](features/REGISTER.md)                                |
-| Google sign-in        | [features/REGISTER.md](features/REGISTER.md) → Google Sign-Up Flow          |
-| Route guards          | [features/REGISTER.md](features/REGISTER.md) → Router Guard                 |
-| Profile viewing       | [features/PROFILE.md](features/PROFILE.md)                                  |
-| Profile editing plan  | [features/PROFILE.md](features/PROFILE.md) → Future Enhancements            |
-| Server endpoints      | [Server AUTH.md](../../get-gains-server/docs/features/AUTH.md)              |
+| Looking for...              | Go to...                                                                    |
+| --------------------------- | --------------------------------------------------------------------------- |
+| Project architecture        | [CONTEXT.md](CONTEXT.md)                                                    |
+| Creating providers          | [CONTEXT.md](CONTEXT.md) → Creating Riverpod Providers                      |
+| Data models                 | [CONTEXT.md](CONTEXT.md) → Creating Models                                  |
+| API calls                   | [CONTEXT.md](CONTEXT.md) → Making API Calls                                 |
+| Error handling              | [CONTEXT.md](CONTEXT.md) → Using Result Type                                |
+| Design system               | [DESIGN_STYLE.md](DESIGN_STYLE.md)                                          |
+| Component library           | [COMPONENTS_INDEX.md](COMPONENTS_INDEX.md)                                  |
+| Home dashboard              | [features/HOME.md](features/HOME.md)                                        |
+| Client pose recording       | [features/CLIENT_POSE.md](features/CLIENT_POSE.md)                          |
+| Reference form source       | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) → Reference Form Source  |
+| Unity 3D skeleton           | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) → Unity Message Contract |
+| Coach pose recording (ML)   | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md)        |
+| Workout feature (sessions)  | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)                  |
+| Standalone workout feature  | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md)            |
+| Email verify / reset flows  | [features/VERIFY_RESET_FLOW.md](features/VERIFY_RESET_FLOW.md)              |
+| Registration flow           | [features/REGISTER.md](features/REGISTER.md)                                |
+| Google sign-in              | [features/REGISTER.md](features/REGISTER.md) → Google Sign-Up Flow          |
+| Route guards                | [features/AUTH_PRESENTATION.md](features/AUTH_PRESENTATION.md) → Router Guard |
+| Subscription & paywalls     | [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                        |
+| Profile viewing             | [features/PROFILE.md](features/PROFILE.md)                                  |
+| Profile editing plan        | [features/PROFILE.md](features/PROFILE.md) → Future Enhancements            |
+| Server endpoints            | [Server AUTH.md](../../get-gains-server/docs/features/AUTH.md)              |
 
 ---
 
@@ -470,53 +550,48 @@ features/*.md        → Domain-specific feature documentation
 
 ```
 lib/
-├── core/                           # App-wide utilities
+├── core/                                   # App-wide utilities
 │   ├── constants/
-│   │   ├── api_constants.dart      # API endpoints
-│   │   └── storage_keys.dart       # Storage keys
+│   │   ├── api_constants.dart              # API endpoints
+│   │   └── storage_keys.dart               # Storage keys
 │   ├── utils/
-│   │   ├── app_error.dart          # Error types
-│   │   ├── logger.dart             # Logging
-│   │   └── result.dart             # Result type
-│   └── theme/                      # Theming
+│   │   ├── app_error.dart                  # Error types
+│   │   ├── logger.dart                     # Logging
+│   │   └── result.dart                     # Result type
+│   └── theme/                              # Theming
 ├── features/
-│   ├── home/
-│   │   ├── home.dart               # Feature export
-│   │   └── presentation/
-│   │       ├── screens/
-│   │       │   └── home_screen.dart
-│   │       └── widgets/
-│   │           ├── quick_action_card.dart
-│   │           ├── weekly_progress_card.dart
-│   │           └── workout_summary_card.dart
-│   └── auth/
-│       ├── auth.dart               # Feature export
-│       ├── data/
-│       │   ├── auth_repository.dart
-│       │   └── models/
-│       │       ├── auth_request_models.dart
-│       │       ├── auth_response_models.dart
-│       │       └── user_model.dart
-│       ├── presentation/
-│       │   └── providers/
-│       │       └── register_provider.dart
-│       └── services/
-│           ├── google_sign_in_service.dart
-│           └── user_preferences_service.dart
+│   ├── home/                               # Home dashboard
+│   ├── auth/                               # Auth data + presentation
+│   ├── profile/                            # Profile & fitness profile
+│   ├── workout/                            # Workout routines & sessions
+│   ├── standalone_workout/                 # Standalone workout feature
+│   ├── coaches/                            # Coach discovery (client-facing)
+│   ├── coach_programs/                     # Coach programs, routines, roster
+│   ├── coach_settings/                     # Coach capacity/settings
+│   ├── coach_pose/                         # Coach pose recording tools
+│   ├── client_pose/                        # Client pose comparison
+│   ├── coach_client_progress/              # Coach client progress dashboards
+│   ├── subscription/                       # Subscription & in-app purchases
+│   ├── unity/                              # Unity integration (test screen)
+│   └── programs/                           # Legacy client programs (calendar)
+├── widgets/                                # Shared UI components (buttons, cards, etc.)
 ├── providers/
-│   ├── auth_state_provider.dart    # App-wide auth state
-│   └── router_provider.dart        # Navigation + guards
+│   ├── auth_state_provider.dart            # App-wide auth state
+│   ├── router_provider.dart                # Navigation + guards
+│   └── deep_link_provider.dart             # Deep link handling (verify/reset)
 ├── services/
 │   ├── api/
-│   │   ├── api_client.dart         # Dio HTTP client
-│   │   └── interceptors.dart       # Auth, retry, logging
-│   ├── database/                   # Drift SQLite
+│   │   ├── api_client.dart                 # Dio HTTP client
+│   │   └── interceptors.dart               # Auth, retry, logging
+│   ├── database/                           # Drift SQLite (AppDatabase)
 │   ├── storage/
-│   │   └── secure_storage_service.dart  # JWT tokens
-│   └── sync/                       # Sync queue
-└── main.dart
+│   │   └── secure_storage_service.dart     # JWT tokens
+│   ├── connectivity/                       # ConnectivityService
+│   ├── sync/                               # SyncService & WorkoutSyncService
+│   └── program_service.dart                # Legacy programs service
+└── main.dart                               # App entrypoint (ProviderScope, Sentry, Hive)
 ```
 
 ---
 
-_Last updated: March 1, 2026_
+_Last updated: March 5, 2026_
