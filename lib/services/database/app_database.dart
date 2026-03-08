@@ -423,8 +423,60 @@ class AppDatabase extends _$AppDatabase {
   /// Get active (in-progress) workout session
   Future<WorkoutSession?> getActiveWorkoutSession(String userId) {
     return (select(workoutSessions)
-          ..where((ws) => ws.userId.equals(userId) & ws.completedAt.isNull()))
+          ..where((ws) => ws.userId.equals(userId) & ws.completedAt.isNull())
+          ..orderBy([(ws) => OrderingTerm.desc(ws.startedAt)])
+          ..limit(1))
         .getSingleOrNull();
+  }
+
+  /// Get today's completed session for a specific routine
+  Future<WorkoutSession?> getTodayCompletedSessionForRoutine(
+    String userId,
+    int routineId,
+  ) {
+    final todayStart = DateTime.now().copyWith(
+      hour: 0,
+      minute: 0,
+      second: 0,
+      millisecond: 0,
+    );
+    return (select(workoutSessions)
+          ..where(
+            (ws) =>
+                ws.userId.equals(userId) &
+                ws.routineId.equals(routineId) &
+                ws.completedAt.isNotNull() &
+                ws.completedAt.isBiggerOrEqualValue(todayStart),
+          )
+          ..orderBy([(ws) => OrderingTerm.desc(ws.completedAt)])
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  /// Get completed workout sessions for a user (paginated)
+  Future<List<WorkoutSession>> getCompletedSessions(
+    String userId, {
+    int limit = 20,
+    int offset = 0,
+  }) {
+    return (select(workoutSessions)
+          ..where((ws) => ws.userId.equals(userId) & ws.completedAt.isNotNull())
+          ..orderBy([(ws) => OrderingTerm.desc(ws.startedAt)])
+          ..limit(limit, offset: offset))
+        .get();
+  }
+
+  /// Count completed workout sessions for a user
+  Future<int> countCompletedSessions(String userId) async {
+    final countExp = countAll();
+    final query = selectOnly(workoutSessions)
+      ..addColumns([countExp])
+      ..where(
+        workoutSessions.userId.equals(userId) &
+            workoutSessions.completedAt.isNotNull(),
+      );
+    final result = await query.getSingle();
+    return result.read(countExp) ?? 0;
   }
 
   /// Get workout session by ID
@@ -462,6 +514,17 @@ class AppDatabase extends _$AppDatabase {
   /// Delete workout session
   Future<int> deleteWorkoutSession(int id) {
     return (delete(workoutSessions)..where((ws) => ws.id.equals(id))).go();
+  }
+
+  /// Delete completed sessions older than [days] days (and their sets)
+  Future<int> deleteOldCompletedSessions({int days = 7}) async {
+    final cutoff = DateTime.now().subtract(Duration(days: days));
+    return (delete(workoutSessions)..where(
+          (ws) =>
+              ws.completedAt.isNotNull() &
+              ws.completedAt.isSmallerThanValue(cutoff),
+        ))
+        .go();
   }
 
   /// Update remoteId for a synced workout session
