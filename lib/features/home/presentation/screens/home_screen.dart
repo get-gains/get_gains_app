@@ -270,7 +270,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           case HomeStatus.noCoach:
                             return _FindCoachCta(isDark: isDark);
                           case HomeStatus.noSubscription:
-                            return _SubscriptionRequiredCta(isDark: isDark);
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 24),
+                              child: SubscriptionGatedWidget(
+                                requiredTier: SubscriptionTiers.basic,
+                                feature: SubscriptionFeature.coachWorkout,
+                                child: const SizedBox.shrink(),
+                              ),
+                            );
                           case HomeStatus.waitingForProgram:
                             return _WaitingForProgramCard(isDark: isDark);
                           case HomeStatus.restDay:
@@ -542,80 +549,6 @@ class _FindCoachCta extends StatelessWidget {
                   label: 'Discover Coaches',
                   icon: Icons.arrow_forward,
                   onPressed: () => context.push(AppRoutes.discoverCoaches),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// CTA card shown when the user has a subscribed coach but no active
-/// subscription plan — prompts them to upgrade to unlock coach workouts.
-class _SubscriptionRequiredCta extends StatelessWidget {
-  const _SubscriptionRequiredCta({required this.isDark});
-
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
-      child: AppCard(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.workspace_premium,
-                      color: Colors.amber,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Unlock Coach Workouts',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Subscribe to receive personalised programs from your coach and track your progress together.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight,
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: AppButton.primary(
-                  label: 'View Plans',
-                  icon: Icons.workspace_premium_outlined,
-                  onPressed: () => showUpgradeSheet(
-                    context: context,
-                    requiredTier: 1,
-                    title: 'Subscribe to access coach workouts',
-                    description:
-                        'Get your personalised program delivered by a certified coach.',
-                  ),
                 ),
               ),
             ],

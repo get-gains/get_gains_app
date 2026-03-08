@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_error.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../subscription/subscription.dart';
 import '../../data/models/coach_model.dart';
 import '../providers/coach_profile_provider.dart';
 import '../providers/subscribed_coaches_provider.dart';
@@ -343,7 +344,23 @@ class _CoachProfileScreenState extends ConsumerState<CoachProfileScreen> {
           }
         }
       } else {
-        // Subscribe — server enforces ML-2 (subscription) and ML-5 (capacity)
+        // Proactive subscription check — show upgrade prompt instead of
+        // relying on server 403 with a vague error toast (US2 / T026).
+        final guard = ref.read(subscriptionGuardProvider);
+        final canAccess = await guard.requireTier(
+          SubscriptionTiers.basic,
+          onDenied: (_) {
+            if (mounted) {
+              showUpgradeSheet(
+                context: context,
+                feature: SubscriptionFeature.coachAccess,
+              );
+            }
+          },
+        );
+        if (!canAccess) return;
+
+        // Subscribe — server still enforces ML-2 + ML-5 as fallback
         final success = await ref
             .read(subscribedCoachesProvider.notifier)
             .subscribeToCoach(widget.coachId);
@@ -353,8 +370,8 @@ class _CoachProfileScreenState extends ConsumerState<CoachProfileScreen> {
           } else {
             AppToast.error(
               context,
-              'Could not subscribe. You may need an active subscription, '
-              'or the coach may not be accepting new clients.',
+              'Could not subscribe. The coach may not be accepting new '
+              'clients right now.',
             );
           }
         }
