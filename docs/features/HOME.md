@@ -1,7 +1,7 @@
 # Home Feature Documentation
 
 > **Created**: February 18, 2026
-> **Updated**: February 25, 2026 — Data layer for all home dashboard providers
+> **Updated**: March 9, 2026 — `completedToday` flag on WorkoutSummaryCard
 > **Status**: Data layer complete; presentation wiring next
 
 ---
@@ -138,15 +138,16 @@ WorkoutSummaryCard(
 )
 ```
 
-| Property           | Type            | Required | Default | Description                                             |
-| ------------------ | --------------- | -------- | ------- | ------------------------------------------------------- |
-| `routineName`      | `String`        | ✅       | —       | Routine title                                           |
-| `description`      | `String`        | ✅       | —       | Short description                                       |
-| `exerciseCount`    | `int`           | ✅       | —       | Number of exercises                                     |
-| `estimatedMinutes` | `int`           | ✅       | —       | Duration estimate                                       |
-| `isPlaceholder`    | `bool`          | ❌       | `false` | Renders placeholder state (hourglass icon, hides stats) |
-| `muscleGroups`     | `List<String>`  | ❌       | `[]`    | Muscle group chip list                                  |
-| `onStartPressed`   | `VoidCallback?` | ❌       | `null`  | Start button action                                     |
+| Property           | Type            | Required | Default | Description                                                          |
+| ------------------ | --------------- | -------- | ------- | -------------------------------------------------------------------- |
+| `routineName`      | `String`        | ✅       | —       | Routine title                                                        |
+| `description`      | `String`        | ✅       | —       | Short description                                                    |
+| `exerciseCount`    | `int`           | ✅       | —       | Number of exercises                                                  |
+| `estimatedMinutes` | `int`           | ✅       | —       | Duration estimate                                                    |
+| `isPlaceholder`    | `bool`          | ❌       | `false` | Renders placeholder state (hourglass icon, hides stats)              |
+| `completedToday`   | `bool`          | ❌       | `false` | When true, shows "Workout Done Today ✓" disabled button instead of Start |
+| `muscleGroups`     | `List<String>`  | ❌       | `[]`    | Muscle group chip list                                               |
+| `onStartPressed`   | `VoidCallback?` | ❌       | `null`  | Start button action                                                  |
 
 ---
 
