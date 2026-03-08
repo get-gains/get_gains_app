@@ -78,6 +78,9 @@ class ApiConstants {
   // Unified Stats Endpoints
   static const String unifiedWeeklyStats = '/stats/weekly';
 
+  // Unified Session History Endpoints
+  static const String unifiedSessionHistory = '/sessions/history';
+
   // Coach Discovery Endpoints (Client-Facing)
   static const String discoverCoaches = '/user/coaches';
   static const String subscribedCoaches = '/user/coaches/subscribed';
