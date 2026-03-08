@@ -34,19 +34,20 @@
 
 ## Documentation Structure
 
-| Document                                                               | Purpose                                                      |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------ |
-| [CONTEXT.md](CONTEXT.md)                                               | Core infrastructure, patterns, conventions                   |
-| [FEATURE_INDEX.md](FEATURE_INDEX.md)                                   | This file - navigation hub                                   |
-| [features/REGISTER.md](features/REGISTER.md)                           | Registration feature documentation                           |
-| [features/HOME.md](features/HOME.md)                                   | Home dashboard screen & widgets                              |
-| [features/POSE_DETECTION.md](features/POSE_DETECTION.md)               | Pose detection, form analysis, on-device ML                  |
-| [features/PROFILE.md](features/PROFILE.md)                             | Profile viewing and management documentation                 |
-| [features/PROGRAM.md](features/PROGRAM.md)                             | Coach programs, routines, exercises, assignments             |
-| [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md) | Coach discovery, settings & missing links data layer         |
-| [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md)   | Coaches & Subscription presentation layer (screens, routes)  |
-| [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md) | Coach client progress — sessions, stats, forms, presentation |
-| [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md)       | Standalone workout — exercises, routines, programs, sessions |
+| Document                                                                     | Purpose                                                               |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| [CONTEXT.md](CONTEXT.md)                                                     | Core infrastructure, patterns, conventions                            |
+| [FEATURE_INDEX.md](FEATURE_INDEX.md)                                         | This file - navigation hub                                            |
+| [features/REGISTER.md](features/REGISTER.md)                                 | Registration feature documentation                                    |
+| [features/HOME.md](features/HOME.md)                                         | Home dashboard screen & widgets                                       |
+| [features/POSE_DETECTION.md](features/POSE_DETECTION.md)                     | Pose detection, form analysis, on-device ML                           |
+| [features/PROFILE.md](features/PROFILE.md)                                   | Profile viewing and management documentation                          |
+| [features/PROGRAM.md](features/PROGRAM.md)                                   | Coach programs, routines, exercises, assignments                      |
+| [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md)       | Coach discovery, settings & missing links data layer                  |
+| [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md)         | Coaches & Subscription presentation layer (screens, routes)           |
+| [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md)       | Coach client progress — sessions, stats, forms, presentation          |
+| [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md)             | Standalone workout — exercises, routines, programs, sessions          |
+| [features/SUBSCRIPTION_DEFINITIONS.md](features/SUBSCRIPTION_DEFINITIONS.md) | Subscription-aware stats, session history, upgrade prompts, UI gating |
 
 ---
 
