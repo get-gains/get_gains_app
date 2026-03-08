@@ -921,6 +921,64 @@ class WorkoutRepository {
     );
   }
 
+  /// Fetch unified weekly stats from the new source-aware endpoint.
+  ///
+  /// Calls `GET /api/stats/weekly` with an optional `weekOf` date.
+  /// Returns combined totals and per-source breakdowns (standalone / coach).
+  /// Free users receive standalone-only sources; subscribed users see both.
+  Future<Result<UnifiedWeeklyStats, AppError>> getUnifiedWeeklyStats({
+    DateTime? weekOf,
+  }) async {
+    AppLogger.debug(
+      'Fetching unified weekly stats from server',
+      tag: 'WorkoutRepo',
+    );
+
+    final queryParams = <String, dynamic>{
+      if (weekOf != null) 'weekOf': weekOf.toIso8601String(),
+    };
+
+    final result = await _apiClient.get<Map<String, dynamic>>(
+      ApiConstants.unifiedWeeklyStats,
+      queryParameters: queryParams.isNotEmpty ? queryParams : null,
+    );
+
+    return result.when(
+      success: (data) {
+        try {
+          final model = UnifiedWeeklyStats.fromJson(data);
+          AppLogger.info(
+            'Unified weekly stats: ${model.workoutsCompleted} workouts, '
+            '${model.totalMinutes}min, ${model.streakDays} streak, '
+            '${model.sources.length} sources',
+            tag: 'WorkoutRepo',
+          );
+          return Success(model);
+        } catch (e) {
+          AppLogger.error(
+            'Failed to parse unified weekly stats',
+            tag: 'WorkoutRepo',
+            error: e,
+          );
+          return Failure(
+            UnknownError(
+              message: 'Failed to parse unified weekly stats: $e',
+              originalError: e,
+            ),
+          );
+        }
+      },
+      failure: (error) {
+        AppLogger.error(
+          'Failed to fetch unified weekly stats',
+          tag: 'WorkoutRepo',
+          error: error,
+        );
+        return Failure(error);
+      },
+    );
+  }
+
   /// Fetch paginated workout session history from the server.
   ///
   /// Calls `GET /api/workout/sessions` with pagination and optional

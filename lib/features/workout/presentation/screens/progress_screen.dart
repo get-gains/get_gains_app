@@ -23,16 +23,16 @@ class ProgressScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final weeklyAsync = ref.watch(weeklyStatsProvider);
+    final weeklyAsync = ref.watch(unifiedWeeklyStatsProvider);
     final recentAsync = ref.watch(recentActivityProvider);
 
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(weeklyStatsProvider);
+            ref.invalidate(unifiedWeeklyStatsProvider);
             ref.invalidate(recentActivityProvider);
-            await ref.read(weeklyStatsProvider.future);
+            await ref.read(unifiedWeeklyStatsProvider.future);
           },
           child: CustomScrollView(
             slivers: [
@@ -75,7 +75,8 @@ class ProgressScreen extends ConsumerWidget {
                           child: AppErrorState(
                             title: 'Could not load stats',
                             description: '$error',
-                            onRetry: () => ref.invalidate(weeklyStatsProvider),
+                            onRetry: () =>
+                                ref.invalidate(unifiedWeeklyStatsProvider),
                           ),
                         ),
                       ),
@@ -86,6 +87,26 @@ class ProgressScreen extends ConsumerWidget {
                     weeklyAsync.when(
                       data: (stats) =>
                           _SummaryStatsCard(stats: stats, isDark: isDark),
+                      loading: () => const SizedBox.shrink(),
+                      error: (_, __) => const SizedBox.shrink(),
+                    ),
+
+                    // ── Per-Source Breakdown ─────────────────────
+                    weeklyAsync.when(
+                      data: (stats) => stats.sources.isNotEmpty
+                          ? _SourceBreakdownSection(
+                              stats: stats,
+                              isDark: isDark,
+                            )
+                          : const SizedBox.shrink(),
+                      loading: () => const SizedBox.shrink(),
+                      error: (_, __) => const SizedBox.shrink(),
+                    ),
+
+                    // ── Empty State Encouragement ────────────────
+                    weeklyAsync.when(
+                      data: (stats) =>
+                          _StatsEmptyState(stats: stats, isDark: isDark),
                       loading: () => const SizedBox.shrink(),
                       error: (_, __) => const SizedBox.shrink(),
                     ),
@@ -179,7 +200,7 @@ class _SectionHeader extends StatelessWidget {
 class _SummaryStatsCard extends StatelessWidget {
   const _SummaryStatsCard({required this.stats, required this.isDark});
 
-  final WeeklyStatsModel stats;
+  final UnifiedWeeklyStats stats;
   final bool isDark;
 
   @override
@@ -253,6 +274,152 @@ class _SummaryStatsCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Displays per-source breakdown when multiple sources exist.
+class _SourceBreakdownSection extends StatelessWidget {
+  const _SourceBreakdownSection({required this.stats, required this.isDark});
+
+  final UnifiedWeeklyStats stats;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 24),
+        _SectionHeader(title: 'By Source', isDark: isDark),
+        const SizedBox(height: 12),
+        ...stats.sources.map(
+          (source) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _SourceCard(source: source, isDark: isDark),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Card showing stats for a single source (standalone or coach).
+class _SourceCard extends StatelessWidget {
+  const _SourceCard({required this.source, required this.isDark});
+
+  final SourceStats source;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final isCoach = source.type == 'coach';
+    final labelColor = isCoach
+        ? (isDark ? AppColors.primaryDark : AppColors.primaryLight)
+        : (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight);
+
+    return AppCard(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: labelColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    source.sourceLabel,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: labelColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (isCoach && source.programName != null) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      source.programName!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _MiniStat(
+                  label: 'Workouts',
+                  value: '${source.workoutsCompleted}',
+                  isDark: isDark,
+                ),
+                const SizedBox(width: 24),
+                _MiniStat(
+                  label: 'Time',
+                  value: source.totalTimeDisplay,
+                  isDark: isDark,
+                ),
+                const SizedBox(width: 24),
+                _MiniStat(
+                  label: 'Streak',
+                  value: '${source.streakDays}d',
+                  isDark: isDark,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact stat display for source breakdown cards.
+class _MiniStat extends StatelessWidget {
+  const _MiniStat({
+    required this.label,
+    required this.value,
+    required this.isDark,
+  });
+
+  final String label;
+  final String value;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          value,
+          style: Theme.of(
+            context,
+          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: isDark
+                ? AppColors.textSecondaryDark
+                : AppColors.textSecondaryLight,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -452,6 +619,35 @@ class _StatsLoadingSkeleton extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Contextual empty state encouragement based on source availability.
+///
+/// - Both sources empty → general "Start a Workout" CTA
+/// - No standalone sessions → "Start a Workout" encouragement
+/// - No coach sessions (subscribed user) → "Start a Coach Program" message
+class _StatsEmptyState extends StatelessWidget {
+  const _StatsEmptyState({required this.stats, required this.isDark});
+
+  final UnifiedWeeklyStats stats;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    // If user has activity, no empty state needed
+    if (stats.hasActivity) return const SizedBox.shrink();
+
+    // Both sources empty — general encouragement
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: AppEmptyState.compact(
+        icon: Icons.fitness_center,
+        title: 'No Workouts This Week',
+        description:
+            'Start a workout to track your progress and build streaks!',
       ),
     );
   }
