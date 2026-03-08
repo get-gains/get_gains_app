@@ -92,7 +92,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final isCoachAsync = ref.watch(isCoachProvider);
     final homeStatusAsync = ref.watch(homeStatusProvider);
     final todayAsync = ref.watch(activeTodayProvider);
-    final weeklyAsync = ref.watch(weeklyStatsProvider);
+    final weeklyAsync = ref.watch(unifiedWeeklyStatsProvider);
     final recentAsync = ref.watch(recentActivityProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Extract name from email or use default
@@ -468,13 +468,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     ref.invalidate(homeStatusProvider);
     ref.invalidate(todayRoutineProvider);
     ref.invalidate(activeTodayProvider);
-    ref.invalidate(weeklyStatsProvider);
+    ref.invalidate(unifiedWeeklyStatsProvider);
     ref.invalidate(recentActivityProvider);
     ref.invalidate(hasSubscribedCoachProvider);
     // Wait for the key providers to re-fetch
     await Future.wait<void>([
       ref.read(homeStatusProvider.future).then((_) {}),
-      ref.read(weeklyStatsProvider.future).then((_) {}),
+      ref.read(unifiedWeeklyStatsProvider.future).then((_) {}),
     ]);
   }
 }
