@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../subscription/subscription.dart';
 import '../../data/models/models.dart';
 import '../../data/workout_repository.dart';
 
@@ -60,52 +61,56 @@ class _RoutineListScreenState extends ConsumerState<RoutineListScreen> {
           ? AppColors.backgroundDark
           : AppColors.backgroundLight,
       appBar: AppBar(title: const Text('Routines'), centerTitle: true),
-      body: FutureBuilder<List<RoutineModel>>(
-        future: _routinesFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: SubscriptionGatedWidget(
+        requiredTier: SubscriptionTiers.basic,
+        feature: SubscriptionFeature.coachRoutines,
+        child: FutureBuilder<List<RoutineModel>>(
+          future: _routinesFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-          final routines = snapshot.data ?? [];
+            final routines = snapshot.data ?? [];
 
-          if (routines.isEmpty) {
-            return Center(
-              child: AppEmptyState(
-                icon: Icons.fitness_center,
-                title: 'No Routines',
-                description:
-                    'You don\'t have any routines yet.\n'
-                    'Routines will appear here when assigned by your coach.',
-                actionLabel: 'Refresh',
-                onAction: () {
-                  setState(() {
-                    _loadRoutines();
-                  });
+            if (routines.isEmpty) {
+              return Center(
+                child: AppEmptyState(
+                  icon: Icons.fitness_center,
+                  title: 'No Routines',
+                  description:
+                      'You don\'t have any routines yet.\n'
+                      'Routines will appear here when assigned by your coach.',
+                  actionLabel: 'Refresh',
+                  onAction: () {
+                    setState(() {
+                      _loadRoutines();
+                    });
+                  },
+                ),
+              );
+            }
+
+            return RefreshIndicator(
+              onRefresh: () async {
+                setState(() {
+                  _loadRoutines();
+                });
+              },
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: routines.length,
+                itemBuilder: (context, index) {
+                  final routine = routines[index];
+                  return _RoutineCard(
+                    routine: routine,
+                    onTap: () => _openRoutineDetail(routine),
+                  );
                 },
               ),
             );
-          }
-
-          return RefreshIndicator(
-            onRefresh: () async {
-              setState(() {
-                _loadRoutines();
-              });
-            },
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: routines.length,
-              itemBuilder: (context, index) {
-                final routine = routines[index];
-                return _RoutineCard(
-                  routine: routine,
-                  onTap: () => _openRoutineDetail(routine),
-                );
-              },
-            ),
-          );
-        },
+          },
+        ),
       ),
     );
   }
