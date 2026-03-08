@@ -1207,6 +1207,72 @@ class WorkoutRepository {
       },
     );
   }
+
+  /// Fetch unified session history with source metadata.
+  ///
+  /// Calls `GET /api/sessions/history` with optional source filter
+  /// and pagination. Returns sessions with source badges ("standalone"
+  /// or "coach"), program names, and coach names.
+  ///
+  /// All sessions are returned regardless of subscription status —
+  /// coach session history is never gated (user's own training data).
+  Future<Result<UnifiedSessionHistoryResponse, AppError>>
+  getUnifiedSessionHistory({
+    String source = 'all',
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    AppLogger.debug(
+      'Fetching unified session history: source=$source, '
+      'limit=$limit, offset=$offset',
+      tag: 'WorkoutRepo',
+    );
+
+    final queryParams = <String, dynamic>{
+      'source': source,
+      'limit': limit,
+      'offset': offset,
+    };
+
+    final result = await _apiClient.get<Map<String, dynamic>>(
+      ApiConstants.unifiedSessionHistory,
+      queryParameters: queryParams,
+    );
+
+    return result.when(
+      success: (data) {
+        try {
+          final response = UnifiedSessionHistoryResponse.fromJson(data);
+          AppLogger.info(
+            'Fetched ${response.sessions.length} unified sessions '
+            '(total: ${response.pagination.total}, source: $source)',
+            tag: 'WorkoutRepo',
+          );
+          return Success(response);
+        } catch (e) {
+          AppLogger.error(
+            'Failed to parse unified session history',
+            tag: 'WorkoutRepo',
+            error: e,
+          );
+          return Failure(
+            UnknownError(
+              message: 'Failed to parse unified session history: $e',
+              originalError: e,
+            ),
+          );
+        }
+      },
+      failure: (error) {
+        AppLogger.error(
+          'Failed to fetch unified session history',
+          tag: 'WorkoutRepo',
+          error: error,
+        );
+        return Failure(error);
+      },
+    );
+  }
 }
 
 /// Provider for WorkoutRepository
