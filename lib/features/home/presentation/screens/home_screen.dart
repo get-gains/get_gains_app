@@ -264,6 +264,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       const SizedBox(height: 24),
 
                     // ── Home Status CTA (M-CL1 / M-CL7) ────────
+                    // First gated section = prominent (compact: false),
+                    // all subsequent coach sections use compact mode.
                     homeStatusAsync.when(
                       data: (status) {
                         switch (status) {
@@ -275,6 +277,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               child: SubscriptionGatedWidget(
                                 requiredTier: SubscriptionTiers.basic,
                                 feature: SubscriptionFeature.coachWorkout,
+                                compact:
+                                    false, // Prominent: first gated section
                                 child: const SizedBox.shrink(),
                               ),
                             );
@@ -285,7 +289,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             return const SizedBox.shrink();
                         }
                       },
-                      loading: () => const SizedBox.shrink(),
+                      loading: () => _buildStatusSkeleton(isDark),
                       error: (_, __) => const SizedBox.shrink(),
                     ),
 
@@ -326,33 +330,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 context.push(AppRoutes.routines),
                           );
                         }
-                        // No program / no routine
-                        return WorkoutSummaryCard(
-                          routineName: 'No Routine Assigned',
-                          description:
-                              'Your coach will assign your workout routines. Check back soon!',
-                          exerciseCount: 0,
-                          estimatedMinutes: 0,
-                          isPlaceholder: true,
-                          onStartPressed: () =>
-                              context.push(AppRoutes.routines),
-                        );
+                        // No active programs at all — show Start a Program CTA
+                        return _StartProgramCta(isDark: isDark);
                       },
-                      loading: () => const AppCard(
-                        child: Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Center(child: CircularProgressIndicator()),
-                        ),
-                      ),
-                      error: (_, __) => WorkoutSummaryCard(
-                        routineName: 'No Routine Assigned',
-                        description:
-                            'Your coach will assign your workout routines. Check back soon!',
-                        exerciseCount: 0,
-                        estimatedMinutes: 0,
-                        isPlaceholder: true,
-                        onStartPressed: () => context.push(AppRoutes.routines),
-                      ),
+                      loading: () => _buildTodaySkeleton(isDark),
+                      error: (_, __) => _StartProgramCta(isDark: isDark),
                     ),
 
                     const SizedBox(height: 24),
@@ -483,6 +465,102 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ref.read(homeStatusProvider.future).then((_) {}),
       ref.read(unifiedWeeklyStatsProvider.future).then((_) {}),
     ]);
+  }
+
+  /// Loading skeleton for the today's workout section (T040).
+  Widget _buildTodaySkeleton(bool isDark) {
+    return Container(
+      height: 120,
+      decoration: BoxDecoration(
+        color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  /// Loading skeleton for the home status CTA section (T040).
+  Widget _buildStatusSkeleton(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Container(
+        height: 80,
+        decoration: BoxDecoration(
+          color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+    );
+  }
+}
+
+/// CTA shown when user has no active programs at all (T038).
+class _StartProgramCta extends StatelessWidget {
+  const _StartProgramCta({required this.isDark});
+
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color:
+                        (isDark
+                                ? AppColors.primaryDark
+                                : AppColors.primaryLight)
+                            .withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.fitness_center,
+                    color: isDark
+                        ? AppColors.primaryDark
+                        : AppColors.primaryLight,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Start a Program',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Create a standalone workout program or find a coach to get personalized training.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: isDark
+                    ? AppColors.textSecondaryDark
+                    : AppColors.textSecondaryLight,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: AppButton.primary(
+                label: 'Browse Workouts',
+                icon: Icons.arrow_forward,
+                onPressed: () => context.push(AppRoutes.routines),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

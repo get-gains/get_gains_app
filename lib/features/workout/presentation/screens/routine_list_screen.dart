@@ -64,6 +64,7 @@ class _RoutineListScreenState extends ConsumerState<RoutineListScreen> {
       body: SubscriptionGatedWidget(
         requiredTier: SubscriptionTiers.basic,
         feature: SubscriptionFeature.coachRoutines,
+        compact: true,
         child: FutureBuilder<List<RoutineModel>>(
           future: _routinesFuture,
           builder: (context, snapshot) {
