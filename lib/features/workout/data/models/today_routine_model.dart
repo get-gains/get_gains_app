@@ -19,6 +19,9 @@ abstract class TodayRoutineModel with _$TodayRoutineModel {
 
     /// Today's routine info — null when [isRestDay] is true.
     TodayRoutineDetails? today,
+
+    /// Whether the user has already completed a session today.
+    @Default(false) bool completedToday,
   }) = _TodayRoutineModel;
 
   factory TodayRoutineModel.fromJson(Map<String, dynamic> json) =>

@@ -476,6 +476,35 @@ class WorkoutRepository {
     }
   }
 
+  /// Get today's completed session for a routine (from local DB)
+  Future<Result<WorkoutSessionModel?, AppError>> getTodayCompletedSession({
+    required String userId,
+    required String routineModelId,
+  }) async {
+    try {
+      final localRoutineId = await _resolveLocalRoutineId(routineModelId);
+      if (localRoutineId == null) return const Success(null);
+
+      final session = await _db.getTodayCompletedSessionForRoutine(
+        userId,
+        localRoutineId,
+      );
+      if (session == null) return const Success(null);
+
+      final sets = await _db.getPerformedSets(session.id);
+      return Success(await _mapWorkoutSession(session, sets));
+    } catch (e) {
+      AppLogger.error(
+        'Failed to get today completed session',
+        tag: 'WorkoutRepo',
+        error: e,
+      );
+      return Failure(
+        DatabaseError(message: 'Failed to get today session: \$e'),
+      );
+    }
+  }
+
   /// Get workout history for a user
   Future<Result<List<WorkoutSessionModel>, AppError>> getWorkoutHistory(
     String userId,
@@ -492,6 +521,73 @@ class WorkoutRepository {
       return Success(sessionModels);
     } catch (e) {
       AppLogger.error('Failed to get history', tag: 'WorkoutRepo', error: e);
+      return Failure(DatabaseError(message: 'Failed to load history: $e'));
+    }
+  }
+
+  /// Get completed session history from local DB (paginated).
+  ///
+  /// Returns a [WorkoutHistoryResponse] matching the server format
+  /// so the history screen can use local data.
+  Future<Result<WorkoutHistoryResponse, AppError>> getLocalSessionHistory({
+    required String userId,
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      // Clean up sessions older than 7 days
+      final deleted = await _db.deleteOldCompletedSessions(days: 7);
+      if (deleted > 0) {
+        AppLogger.info('Cleaned up $deleted old sessions', tag: 'WorkoutRepo');
+      }
+
+      final sessions = await _db.getCompletedSessions(
+        userId,
+        limit: limit,
+        offset: offset,
+      );
+      final total = await _db.countCompletedSessions(userId);
+
+      final summaries = <WorkoutSessionSummary>[];
+      for (final session in sessions) {
+        final sets = await _db.getPerformedSets(session.id);
+        String? routineName;
+        if (session.routineId != null) {
+          final routine = await _db.getRoutineById(session.routineId!);
+          routineName = routine?.name;
+        }
+        summaries.add(
+          WorkoutSessionSummary(
+            id: session.remoteId ?? session.id.toString(),
+            userId: session.userId,
+            assignedProgramId: session.assignedProgramId,
+            routineId: session.routineId?.toString(),
+            startedAt: session.startedAt,
+            completedAt: session.completedAt,
+            notes: session.notes,
+            totalSets: sets.length,
+            routineName: routineName,
+          ),
+        );
+      }
+
+      return Success(
+        WorkoutHistoryResponse(
+          sessions: summaries,
+          pagination: WorkoutHistoryPagination(
+            total: total,
+            limit: limit,
+            offset: offset,
+            hasMore: offset + sessions.length < total,
+          ),
+        ),
+      );
+    } catch (e) {
+      AppLogger.error(
+        'Failed to get local history',
+        tag: 'WorkoutRepo',
+        error: e,
+      );
       return Failure(DatabaseError(message: 'Failed to load history: $e'));
     }
   }

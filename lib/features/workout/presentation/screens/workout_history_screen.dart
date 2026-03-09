@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../providers/auth_state_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../data/models/models.dart';
 import '../../data/workout_repository.dart';
@@ -13,16 +14,22 @@ import '../../data/workout_repository.dart';
 /// Paginated workout session history provider.
 ///
 /// Fetches workout sessions in pages of 20. The family parameter
-/// is the page number (0-based).
+/// is the page number (0-based). Uses local DB for offline-first access.
 final workoutHistoryPageProvider = FutureProvider.autoDispose
     .family<WorkoutHistoryResponse, int>((ref, page) async {
       const pageSize = 20;
       final repo = ref.watch(workoutRepositoryProvider);
-      final result = await repo.getSessionHistory(
+      final userId = ref.watch(authStateProvider).userId;
+
+      if (userId == null) throw Exception('Not authenticated');
+
+      // Try local DB first (offline-first)
+      final localResult = await repo.getLocalSessionHistory(
+        userId: userId,
         limit: pageSize,
         offset: page * pageSize,
       );
-      return result.when(
+      return localResult.when(
         success: (response) => response,
         failure: (error) => throw error,
       );

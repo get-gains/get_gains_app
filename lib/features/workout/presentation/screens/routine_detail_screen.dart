@@ -216,15 +216,9 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
               else
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate((context, index) {
-                      final exercise = routine.exercises[index];
-                      return _ExerciseCard(
-                        routineExercise: exercise,
-                        index: index,
-                        onViewForm: () => _navigateToViewForm(exercise),
-                      );
-                    }, childCount: routine.exercises.length),
+                  sliver: _ExerciseListSliver(
+                    routine: routine,
+                    onViewForm: _navigateToViewForm,
                   ),
                 ),
 
@@ -232,11 +226,9 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: AppButton.primary(
-                    label: 'Start Workout',
-                    icon: Icons.play_arrow,
-                    isFullWidth: true,
-                    onPressed: () => _startWorkout(routine),
+                  child: _StartWorkoutButton(
+                    routine: routine,
+                    onStart: () => _startWorkout(routine),
                   ),
                 ),
               ),
@@ -253,6 +245,114 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
     final exerciseId =
         routineExercise.exercise?.id ?? routineExercise.exerciseId;
     context.push('/client/exercise/$exerciseId/view-form');
+  }
+}
+
+/// Extracted sliver that watches both active session and today's history.
+class _ExerciseListSliver extends ConsumerWidget {
+  const _ExerciseListSliver({required this.routine, required this.onViewForm});
+
+  final RoutineModel routine;
+  final void Function(RoutineExerciseModel) onViewForm;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sessionState = ref.watch(workoutSessionProvider);
+    final todaySession = ref.watch(todayCompletedSessionProvider(routine.id));
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate((context, index) {
+        final exercise = routine.exercises[index];
+        int completedSets = 0;
+
+        if (sessionState is WorkoutSessionActive) {
+          // Active workout — use live data
+          completedSets = sessionState.session
+              .setsForExercise(exercise.id)
+              .length;
+        } else if (sessionState is WorkoutSessionCompleted &&
+            sessionState.session.performedSets.isNotEmpty) {
+          // Just finished — use the completed session data
+          completedSets = sessionState.session
+              .setsForExercise(exercise.id)
+              .length;
+        } else {
+          // No active session — check today's history
+          final history = todaySession.value;
+          if (history != null) {
+            completedSets = history.setsForExercise(exercise.id).length;
+          }
+        }
+
+        return _ExerciseCard(
+          routineExercise: exercise,
+          index: index,
+          completedSets: completedSets,
+          onViewForm: () => onViewForm(exercise),
+        );
+      }, childCount: routine.exercises.length),
+    );
+  }
+}
+
+/// Button that shows "Workout Done Today" or "Start Workout" based on history.
+class _StartWorkoutButton extends ConsumerWidget {
+  const _StartWorkoutButton({required this.routine, required this.onStart});
+
+  final RoutineModel routine;
+  final VoidCallback onStart;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sessionState = ref.watch(workoutSessionProvider);
+    final todaySession = ref.watch(todayCompletedSessionProvider(routine.id));
+
+    final bool isCompletedToday =
+        sessionState is WorkoutSessionCompleted ||
+        (todaySession.value?.isCompleted ?? false);
+
+    if (isCompletedToday) {
+      return Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.success.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.check_circle, color: AppColors.success, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Workout Done Today',
+                  style: TextStyle(
+                    color: AppColors.success,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          AppButton.outline(
+            label: 'Do Again',
+            icon: Icons.replay,
+            isFullWidth: true,
+            onPressed: onStart,
+          ),
+        ],
+      );
+    }
+
+    return AppButton.primary(
+      label: 'Start Workout',
+      icon: Icons.play_arrow,
+      isFullWidth: true,
+      onPressed: onStart,
+    );
   }
 }
 
@@ -300,17 +400,20 @@ class _ExerciseCard extends StatelessWidget {
     required this.routineExercise,
     required this.index,
     required this.onViewForm,
+    this.completedSets = 0,
   });
 
   final RoutineExerciseModel routineExercise;
   final int index;
   final VoidCallback onViewForm;
+  final int completedSets;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final exercise = routineExercise.exercise;
     final exerciseName = exercise?.name ?? 'Exercise ${index + 1}';
+    final isExerciseComplete = completedSets >= routineExercise.sets;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -323,26 +426,35 @@ class _ExerciseCard extends StatelessWidget {
               // Exercise header
               Row(
                 children: [
-                  // Order number
+                  // Order number / completion indicator
                   Container(
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: isDark
+                      color: isExerciseComplete
+                          ? AppColors.success.withValues(alpha: 0.2)
+                          : isDark
                           ? AppColors.primaryDark.withValues(alpha: 0.2)
                           : AppColors.primaryLight.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Center(
-                      child: Text(
-                        '${index + 1}',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? AppColors.primaryDark
-                              : AppColors.primaryLight,
-                        ),
-                      ),
+                      child: isExerciseComplete
+                          ? Icon(
+                              Icons.check,
+                              size: 18,
+                              color: AppColors.success,
+                            )
+                          : Text(
+                              '${index + 1}',
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? AppColors.primaryDark
+                                        : AppColors.primaryLight,
+                                  ),
+                            ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -371,7 +483,22 @@ class _ExerciseCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  // Muscle group badge
+                  // Muscle group badge + set progress
+                  if (completedSets > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Text(
+                        '$completedSets/${routineExercise.sets}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isExerciseComplete
+                              ? AppColors.success
+                              : isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
                   if (exercise != null)
                     AppBadge(
                       label: exercise.primaryMuscleGroup.displayName,
