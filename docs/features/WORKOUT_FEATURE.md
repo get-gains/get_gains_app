@@ -1,7 +1,7 @@
 # Workout Feature Documentation
 
 > **Created**: January 29-30, 2026  
-> **Updated**: February 19, 2026  
+> **Updated**: March 9, 2026  
 > **Status**: Implemented  
 
 ---
@@ -275,6 +275,67 @@ lib/features/home/
 - **Workout context**: Passed via `go_router` `extra` map with `workoutSessionId`, `routineExerciseId`, `routineExercises`, `currentExerciseIndex`
 - **Set logging**: `logSet()` now accepts optional `routineExerciseIdOverride` so the recording screen can log sets for a specific exercise without relying on `currentExerciseIndex`
 
+### GG-70: Exercise Not Marked Finished (Mar 9, 2026)
+
+Multiple issues preventing exercises from being correctly marked as done during a workout session.
+
+**Bugs fixed:**
+
+1. **`_calculateCurrentExerciseIndex` off-by-one** — Returned `exercises.length - 1` when all exercises were complete; now returns `exercises.length` so `isAllExercisesCompleted` evaluates correctly.
+2. **`logSet` did not auto-advance** — After logging the final set of an exercise, the exercise index was not recalculated. Now `_calculateCurrentExerciseIndex` is called after each logged set and the PageView auto-scrolls to the next exercise.
+3. **`WorkoutSessionCompleted` lost routine context** — Added optional `RoutineModel? routine` field so the completion dialog can show a per-exercise breakdown (checkmark + sets count).
+4. **Completion dialog per-exercise breakdown** — On session complete, the dialog lists each exercise with a green checkmark and the number of sets performed.
+5. **Removed redundant Finish button** — The `TextButton('Finish')` in the AppBar was removed; session is completed via the auto-triggered dialog when all exercises are done.
+
+**Files modified:** `workout_session_provider.dart`, `workout_session_screen.dart`
+
+---
+
+### Routine Detail Screen — Completion Indicators & Do Again (Mar 9, 2026)
+
+Added live and history-based exercise completion indicators to `RoutineDetailScreen`.
+
+- **`_ExerciseListSliver`** (`ConsumerWidget`) — Watches both the active `workoutSessionProvider` and `todayCompletedSessionProvider` (local DB history) to show per-exercise completion (green checkmark + "N/M sets"). Priority: active session → just-completed session → today's history.
+- **`_StartWorkoutButton`** (`ConsumerWidget`) — Shows a green "Workout Done Today" banner with a "Do Again" outline button when a completed session exists for today, otherwise shows "Start Workout".
+- **`_ExerciseCard`** — Accepts `completedSets` parameter; when > 0, renders a green checkmark badge with set count.
+- **`todayCompletedSessionProvider(routineId)`** — Riverpod `FutureProvider` that queries local Drift DB for today's completed session for that routine, providing persistent indicators even after the app restarts.
+
+**Files modified:** `routine_detail_screen.dart`, `workout_session_provider.dart`
+
+---
+
+### Server `completedToday` Flag (Mar 9, 2026)
+
+- `GET /api/workout/today` response now includes `completedToday: boolean` — `true` when the user has a completed `WorkoutSession` with `completedAt >= todayStart` for the current routine.
+- `TodayRoutineModel` in Flutter gained `@Default(false) bool completedToday`.
+- `WorkoutSummaryCard` on the home screen shows "Workout Done Today ✓" (disabled button) when `completedToday` is true.
+
+**Files modified:** `workout.controller.ts` (server), `today_routine_model.dart`, `workout_summary_card.dart`, `home_screen.dart`
+
+---
+
+### Local DB Workout History (Mar 9, 2026)
+
+The history screen previously fetched from the server API (`GET /workout/sessions`), but sync was failing with a 403 (subscription required). Switched to offline-first local DB reads.
+
+- **`getLocalSessionHistory({userId, limit, offset})`** — New `WorkoutRepository` method that reads completed sessions from Drift and resolves routine names locally.
+- **`getCompletedSessions(userId, {limit, offset})`** and **`countCompletedSessions(userId)`** — New paginated Drift queries.
+- **Auto-cleanup** — `deleteOldCompletedSessions(days: 7)` deletes completed sessions older than 7 days (performed sets cascade-deleted). Called automatically at the start of `getLocalSessionHistory()`.
+- **Sync trigger** — `completeSession()` now calls `workoutSyncService.syncAll()` on success.
+
+**Files modified:** `app_database.dart`, `workout_repository.dart`, `workout_history_screen.dart`, `workout_session_provider.dart`
+
+---
+
+### `getActiveWorkoutSession` — Too Many Elements Fix (Mar 9, 2026)
+
+- Multiple incomplete sessions could exist in the local DB, causing `getSingle()` to throw "Bad state: Too many elements".
+- Added `..limit(1)` and `orderBy(startedAt desc)` to return only the most recent active session.
+
+**Files modified:** `app_database.dart`
+
+---
+
 ### WorkoutSessionScreen Initial State Loop (Feb 18, 2026)
 - **Issue**: When navigating to `/workout-session` without an active session (i.e. `WorkoutSessionInitial` state), the screen showed "No Active Workout" with a "View Routines" button that sent users back to `/routines`, causing a loop instead of starting the session.
 - **Solution**: `WorkoutSessionInitial` now automatically redirects to `/routines` via `WidgetsBinding.addPostFrameCallback` and shows a spinner during the redirect. Users select a routine → start workout from `RoutineDetailScreen` → `_startWorkout` calls `workoutSessionProvider.startSession()` → navigates to `/workout-session` with an active session already in place.
@@ -322,9 +383,11 @@ npx tsc --noEmit
 
 ## Future Enhancements
 
-- [ ] Add workout history screen
+- [x] Add workout history screen (local DB, Mar 9 2026)
 - [ ] Implement progress/stats screen
 - [ ] Add rest timer between sets
 - [ ] Add exercise demonstration videos/images
-- [ ] Implement offline sync queue processing
+- [x] Implement offline sync queue processing (partial — sync trigger on complete, Mar 9 2026)
 - [ ] Add workout notifications/reminders
+- [ ] Fix server sync 403 — `POST /workout/sessions` requires subscription; relax or bypass for session sync
+- [ ] Optimize `deleteOldCompletedSessions` to run once per day instead of every history page load
