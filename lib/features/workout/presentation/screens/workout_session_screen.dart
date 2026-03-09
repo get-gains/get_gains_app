@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../home/presentation/providers/home_providers.dart';
 import '../../data/models/models.dart';
 import '../providers/exercise_log_provider.dart';
 import '../providers/workout_session_provider.dart';
@@ -47,13 +48,30 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     WorkoutSessionState next,
   ) {
     if (next is WorkoutSessionCompleted) {
-      _showCompletionDialog(next.session);
+      _showCompletionDialog(next.session, next.routine);
     } else if (next is WorkoutSessionError) {
       AppToast.error(context, next.error.message);
+    } else if (next is WorkoutSessionActive &&
+        previous is WorkoutSessionActive) {
+      // Auto-scroll PageView when exercise index advances after completing sets
+      final newIndex = next.currentExerciseIndex;
+      final oldIndex = previous.currentExerciseIndex;
+      if (newIndex != oldIndex &&
+          newIndex < (next.routine?.exercises.length ?? 0) &&
+          _pageController.hasClients) {
+        _pageController.animateToPage(
+          newIndex,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
     }
   }
 
-  void _showCompletionDialog(WorkoutSessionModel session) {
+  void _showCompletionDialog(
+    WorkoutSessionModel session,
+    RoutineModel? routine,
+  ) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -66,12 +84,50 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
             Text('Duration: ${_formatDuration(session.duration)}'),
             Text('Sets completed: ${session.completedSetsCount}'),
             Text('Total volume: ${session.totalVolume.toStringAsFixed(1)} kg'),
+            if (routine != null) ...[
+              const SizedBox(height: 12),
+              const Divider(),
+              const SizedBox(height: 8),
+              ...routine.exercises.map((exercise) {
+                final sets = session.setsForExercise(exercise.id);
+                final done = sets.length >= exercise.sets;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        done
+                            ? Icons.check_circle
+                            : Icons.radio_button_unchecked,
+                        color: done ? AppColors.success : Colors.grey,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          exercise.exercise?.name ?? 'Exercise',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                      Text(
+                        '${sets.length}/${exercise.sets}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: done ? AppColors.success : Colors.grey,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
           ],
         ),
         actions: [
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
+              ref.invalidate(activeTodayProvider);
               context.go(AppRoutes.home);
             },
             child: const Text('Done'),
@@ -198,13 +254,6 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
         ],
       ),
       centerTitle: true,
-      actions: [
-        if (state.isAllExercisesCompleted)
-          TextButton(
-            onPressed: () => _completeWorkout(),
-            child: const Text('Finish'),
-          ),
-      ],
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(4),
         child: LinearProgressIndicator(
