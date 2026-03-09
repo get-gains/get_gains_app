@@ -138,8 +138,8 @@ abstract class AssignProgramRequest with _$AssignProgramRequest {
     required String userId,
     required String programId,
     required String startDate,
-    String? endDate,
-    String? notes,
+    @JsonKey(includeIfNull: false) String? endDate,
+    @JsonKey(includeIfNull: false) String? notes,
   }) = _AssignProgramRequest;
 
   factory AssignProgramRequest.fromJson(Map<String, dynamic> json) =>

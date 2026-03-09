@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../../../core/utils/logger.dart';
 import '../../coach_pose/data/models/feature_frame_model.dart';
+import '../data/models/body_segment.dart';
 import '../data/models/models.dart';
 
 /// Compares client's recorded form against coach's reference form using
@@ -49,6 +50,17 @@ class FormComparisonService {
       );
     }
 
+    // Defensive guard: trim client frames to reference length (US3).
+    // Callers should already trim, but this ensures DTW is always bounded.
+    if (clientFrames.length > referenceFrames.length) {
+      AppLogger.warning(
+        'Client frames (${clientFrames.length}) exceed reference '
+        '(${referenceFrames.length}) — trimming to reference length',
+        tag: 'FormComparison',
+      );
+      clientFrames = clientFrames.sublist(0, referenceFrames.length);
+    }
+
     // Collect all angle names present in both sequences
     final refAngles = _collectAngleNames(referenceFrames);
     final clientAngles = _collectAngleNames(clientFrames);
@@ -75,7 +87,7 @@ class FormComparisonService {
     }
 
     // Compute DTW score per angle
-    final segmentScores = <String, double>{};
+    final angleScores = <String, double>{};
     final corrections = <CorrectionModel>[];
 
     for (final angleName in commonAngles) {
@@ -92,14 +104,14 @@ class FormComparisonService {
 
       // Score: 0° mean deviation → 1.0, ≥45° → 0.0
       final score = (1.0 - meanDev / 45.0).clamp(0.0, 1.0);
-      segmentScores[angleName] = score;
+      angleScores[angleName] = score;
 
       // Generate correction if score is below threshold
       if (score < 0.7) {
         final avgDev = meanDev;
         final maxDev = _maxDeviation(refSeries, clientSeries);
         final direction = _inferDirection(refSeries, clientSeries);
-        final segment = _angleToSegment(angleName);
+        final segment = _angleToSegment(angleName).name;
 
         corrections.add(
           CorrectionModel(
@@ -114,10 +126,13 @@ class FormComparisonService {
       }
     }
 
-    // Overall score is weighted average of angles
-    final overallScore = segmentScores.isEmpty
+    // Aggregate per-angle scores into body-segment scores
+    final segmentScores = _aggregateSegmentScores(angleScores);
+
+    // Overall score is mean of all angle scores
+    final overallScore = angleScores.isEmpty
         ? 0.0
-        : segmentScores.values.reduce((a, b) => a + b) / segmentScores.length;
+        : angleScores.values.reduce((a, b) => a + b) / angleScores.length;
 
     final result = ComparisonResultModel(
       exerciseFormId: exerciseFormId,
@@ -205,16 +220,53 @@ class FormComparisonService {
     return 'inconsistent';
   }
 
-  String _angleToSegment(String angleName) {
+  /// Maps an angle name to its body segment enum value.
+  BodySegment _angleToSegment(String angleName) {
     if (angleName.contains('Knee') || angleName.contains('Ankle')) {
-      return angleName.startsWith('left') ? 'LEFT_LEG' : 'RIGHT_LEG';
+      return angleName.startsWith('left')
+          ? BodySegment.LEFT_LEG
+          : BodySegment.RIGHT_LEG;
     }
-    if (angleName.contains('Hip')) return 'TORSO';
+    if (angleName.contains('Hip')) return BodySegment.TORSO;
     if (angleName.contains('Elbow') || angleName.contains('Shoulder')) {
-      return angleName.startsWith('left') ? 'LEFT_ARM' : 'RIGHT_ARM';
+      return angleName.startsWith('left')
+          ? BodySegment.LEFT_ARM
+          : BodySegment.RIGHT_ARM;
     }
-    if (angleName.contains('torso')) return 'TORSO';
-    return 'FULL_BODY';
+    if (angleName.contains('torso')) return BodySegment.TORSO;
+    return BodySegment.FULL_BODY;
+  }
+
+  /// Aggregates per-angle scores into body-segment scores.
+  ///
+  /// Groups each angle score by its [BodySegment] via [_angleToSegment],
+  /// computes the arithmetic mean per segment, and adds a [BodySegment.FULL_BODY]
+  /// entry as the mean of all individual angle scores.
+  Map<String, double> _aggregateSegmentScores(Map<String, double> angleScores) {
+    if (angleScores.isEmpty) return {};
+
+    // Group angle scores by body segment
+    final groups = <BodySegment, List<double>>{};
+    for (final entry in angleScores.entries) {
+      final segment = _angleToSegment(entry.key);
+      // Skip FULL_BODY from grouping — it's computed separately
+      if (segment == BodySegment.FULL_BODY) continue;
+      groups.putIfAbsent(segment, () => []).add(entry.value);
+    }
+
+    final result = <String, double>{};
+
+    // Compute arithmetic mean per segment
+    for (final entry in groups.entries) {
+      final scores = entry.value;
+      result[entry.key.name] = scores.reduce((a, b) => a + b) / scores.length;
+    }
+
+    // FULL_BODY = mean of all individual angle scores
+    result[BodySegment.FULL_BODY.name] =
+        angleScores.values.reduce((a, b) => a + b) / angleScores.length;
+
+    return result;
   }
 
   String _generateCorrectionMessage(
