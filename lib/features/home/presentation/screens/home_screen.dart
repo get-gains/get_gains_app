@@ -326,8 +326,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             exerciseCount: today.exerciseCount,
                             estimatedMinutes: today.estimatedMinutes,
                             isPlaceholder: false,
-                            onStartPressed: () =>
-                                context.push(AppRoutes.routines),
+                            completedToday: today.completedToday,
+                            onStartPressed: today.completedToday
+                                ? null
+                                : () => context.push(AppRoutes.routines),
                           );
                         }
                         // No active programs at all — show Start a Program CTA

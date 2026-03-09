@@ -1,7 +1,9 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/utils/app_error.dart';
 import '../../../../providers/auth_state_provider.dart';
+import '../../../../services/sync/workout_sync_service.dart';
 import '../../data/models/models.dart';
 import '../../data/workout_repository.dart';
 
@@ -68,8 +70,9 @@ class WorkoutSessionActive extends WorkoutSessionState {
 
 /// Session completed
 class WorkoutSessionCompleted extends WorkoutSessionState {
-  const WorkoutSessionCompleted(this.session);
+  const WorkoutSessionCompleted(this.session, {this.routine});
   final WorkoutSessionModel session;
+  final RoutineModel? routine;
 }
 
 /// Error state
@@ -229,8 +232,19 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
           performedSet,
         ];
 
+        final updatedSession = currentState.session.copyWith(
+          performedSets: updatedSets,
+        );
+
+        // Auto-advance to next exercise if current one is now complete
+        final newIndex = _calculateCurrentExerciseIndex(
+          updatedSession,
+          currentState.routine,
+        );
+
         state = currentState.copyWith(
-          session: currentState.session.copyWith(performedSets: updatedSets),
+          session: updatedSession,
+          currentExerciseIndex: newIndex,
         );
       },
       failure: (_) {},
@@ -284,7 +298,9 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
 
     result.when(
       success: (session) {
-        state = WorkoutSessionCompleted(session);
+        state = WorkoutSessionCompleted(session, routine: currentState.routine);
+        // Trigger sync so the server has the session for history
+        ref.read(workoutSyncServiceProvider).syncAll();
       },
       failure: (error) {
         // Restore previous state on error
@@ -323,6 +339,27 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
       }
     }
 
-    return routine.exercises.length - 1;
+    // All exercises completed
+    return routine.exercises.length;
   }
+}
+
+/// Provider that fetches today's completed session for a routine from local DB.
+///
+/// Returns a [WorkoutSessionModel] with all performed sets if the user
+/// completed a workout for the given routine today, otherwise null.
+@riverpod
+Future<WorkoutSessionModel?> todayCompletedSession(
+  Ref ref,
+  String routineId,
+) async {
+  final userId = ref.watch(authStateProvider).userId;
+  if (userId == null) return null;
+
+  final repo = ref.watch(workoutRepositoryProvider);
+  final result = await repo.getTodayCompletedSession(
+    userId: userId,
+    routineModelId: routineId,
+  );
+  return result.valueOrNull;
 }

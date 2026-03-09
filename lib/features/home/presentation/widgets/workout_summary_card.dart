@@ -14,6 +14,7 @@ class WorkoutSummaryCard extends StatelessWidget {
     required this.exerciseCount,
     required this.estimatedMinutes,
     this.isPlaceholder = false,
+    this.completedToday = false,
     this.muscleGroups = const [],
     this.onStartPressed,
   });
@@ -23,6 +24,7 @@ class WorkoutSummaryCard extends StatelessWidget {
   final int exerciseCount;
   final int estimatedMinutes;
   final bool isPlaceholder;
+  final bool completedToday;
   final List<String> muscleGroups;
   final VoidCallback? onStartPressed;
 
@@ -150,6 +152,12 @@ class WorkoutSummaryCard extends StatelessWidget {
                       label: 'View Routines',
                       icon: Icons.arrow_forward,
                       onPressed: onStartPressed,
+                    )
+                  : completedToday
+                  ? AppButton.secondary(
+                      label: 'Workout Done Today ✓',
+                      icon: Icons.check_circle_outline,
+                      onPressed: null,
                     )
                   : AppButton.primary(
                       label: 'Start Workout',
