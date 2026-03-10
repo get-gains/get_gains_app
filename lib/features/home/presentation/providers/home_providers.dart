@@ -77,7 +77,28 @@ Future<TodayRoutineModel> activeToday(Ref ref) async {
 }
 
 // ──────────────────────────────────────────────────────────
-// Weekly Stats
+// Weekly Stats (Unified)
+// ──────────────────────────────────────────────────────────
+
+/// Fetches unified weekly workout statistics from
+/// `GET /api/stats/weekly`.
+///
+/// Returns combined totals and per-source breakdowns
+/// (standalone / coach) for the current week.
+/// Free users receive standalone-only sources;
+/// subscribed users see both standalone and coach.
+@riverpod
+Future<UnifiedWeeklyStats> unifiedWeeklyStats(Ref ref) async {
+  final repo = ref.watch(workoutRepositoryProvider);
+  final result = await repo.getUnifiedWeeklyStats();
+  return result.when(
+    success: (model) => model,
+    failure: (error) => throw error,
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Weekly Stats (Legacy — retained for backward compatibility)
 // ──────────────────────────────────────────────────────────
 
 /// Fetches aggregated weekly workout statistics from
@@ -85,6 +106,8 @@ Future<TodayRoutineModel> activeToday(Ref ref) async {
 ///
 /// Returns workouts completed, total minutes, and streak days
 /// for the current week.
+///
+/// @deprecated Use [unifiedWeeklyStatsProvider] instead.
 @riverpod
 Future<WeeklyStatsModel> weeklyStats(Ref ref) async {
   final repo = ref.watch(workoutRepositoryProvider);

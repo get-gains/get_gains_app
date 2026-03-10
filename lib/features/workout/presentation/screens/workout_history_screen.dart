@@ -11,6 +11,17 @@ import '../../../../widgets/widgets.dart';
 import '../../data/models/models.dart';
 import '../../data/workout_repository.dart';
 
+/// Source filter options for session history.
+enum _SourceFilter {
+  all('All', 'all'),
+  coach('Coach', 'coach'),
+  solo('Solo', 'standalone');
+
+  const _SourceFilter(this.label, this.queryValue);
+  final String label;
+  final String queryValue;
+}
+
 /// Paginated workout session history provider.
 ///
 /// Fetches workout sessions in pages of 20. The family parameter
@@ -35,10 +46,15 @@ final workoutHistoryPageProvider = FutureProvider.autoDispose
       );
     });
 
-/// Workout History Screen (M-CL5)
+/// Workout History Screen
 ///
-/// Displays a paginated list of completed workout sessions.
-/// Each session shows the routine name, date, duration, and sets count.
+/// Displays a paginated list of completed workout sessions from both
+/// standalone and coach sources. Each session shows a source badge
+/// ("Coach" or "Solo"), routine name, date, duration, and sets count.
+///
+/// Filter tabs (All / Coach / Solo) allow filtering by source.
+/// Free and expired users see full session history including historical
+/// coach sessions — no subscription gating on read access (FR-014).
 class WorkoutHistoryScreen extends ConsumerStatefulWidget {
   const WorkoutHistoryScreen({super.key});
 
@@ -48,10 +64,16 @@ class WorkoutHistoryScreen extends ConsumerStatefulWidget {
 }
 
 class _WorkoutHistoryScreenState extends ConsumerState<WorkoutHistoryScreen> {
-  final List<WorkoutSessionSummary> _sessions = [];
+  final List<UnifiedSessionSummary> _sessions = [];
   int _currentPage = 0;
   bool _hasMore = true;
   bool _isLoadingMore = false;
+  bool _isInitialLoad = true;
+  bool _hasError = false;
+  String _errorMessage = '';
+  _SourceFilter _activeFilter = _SourceFilter.all;
+
+  static const _pageSize = 20;
 
   @override
   void initState() {
@@ -61,130 +83,239 @@ class _WorkoutHistoryScreenState extends ConsumerState<WorkoutHistoryScreen> {
 
   Future<void> _loadPage(int page) async {
     if (_isLoadingMore) return;
-    setState(() => _isLoadingMore = true);
+    setState(() {
+      _isLoadingMore = true;
+      if (page == 0) _hasError = false;
+    });
 
-    // We trigger the provider and wait for its result
-    try {
-      final response = await ref.read(workoutHistoryPageProvider(page).future);
-      if (mounted) {
+    final repo = ref.read(workoutRepositoryProvider);
+    final result = await repo.getUnifiedSessionHistory(
+      source: _activeFilter.queryValue,
+      limit: _pageSize,
+      offset: page * _pageSize,
+    );
+
+    if (!mounted) return;
+
+    result.when(
+      success: (response) {
         setState(() {
           if (page == 0) _sessions.clear();
           _sessions.addAll(response.sessions);
           _hasMore = response.pagination.hasMore;
           _currentPage = page;
           _isLoadingMore = false;
+          _isInitialLoad = false;
         });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _isLoadingMore = false);
-    }
+      },
+      failure: (error) {
+        setState(() {
+          _isLoadingMore = false;
+          _isInitialLoad = false;
+          if (page == 0) {
+            _hasError = true;
+            _errorMessage = '$error';
+          }
+        });
+      },
+    );
   }
 
   Future<void> _onRefresh() async {
-    ref.invalidate(workoutHistoryPageProvider);
     await _loadPage(0);
+  }
+
+  void _onFilterChanged(_SourceFilter filter) {
+    if (filter == _activeFilter) return;
+    setState(() {
+      _activeFilter = filter;
+      _sessions.clear();
+      _isInitialLoad = true;
+      _hasMore = true;
+      _currentPage = 0;
+    });
+    _loadPage(0);
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final firstPageAsync = ref.watch(workoutHistoryPageProvider(0));
 
     return Scaffold(
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverAppBar(
-              floating: true,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () => context.pop(),
-              ),
-              title: Text(
-                'Workout History',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-            ),
-            // Handle initial loading / error
-            if (_sessions.isEmpty)
-              firstPageAsync.when(
-                data: (_) => const SliverToBoxAdapter(child: SizedBox.shrink()),
-                loading: () => const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator()),
+        child: RefreshIndicator(
+          onRefresh: _onRefresh,
+          child: CustomScrollView(
+            slivers: [
+              SliverAppBar(
+                floating: true,
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => context.pop(),
                 ),
-                error: (error, _) => SliverFillRemaining(
+                title: Text(
+                  'Workout History',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+              ),
+
+              // Filter tabs
+              SliverToBoxAdapter(
+                child: _FilterTabs(
+                  activeFilter: _activeFilter,
+                  onFilterChanged: _onFilterChanged,
+                  isDark: isDark,
+                ),
+              ),
+
+              // Initial loading state
+              if (_isInitialLoad)
+                const SliverFillRemaining(
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              // Error state
+              else if (_hasError && _sessions.isEmpty)
+                SliverFillRemaining(
                   child: AppErrorState(
                     title: 'Failed to load history',
-                    description: '$error',
+                    description: _errorMessage,
                     onRetry: _onRefresh,
                   ),
-                ),
-              )
-            else ...[
+                )
+              // Empty state
+              else if (_sessions.isEmpty)
+                SliverFillRemaining(
+                  child: AppEmptyState(
+                    icon: Icons.history,
+                    title: _activeFilter == _SourceFilter.all
+                        ? 'No Workouts Yet'
+                        : 'No ${_activeFilter.label} Workouts',
+                    description: _activeFilter == _SourceFilter.all
+                        ? 'Your completed workouts will appear here. Start a workout to build your history!'
+                        : _activeFilter == _SourceFilter.coach
+                        ? 'You don\'t have any coach workout sessions yet.'
+                        : 'You don\'t have any solo workout sessions yet.',
+                  ),
+                )
               // Sessions list
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 8,
-                ),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate((context, index) {
-                    if (index >= _sessions.length) {
-                      // Load more trigger
-                      if (_hasMore && !_isLoadingMore) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          _loadPage(_currentPage + 1);
-                        });
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 8,
+                  ),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      if (index >= _sessions.length) {
+                        // Load more trigger
+                        if (_hasMore && !_isLoadingMore) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            _loadPage(_currentPage + 1);
+                          });
+                        }
+                        return _hasMore
+                            ? const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                child: Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                              )
+                            : const SizedBox.shrink();
                       }
-                      return _hasMore
-                          ? const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 16),
-                              child: Center(child: CircularProgressIndicator()),
-                            )
-                          : const SizedBox.shrink();
-                    }
-                    final session = _sessions[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _SessionCard(session: session, isDark: isDark),
-                    );
-                  }, childCount: _sessions.length + (_hasMore ? 1 : 0)),
+                      final session = _sessions[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _UnifiedSessionCard(
+                          session: session,
+                          isDark: isDark,
+                        ),
+                      );
+                    }, childCount: _sessions.length + (_hasMore ? 1 : 0)),
+                  ),
                 ),
-              ),
             ],
-
-            // Empty state
-            if (_sessions.isEmpty && firstPageAsync.hasValue)
-              SliverFillRemaining(
-                child: AppEmptyState(
-                  icon: Icons.history,
-                  title: 'No Workouts Yet',
-                  description:
-                      'Your completed workouts will appear here. Start a workout to build your history!',
-                ),
-              ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Card displaying a single workout session summary.
-class _SessionCard extends StatelessWidget {
-  const _SessionCard({required this.session, required this.isDark});
+/// Filter tabs for session history: All / Coach / Solo.
+class _FilterTabs extends StatelessWidget {
+  const _FilterTabs({
+    required this.activeFilter,
+    required this.onFilterChanged,
+    required this.isDark,
+  });
 
-  final WorkoutSessionSummary session;
+  final _SourceFilter activeFilter;
+  final ValueChanged<_SourceFilter> onFilterChanged;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      child: Row(
+        children: _SourceFilter.values.map((filter) {
+          final isActive = filter == activeFilter;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              label: Text(filter.label),
+              selected: isActive,
+              onSelected: (_) => onFilterChanged(filter),
+              selectedColor: isDark
+                  ? AppColors.primaryDark.withValues(alpha: 0.2)
+                  : AppColors.primaryLight.withValues(alpha: 0.2),
+              checkmarkColor: isDark
+                  ? AppColors.primaryDark
+                  : AppColors.primaryLight,
+              labelStyle: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: isActive
+                    ? (isDark ? AppColors.primaryDark : AppColors.primaryLight)
+                    : (isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight),
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+              ),
+              backgroundColor: isDark
+                  ? AppColors.surface2Dark
+                  : AppColors.surface2Light,
+              side: BorderSide(
+                color: isActive
+                    ? (isDark ? AppColors.primaryDark : AppColors.primaryLight)
+                    : Colors.transparent,
+                width: 1,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+/// Card displaying a single unified session summary with source badge.
+class _UnifiedSessionCard extends StatelessWidget {
+  const _UnifiedSessionCard({required this.session, required this.isDark});
+
+  final UnifiedSessionSummary session;
   final bool isDark;
 
   @override
   Widget build(BuildContext context) {
     final dateStr = DateFormat.yMMMd().format(session.startedAt);
     final timeStr = DateFormat.jm().format(session.startedAt);
+    final coachSubtitle = session.coachSubtitle;
 
     return AppCard(
       child: Padding(
@@ -223,12 +354,33 @@ class _SessionCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    session.displayName,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          session.displayName,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SourceBadge(source: session.source),
+                    ],
                   ),
+                  if (coachSubtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      coachSubtitle,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: isDark
+                            ? AppColors.primaryDark
+                            : AppColors.primaryLight,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                   const SizedBox(height: 4),
                   Text(
                     '$dateStr · $timeStr',
@@ -241,6 +393,7 @@ class _SessionCard extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(width: 8),
             // Right-side stats
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,

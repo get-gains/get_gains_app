@@ -92,7 +92,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final isCoachAsync = ref.watch(isCoachProvider);
     final homeStatusAsync = ref.watch(homeStatusProvider);
     final todayAsync = ref.watch(activeTodayProvider);
-    final weeklyAsync = ref.watch(weeklyStatsProvider);
+    final weeklyAsync = ref.watch(unifiedWeeklyStatsProvider);
     final recentAsync = ref.watch(recentActivityProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Extract name from email or use default
@@ -264,13 +264,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       const SizedBox(height: 24),
 
                     // ── Home Status CTA (M-CL1 / M-CL7) ────────
+                    // First gated section = prominent (compact: false),
+                    // all subsequent coach sections use compact mode.
                     homeStatusAsync.when(
                       data: (status) {
                         switch (status) {
                           case HomeStatus.noCoach:
                             return _FindCoachCta(isDark: isDark);
                           case HomeStatus.noSubscription:
-                            return _SubscriptionRequiredCta(isDark: isDark);
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 24),
+                              child: SubscriptionGatedWidget(
+                                requiredTier: SubscriptionTiers.basic,
+                                feature: SubscriptionFeature.coachWorkout,
+                                compact:
+                                    false, // Prominent: first gated section
+                                child: const SizedBox.shrink(),
+                              ),
+                            );
                           case HomeStatus.waitingForProgram:
                             return _WaitingForProgramCard(isDark: isDark);
                           case HomeStatus.restDay:
@@ -278,7 +289,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             return const SizedBox.shrink();
                         }
                       },
-                      loading: () => const SizedBox.shrink(),
+                      loading: () => _buildStatusSkeleton(isDark),
                       error: (_, __) => const SizedBox.shrink(),
                     ),
 
@@ -321,33 +332,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 : () => context.push(AppRoutes.routines),
                           );
                         }
-                        // No program / no routine
-                        return WorkoutSummaryCard(
-                          routineName: 'No Routine Assigned',
-                          description:
-                              'Your coach will assign your workout routines. Check back soon!',
-                          exerciseCount: 0,
-                          estimatedMinutes: 0,
-                          isPlaceholder: true,
-                          onStartPressed: () =>
-                              context.push(AppRoutes.routines),
-                        );
+                        // No active programs at all — show Start a Program CTA
+                        return _StartProgramCta(isDark: isDark);
                       },
-                      loading: () => const AppCard(
-                        child: Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Center(child: CircularProgressIndicator()),
-                        ),
-                      ),
-                      error: (_, __) => WorkoutSummaryCard(
-                        routineName: 'No Routine Assigned',
-                        description:
-                            'Your coach will assign your workout routines. Check back soon!',
-                        exerciseCount: 0,
-                        estimatedMinutes: 0,
-                        isPlaceholder: true,
-                        onStartPressed: () => context.push(AppRoutes.routines),
-                      ),
+                      loading: () => _buildTodaySkeleton(isDark),
+                      error: (_, __) => _StartProgramCta(isDark: isDark),
                     ),
 
                     const SizedBox(height: 24),
@@ -470,14 +459,110 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     ref.invalidate(homeStatusProvider);
     ref.invalidate(todayRoutineProvider);
     ref.invalidate(activeTodayProvider);
-    ref.invalidate(weeklyStatsProvider);
+    ref.invalidate(unifiedWeeklyStatsProvider);
     ref.invalidate(recentActivityProvider);
     ref.invalidate(hasSubscribedCoachProvider);
     // Wait for the key providers to re-fetch
     await Future.wait<void>([
       ref.read(homeStatusProvider.future).then((_) {}),
-      ref.read(weeklyStatsProvider.future).then((_) {}),
+      ref.read(unifiedWeeklyStatsProvider.future).then((_) {}),
     ]);
+  }
+
+  /// Loading skeleton for the today's workout section (T040).
+  Widget _buildTodaySkeleton(bool isDark) {
+    return Container(
+      height: 120,
+      decoration: BoxDecoration(
+        color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  /// Loading skeleton for the home status CTA section (T040).
+  Widget _buildStatusSkeleton(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Container(
+        height: 80,
+        decoration: BoxDecoration(
+          color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+    );
+  }
+}
+
+/// CTA shown when user has no active programs at all (T038).
+class _StartProgramCta extends StatelessWidget {
+  const _StartProgramCta({required this.isDark});
+
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color:
+                        (isDark
+                                ? AppColors.primaryDark
+                                : AppColors.primaryLight)
+                            .withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.fitness_center,
+                    color: isDark
+                        ? AppColors.primaryDark
+                        : AppColors.primaryLight,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Start a Program',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Create a standalone workout program or find a coach to get personalized training.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: isDark
+                    ? AppColors.textSecondaryDark
+                    : AppColors.textSecondaryLight,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: AppButton.primary(
+                label: 'Browse Workouts',
+                icon: Icons.arrow_forward,
+                onPressed: () => context.push(AppRoutes.routines),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -544,80 +629,6 @@ class _FindCoachCta extends StatelessWidget {
                   label: 'Discover Coaches',
                   icon: Icons.arrow_forward,
                   onPressed: () => context.push(AppRoutes.discoverCoaches),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// CTA card shown when the user has a subscribed coach but no active
-/// subscription plan — prompts them to upgrade to unlock coach workouts.
-class _SubscriptionRequiredCta extends StatelessWidget {
-  const _SubscriptionRequiredCta({required this.isDark});
-
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
-      child: AppCard(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.workspace_premium,
-                      color: Colors.amber,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Unlock Coach Workouts',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Subscribe to receive personalised programs from your coach and track your progress together.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight,
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: AppButton.primary(
-                  label: 'View Plans',
-                  icon: Icons.workspace_premium_outlined,
-                  onPressed: () => showUpgradeSheet(
-                    context: context,
-                    requiredTier: 1,
-                    title: 'Subscribe to access coach workouts',
-                    description:
-                        'Get your personalised program delivered by a certified coach.',
-                  ),
                 ),
               ),
             ],
