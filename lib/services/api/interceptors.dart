@@ -205,6 +205,10 @@ class ErrorInterceptor extends Interceptor {
       case DioExceptionType.cancel:
         return 'Request was cancelled.';
       case DioExceptionType.connectionError:
+        final uri = err.requestOptions.uri.toString();
+        if (uri.contains('localhost') || uri.contains('127.0.0.1')) {
+          return 'Cannot reach server. Is it running? On a device, run: adb reverse tcp:3000 tcp:3000';
+        }
         return 'No internet connection. Please check your network.';
       case DioExceptionType.unknown:
       default:
@@ -286,8 +290,10 @@ class RetryInterceptor extends Interceptor {
     final retryCount = err.requestOptions.extra['retryCount'] ?? 0;
 
     if (retryCount < maxRetries) {
+      // Rebuild from baseUrl + path so retry never uses a corrupted URI (e.g. 1192.168...)
+      final retryUrl = '${ApiConstants.baseUrl}${err.requestOptions.path.startsWith('/') ? '' : '/'}${err.requestOptions.path}';
       AppLogger.info(
-        'Retrying request (${retryCount + 1}/$maxRetries): ${err.requestOptions.uri}',
+        'Retrying request (${retryCount + 1}/$maxRetries): $retryUrl',
         tag: 'RetryInterceptor',
       );
 
@@ -296,13 +302,17 @@ class RetryInterceptor extends Interceptor {
       err.requestOptions.extra['retryCount'] = retryCount + 1;
 
       try {
+        final retryOptions = err.requestOptions.copyWith(
+          baseUrl: ApiConstants.baseUrl,
+          path: err.requestOptions.path,
+        );
         final response = await Dio(
           BaseOptions(
             baseUrl: ApiConstants.baseUrl,
             connectTimeout: ApiConstants.connectTimeout,
             receiveTimeout: ApiConstants.receiveTimeout,
           ),
-        ).fetch(err.requestOptions);
+        ).fetch(retryOptions);
         handler.resolve(response);
         return;
       } catch (e) {
