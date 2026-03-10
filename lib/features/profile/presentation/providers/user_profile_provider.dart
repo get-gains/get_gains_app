@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/utils/app_error.dart';
 import '../../../../core/utils/logger.dart';
+import '../../../../providers/auth_state_provider.dart';
 import '../../../../services/connectivity/connectivity_service.dart';
 import '../../data/models/profile_request_models.dart';
 import '../../data/models/user_profile_model.dart';
@@ -53,6 +54,8 @@ class UserProfileNotifier extends _$UserProfileNotifier {
 
   @override
   Future<UserProfileModel?> build() async {
+    // Rebuild automatically when the authenticated user changes.
+    ref.watch(authStateProvider);
     final repo = ref.watch(userProfileRepositoryProvider);
     final result = await repo.getProfile();
 
