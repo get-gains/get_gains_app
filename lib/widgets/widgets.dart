@@ -22,3 +22,4 @@ export 'app_table.dart';
 export 'app_tabs.dart';
 export 'app_text_field.dart';
 export 'app_toast.dart';
+export 'source_badge.dart';

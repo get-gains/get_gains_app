@@ -1,12 +1,15 @@
 // lib/features/subscription/presentation/providers/subscription_guard.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/utils/logger.dart';
 import '../../../../core/utils/result.dart';
 import '../../../../core/utils/app_error.dart';
 import '../../data/models/models.dart';
+import '../models/subscription_feature.dart';
+import '../widgets/upgrade_prompt.dart';
 import 'subscription_provider.dart';
 
 part 'subscription_guard.g.dart';
@@ -350,25 +353,31 @@ bool hasTierAccess(Ref ref, int requiredTier) {
 
 // ============== Widget Protection ==============
 
-/// A widget that gates content based on subscription tier
+/// A widget that gates content based on subscription tier.
 ///
-/// Shows the [child] if user has required tier, otherwise shows
-/// the [fallback] widget (or a default locked UI).
+/// Proactively checks cached subscription state before rendering.
+/// If the user is not subscribed, renders an [UpgradePrompt] immediately
+/// without triggering an API call or showing an error flash.
+///
+/// Accepts an optional [feature] for contextual upgrade messaging and
+/// a [compact] flag to control the prompt size.
 ///
 /// Usage:
 /// ```dart
 /// SubscriptionGatedWidget(
-///   requiredTier: SubscriptionTiers.premium,
-///   child: PremiumFeatureWidget(),
-///   fallback: UpgradePrompt(requiredTier: SubscriptionTiers.premium),
+///   requiredTier: SubscriptionTiers.basic,
+///   feature: SubscriptionFeature.coachRoutines,
+///   child: CoachRoutinesWidget(),
 /// )
 /// ```
-class SubscriptionGatedWidget extends StatelessWidget {
+class SubscriptionGatedWidget extends ConsumerWidget {
   const SubscriptionGatedWidget({
     super.key,
     required this.requiredTier,
     required this.child,
     this.fallback,
+    this.feature,
+    this.compact = false,
     this.showLockedOverlay = false,
   });
 
@@ -378,45 +387,76 @@ class SubscriptionGatedWidget extends StatelessWidget {
   /// Widget to show when user has access
   final Widget child;
 
-  /// Widget to show when user doesn't have access
-  /// If null, the child is hidden completely
+  /// Widget to show when user doesn't have access.
+  /// If null, a default [UpgradePrompt] is shown (or the child is hidden
+  /// completely when no [feature] is set).
   final Widget? fallback;
+
+  /// The subscription feature for contextual UpgradePrompt messaging.
+  final SubscriptionFeature? feature;
+
+  /// If true, the fallback upgrade prompt renders in compact mode.
+  final bool compact;
 
   /// If true, shows the child with a locked overlay instead of fallback
   final bool showLockedOverlay;
 
   @override
-  Widget build(BuildContext context) {
-    // Note: This widget should be used with ConsumerWidget or wrapped in Consumer
-    // to properly watch subscription state
-    return _SubscriptionGatedContent(
-      requiredTier: requiredTier,
-      child: child,
-      fallback: fallback,
-      showLockedOverlay: showLockedOverlay,
-    );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final subState = ref.watch(subscriptionProvider);
+
+    // Loading: show a small shimmer placeholder while resolving
+    if (subState is SubscriptionInitial || subState is SubscriptionLoading) {
+      return _buildLoadingSkeleton(context);
+    }
+
+    // Error or not-loaded: treat as non-subscribed (server is authoritative)
+    if (subState is! SubscriptionLoaded) {
+      return _buildFallback(context);
+    }
+
+    final currentTier = subState.status.tierLevel;
+
+    if (currentTier >= requiredTier) {
+      return child;
+    }
+
+    // Determine current subscription status for PAST_DUE/PENDING handling
+    final subscriptionStatus = subState.status.subscription?.status;
+
+    return _buildFallback(context, subscriptionStatus: subscriptionStatus);
   }
-}
 
-/// Internal widget that uses Consumer to watch subscription state
-class _SubscriptionGatedContent extends StatelessWidget {
-  const _SubscriptionGatedContent({
-    required this.requiredTier,
-    required this.child,
-    this.fallback,
-    this.showLockedOverlay = false,
-  });
+  Widget _buildFallback(
+    BuildContext context, {
+    SubscriptionStatus? subscriptionStatus,
+  }) {
+    if (fallback != null) return fallback!;
 
-  final int requiredTier;
-  final Widget child;
-  final Widget? fallback;
-  final bool showLockedOverlay;
+    // If a feature is provided, show an UpgradePrompt
+    if (feature != null) {
+      return UpgradePrompt(
+        feature: feature,
+        requiredTier: requiredTier,
+        compact: compact,
+        subscriptionStatus: subscriptionStatus,
+      );
+    }
 
-  @override
-  Widget build(BuildContext context) {
-    // This needs to be a ConsumerWidget or use Consumer
-    // The parent should use ref.watch(hasTierAccessProvider(requiredTier))
-    return child; // Placeholder - actual implementation uses Consumer
+    // No fallback and no feature — hide content
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildLoadingSkeleton(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      height: compact ? 48 : 120,
+      decoration: BoxDecoration(
+        color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+      ),
+    );
   }
 }
 
