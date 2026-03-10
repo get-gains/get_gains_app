@@ -1197,6 +1197,12 @@ class _ClientUnityRecordingScreenState
           ),
           const SizedBox(height: 16),
 
+          // ── Workout mode: set logger (above fold) ───────────────────
+          if (_isWorkoutMode) ...[
+            _buildSetLogger(context, state, isDark),
+            const SizedBox(height: 16),
+          ],
+
           // Rep count
           AppCard.elevated(
             child: Padding(
@@ -1277,12 +1283,6 @@ class _ClientUnityRecordingScreenState
           ],
 
           const SizedBox(height: 24),
-
-          // ── Workout mode: set logger ────────────────────────────────
-          if (_isWorkoutMode) ...[
-            _buildSetLogger(context, state, isDark),
-            const SizedBox(height: 16),
-          ],
 
           // ── Action buttons ──────────────────────────────────────────
           if (!_isWorkoutMode)

@@ -2,13 +2,14 @@
 
 > **Created**: January 29-30, 2026  
 > **Updated**: March 9, 2026  
-> **Status**: Implemented  
+> **Status**: Implemented
 
 ---
 
 ## Overview
 
 This feature allows users to:
+
 - View assigned workout routines
 - Start workout sessions with **form recording** for each exercise
 - Compare exercise form against coach's reference (side-by-side skeleton, similarity score)
@@ -37,12 +38,12 @@ When a user presses **"Start Workout"** on a routine:
 
 ## Acceptance Criteria
 
-| Criteria | Status |
-|----------|--------|
-| Exercises can be logged with sets, reps, and weight | ✅ |
-| Exercises can be marked as done | ✅ |
-| Exercises will be seen as performed in the routines screen | ✅ |
-| Exercises contribute to routine completion/consistency score | ✅ |
+| Criteria                                                     | Status |
+| ------------------------------------------------------------ | ------ |
+| Exercises can be logged with sets, reps, and weight          | ✅     |
+| Exercises can be marked as done                              | ✅     |
+| Exercises will be seen as performed in the routines screen   | ✅     |
+| Exercises contribute to routine completion/consistency score | ✅     |
 
 ---
 
@@ -82,6 +83,7 @@ lib/features/workout/
 ### Data Models
 
 #### ExerciseModel
+
 ```dart
 @freezed
 class ExerciseModel with _$ExerciseModel {
@@ -98,6 +100,7 @@ class ExerciseModel with _$ExerciseModel {
 ```
 
 #### RoutineModel
+
 ```dart
 @freezed
 class RoutineModel with _$RoutineModel {
@@ -115,6 +118,7 @@ class RoutineModel with _$RoutineModel {
 ```
 
 #### WorkoutSessionModel
+
 ```dart
 @freezed
 class WorkoutSessionModel with _$WorkoutSessionModel {
@@ -134,6 +138,7 @@ class WorkoutSessionModel with _$WorkoutSessionModel {
 ```
 
 #### PerformedSetModel
+
 ```dart
 @freezed
 class PerformedSetModel with _$PerformedSetModel {
@@ -157,22 +162,22 @@ class PerformedSetModel with _$PerformedSetModel {
 
 Added to `lib/services/database/app_database.dart`:
 
-| Table | Description |
-|-------|-------------|
-| `Exercises` | Exercise library with muscle groups and equipment |
-| `Routines` | Workout routines with duration and target muscles |
+| Table              | Description                                                              |
+| ------------------ | ------------------------------------------------------------------------ |
+| `Exercises`        | Exercise library with muscle groups and equipment                        |
+| `Routines`         | Workout routines with duration and target muscles                        |
 | `RoutineExercises` | Junction table linking routines to exercises with sets/reps prescription |
-| `WorkoutSessions` | User workout sessions with start/end times |
-| `PerformedSets` | Individual sets logged by users |
+| `WorkoutSessions`  | User workout sessions with start/end times                               |
+| `PerformedSets`    | Individual sets logged by users                                          |
 
 ### Routes
 
 Added to `lib/providers/router_provider.dart`:
 
-| Route | Screen | Description |
-|-------|--------|-------------|
-| `/routines` | `RoutineListScreen` | View available workout routines |
-| `/workout-session` | `WorkoutSessionScreen` | Active workout logging screen |
+| Route              | Screen                 | Description                     |
+| ------------------ | ---------------------- | ------------------------------- |
+| `/routines`        | `RoutineListScreen`    | View available workout routines |
+| `/workout-session` | `WorkoutSessionScreen` | Active workout logging screen   |
 
 ### API Constants
 
@@ -190,47 +195,52 @@ static const String performedSets = '/workout/sets';
 
 ### Files Created
 
-| File | Description |
-|------|-------------|
-| `src/schemas/workout.schema.ts` | Zod validation schemas for all workout endpoints |
-| `src/controllers/workout.controller.ts` | Controller with all workout operations |
-| `src/routes/workout.routes.ts` | Express router with protected routes |
+| File                                    | Description                                      |
+| --------------------------------------- | ------------------------------------------------ |
+| `src/schemas/workout.schema.ts`         | Zod validation schemas for all workout endpoints |
+| `src/controllers/workout.controller.ts` | Controller with all workout operations           |
+| `src/routes/workout.routes.ts`          | Express router with protected routes             |
 
 ### API Endpoints
 
 All routes are prefixed with `/api/workout` and require authentication.
 
 #### Exercises
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/exercises` | List exercises with filtering |
+
+| Method | Endpoint     | Description                   |
+| ------ | ------------ | ----------------------------- |
+| GET    | `/exercises` | List exercises with filtering |
 
 #### Routines
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/routines` | List user's assigned routines |
-| GET | `/routines/:routineId` | Get single routine with exercises |
+
+| Method | Endpoint               | Description                       |
+| ------ | ---------------------- | --------------------------------- |
+| GET    | `/routines`            | List user's assigned routines     |
+| GET    | `/routines/:routineId` | Get single routine with exercises |
 
 #### Workout Sessions
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/sessions` | Start a new workout session |
-| GET | `/sessions/active` | Get user's active session |
-| GET | `/sessions` | Get workout history |
-| GET | `/sessions/:sessionId` | Get single session details |
-| POST | `/sessions/:sessionId/complete` | Complete a workout session |
+
+| Method | Endpoint                        | Description                 |
+| ------ | ------------------------------- | --------------------------- |
+| POST   | `/sessions`                     | Start a new workout session |
+| GET    | `/sessions/active`              | Get user's active session   |
+| GET    | `/sessions`                     | Get workout history         |
+| GET    | `/sessions/:sessionId`          | Get single session details  |
+| POST   | `/sessions/:sessionId/complete` | Complete a workout session  |
 
 #### Performed Sets
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/sets` | Log a new set |
-| PUT | `/sets/:setId` | Update an existing set |
-| DELETE | `/sets/:setId` | Delete a set |
-| POST | `/sets/sync` | Batch sync sets from offline |
+
+| Method | Endpoint       | Description                  |
+| ------ | -------------- | ---------------------------- |
+| POST   | `/sets`        | Log a new set                |
+| PUT    | `/sets/:setId` | Update an existing set       |
+| DELETE | `/sets/:setId` | Delete a set                 |
+| POST   | `/sets/sync`   | Batch sync sets from offline |
 
 ### Prisma Schema
 
 The following models already existed in `prisma/schema.prisma`:
+
 - `Exercise`
 - `Routine`
 - `RoutineExercise`
@@ -270,6 +280,7 @@ lib/features/home/
 ## Bug Fixes & Improvements
 
 ### Start Workout → Recording Flow (Feb 19, 2026)
+
 - **Change**: "Start Workout" now navigates to the first exercise's `ClientUnityRecordingScreen` instead of directly to `WorkoutSessionScreen`
 - **Files modified**: `routine_detail_screen.dart` (`_startWorkout`), `router_provider.dart` (`clientUnityRecord` route), `client_unity_recording_screen.dart` (workout mode), `workout_session_provider.dart` (`logSet` override), `client_recording_provider.dart` (landmark frames in complete state)
 - **Workout context**: Passed via `go_router` `extra` map with `workoutSessionId`, `routineExerciseId`, `routineExercises`, `currentExerciseIndex`
@@ -301,6 +312,20 @@ Added live and history-based exercise completion indicators to `RoutineDetailScr
 - **`todayCompletedSessionProvider(routineId)`** — Riverpod `FutureProvider` that queries local Drift DB for today's completed session for that routine, providing persistent indicators even after the app restarts.
 
 **Files modified:** `routine_detail_screen.dart`, `workout_session_provider.dart`
+
+---
+
+### Routine Detail Screen — View Form Removed & UI Polish (Mar 9, 2026)
+
+Removed the standalone "View Form" button from exercise cards on the routine detail page. Users must start a workout to access form comparison. Also improved visual hierarchy:
+
+- **`_ExerciseCard`** — Removed `onViewForm` callback and "View Form" `OutlinedButton`. Exercise cards now show only exercise info (name, sets×reps, muscle group, completion status). Changed order number container from rounded rectangle to circle shape.
+- **`_ExerciseListSliver`** — Removed `onViewForm` parameter and callback forwarding.
+- **`_StartWorkoutButton`** — Moved from `CustomScrollView` sliver to `Scaffold.bottomNavigationBar` wrapped in `SafeArea`, making it persistently visible without scrolling.
+- **`_navigateToViewForm`** method — Removed entirely from `_RoutineDetailScreenState`.
+- **Scaffold restructure** — `FutureBuilder` now wraps the `Scaffold` (instead of being inside it) so the `bottomNavigationBar` has access to the loaded routine.
+
+**Files modified:** `routine_detail_screen.dart`
 
 ---
 
@@ -337,26 +362,32 @@ The history screen previously fetched from the server API (`GET /workout/session
 ---
 
 ### WorkoutSessionScreen Initial State Loop (Feb 18, 2026)
+
 - **Issue**: When navigating to `/workout-session` without an active session (i.e. `WorkoutSessionInitial` state), the screen showed "No Active Workout" with a "View Routines" button that sent users back to `/routines`, causing a loop instead of starting the session.
 - **Solution**: `WorkoutSessionInitial` now automatically redirects to `/routines` via `WidgetsBinding.addPostFrameCallback` and shows a spinner during the redirect. Users select a routine → start workout from `RoutineDetailScreen` → `_startWorkout` calls `workoutSessionProvider.startSession()` → navigates to `/workout-session` with an active session already in place.
 
 ### AppColors Usage
+
 - **Issue**: `AppColors.primary` is a method, not a static constant
 - **Solution**: Changed to `isDark ? AppColors.primaryDark : AppColors.primaryLight`
 
 ### AppEmptyState Action
+
 - **Issue**: Used `action` parameter with widget
 - **Solution**: Changed to `actionLabel` + `onAction` callback pattern
 
 ### AppBadge Color
+
 - **Issue**: Used `color` parameter
 - **Solution**: Changed to `variant: AppBadgeVariant.primary`
 
 ### AuthState userName
+
 - **Issue**: `userName` getter doesn't exist on AuthState
 - **Solution**: Extract name from email: `email.split('@').first`
 
 ### Button Text Centering
+
 - **Issue**: Button text not centered when `isFullWidth` is false
 - **Solution**: Wrapped content in `IntrinsicWidth(child: Center(...))` in AppButton
 
@@ -365,16 +396,19 @@ The history screen previously fetched from the server API (`GET /workout/session
 ## Commands Reference
 
 ### Generate Code
+
 ```bash
 dart run build_runner build --delete-conflicting-outputs
 ```
 
 ### Regenerate Prisma Client
+
 ```bash
 npx prisma generate
 ```
 
 ### Type Check Server
+
 ```bash
 npx tsc --noEmit
 ```

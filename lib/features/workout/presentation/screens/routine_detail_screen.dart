@@ -76,32 +76,46 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: isDark
-          ? AppColors.backgroundDark
-          : AppColors.backgroundLight,
-      body: FutureBuilder<RoutineModel?>(
-        future: _routineFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+    return FutureBuilder<RoutineModel?>(
+      future: _routineFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            backgroundColor: isDark
+                ? AppColors.backgroundDark
+                : AppColors.backgroundLight,
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
 
-          final routine = snapshot.data;
-          if (routine == null) {
-            return Scaffold(
-              appBar: AppBar(title: const Text('Routine')),
-              body: AppEmptyState(
-                icon: Icons.error_outline,
-                title: 'Routine Not Found',
-                description: 'This routine could not be loaded.',
-                actionLabel: 'Go Back',
-                onAction: () => context.pop(),
+        final routine = snapshot.data;
+        if (routine == null) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Routine')),
+            body: AppEmptyState(
+              icon: Icons.error_outline,
+              title: 'Routine Not Found',
+              description: 'This routine could not be loaded.',
+              actionLabel: 'Go Back',
+              onAction: () => context.pop(),
+            ),
+          );
+        }
+
+        return Scaffold(
+          backgroundColor: isDark
+              ? AppColors.backgroundDark
+              : AppColors.backgroundLight,
+          bottomNavigationBar: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: _StartWorkoutButton(
+                routine: routine,
+                onStart: () => _startWorkout(routine),
               ),
-            );
-          }
-
-          return CustomScrollView(
+            ),
+          ),
+          body: CustomScrollView(
             slivers: [
               // App Bar
               SliverAppBar(
@@ -216,44 +230,24 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
               else
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: _ExerciseListSliver(
-                    routine: routine,
-                    onViewForm: _navigateToViewForm,
-                  ),
+                  sliver: _ExerciseListSliver(routine: routine),
                 ),
 
-              // Bottom padding + start button
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: _StartWorkoutButton(
-                    routine: routine,
-                    onStart: () => _startWorkout(routine),
-                  ),
-                ),
-              ),
-
-              const SliverToBoxAdapter(child: SizedBox(height: 32)),
+              // Bottom spacing to account for persistent bottom bar
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
             ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
-  }
-
-  void _navigateToViewForm(RoutineExerciseModel routineExercise) {
-    final exerciseId =
-        routineExercise.exercise?.id ?? routineExercise.exerciseId;
-    context.push('/client/exercise/$exerciseId/view-form');
   }
 }
 
 /// Extracted sliver that watches both active session and today's history.
 class _ExerciseListSliver extends ConsumerWidget {
-  const _ExerciseListSliver({required this.routine, required this.onViewForm});
+  const _ExerciseListSliver({required this.routine});
 
   final RoutineModel routine;
-  final void Function(RoutineExerciseModel) onViewForm;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -288,7 +282,6 @@ class _ExerciseListSliver extends ConsumerWidget {
           routineExercise: exercise,
           index: index,
           completedSets: completedSets,
-          onViewForm: () => onViewForm(exercise),
         );
       }, childCount: routine.exercises.length),
     );
@@ -399,13 +392,11 @@ class _ExerciseCard extends StatelessWidget {
   const _ExerciseCard({
     required this.routineExercise,
     required this.index,
-    required this.onViewForm,
     this.completedSets = 0,
   });
 
   final RoutineExerciseModel routineExercise;
   final int index;
-  final VoidCallback onViewForm;
   final int completedSets;
 
   @override
@@ -436,7 +427,7 @@ class _ExerciseCard extends StatelessWidget {
                           : isDark
                           ? AppColors.primaryDark.withValues(alpha: 0.2)
                           : AppColors.primaryLight.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
+                      shape: BoxShape.circle,
                     ),
                     child: Center(
                       child: isExerciseComplete
@@ -521,21 +512,6 @@ class _ExerciseCard extends StatelessWidget {
                   ),
                 ),
               ],
-
-              const SizedBox(height: 12),
-
-              // Action buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: AppButton.outline(
-                      label: 'View Form',
-                      icon: Icons.visibility,
-                      onPressed: onViewForm,
-                    ),
-                  ),
-                ],
-              ),
             ],
           ),
         ),

@@ -49,6 +49,18 @@
 | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md)             | Standalone workout — exercises, routines, programs, sessions          |
 | [features/SUBSCRIPTION_DEFINITIONS.md](features/SUBSCRIPTION_DEFINITIONS.md) | Subscription-aware stats, session history, upgrade prompts, UI gating |
 
+### Recent Changes (specs/002-fix-client-flow)
+
+| Change                    | Files Affected                                      | Description                                                                                |
+| ------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Segment score aggregation | `form_comparison_service.dart`, `body_segment.dart` | Angle-level DTW scores aggregated into body-segment keys matching server `BodySegmentEnum` |
+| Frame trimming            | `client_recording_provider.dart`                    | Client recording frames trimmed to reference length before DTW comparison                  |
+| DTW defensive guard       | `form_comparison_service.dart`                      | Defensive trim inside `compare()` if client frames exceed reference                        |
+| View Form removed         | `routine_detail_screen.dart`                        | Standalone "View Form" button removed from exercise cards                                  |
+| Log Set above fold        | `client_unity_recording_screen.dart`                | Set logger moved above segment breakdown in results view                                   |
+| Persistent Start Workout  | `routine_detail_screen.dart`                        | Start Workout button moved to `Scaffold.bottomNavigationBar`                               |
+| Nullable assign-program   | `program_request_models.dart`                       | `endDate`/`notes` omitted from JSON when null via `@JsonKey(includeIfNull: false)`         |
+
 ---
 
 ## Feature Categories

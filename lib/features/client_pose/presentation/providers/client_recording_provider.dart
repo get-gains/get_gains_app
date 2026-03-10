@@ -319,11 +319,21 @@ class ClientRecording extends _$ClientRecording {
     state = const ClientRecordingProcessing();
 
     try {
-      // Run DTW comparison
+      // Trim client frames to reference length to prevent over-length
+      // recordings from corrupting the form score (US2).
+      final refLen = _referenceFeatures.length;
+      final trimLen = math.min(_clientFeatures.length, refLen);
+      final trimmedFeatures = _clientFeatures.sublist(0, trimLen);
+      final trimmedLandmarks = _clientLandmarks.sublist(
+        0,
+        math.min(_clientLandmarks.length, trimLen),
+      );
+
+      // Run DTW comparison with trimmed frames
       final result = _comparisonService.compare(
         exerciseFormId: activeState.formId,
         referenceFrames: _referenceFeatures,
-        clientFrames: _clientFeatures,
+        clientFrames: trimmedFeatures,
         cameraAngle: activeState.cameraAngle,
         avgLandmarkConfidence: null,
       );
@@ -357,9 +367,9 @@ class ClientRecording extends _$ClientRecording {
         repCount: repCount,
         uploadSuccess: uploadSuccess,
         referenceLandmarkFrames: List.unmodifiable(_referenceLandmarks),
-        // Apply batch smoothing to client landmarks for clean results playback
+        // Apply batch smoothing to trimmed client landmarks for clean results playback
         clientLandmarkFrames: List.unmodifiable(
-          _preprocessor.smoothFrames(_clientLandmarks),
+          _preprocessor.smoothFrames(trimmedLandmarks),
         ),
         exerciseName: _exerciseName,
       );
