@@ -92,8 +92,10 @@ class ProfileScreen extends ConsumerWidget {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
-            await ref.refresh(profileProvider.future);
-            ref.read(userProfileProvider.notifier).refresh();
+            ref.invalidate(profileProvider);
+            ref.invalidate(userProfileProvider);
+            await ref.read(profileProvider.future);
+            await ref.read(userProfileProvider.future);
           },
           child: profileAsync.when(
             data: (user) => _ProfileContent(

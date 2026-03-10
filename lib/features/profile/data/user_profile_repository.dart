@@ -7,6 +7,7 @@ import '../../../core/constants/api_constants.dart';
 import '../../../core/utils/app_error.dart';
 import '../../../core/utils/logger.dart';
 import '../../../core/utils/result.dart';
+import '../../../providers/auth_state_provider.dart';
 import '../../../services/api/api_client.dart';
 import '../../auth/services/user_preferences_service.dart';
 import 'models/profile_request_models.dart';
@@ -40,19 +41,29 @@ const String _cachedProfileKey = 'cached_user_profile';
 /// in S3 and returns a presigned URL in the response.
 @Riverpod(keepAlive: true)
 UserProfileRepository userProfileRepository(Ref ref) {
+  final currentUserId = ref.watch(authStateProvider).userId;
   return UserProfileRepository(
     ref.watch(apiClientProvider),
     ref.watch(userPreferencesServiceProvider),
+    currentUserId: currentUserId,
   );
 }
 
 class UserProfileRepository {
-  UserProfileRepository(this._apiClient, this._prefs);
+  UserProfileRepository(this._apiClient, this._prefs, {this.currentUserId});
 
   final ApiClient _apiClient;
   final UserPreferencesService _prefs;
+  final String? currentUserId;
 
   static const _tag = 'UserProfileRepository';
+
+  String get _scopedCacheKey {
+    if (currentUserId == null || currentUserId!.isEmpty) {
+      return _cachedProfileKey;
+    }
+    return '$_cachedProfileKey:$currentUserId';
+  }
 
   // ─── GET /profile ───────────────────────────────────────────────────
 
@@ -307,7 +318,7 @@ class UserProfileRepository {
   void _cacheProfile(UserProfileModel profile) {
     try {
       final jsonString = jsonEncode(profile.toJson());
-      _prefs.cacheRaw(_cachedProfileKey, jsonString);
+      _prefs.cacheRaw(_scopedCacheKey, jsonString);
       AppLogger.debug('Profile cached locally', tag: _tag);
     } catch (e) {
       AppLogger.error('Failed to cache profile', tag: _tag, error: e);
@@ -317,7 +328,7 @@ class UserProfileRepository {
   /// Reads the locally-cached profile from Hive.
   UserProfileModel? _readCachedProfile() {
     try {
-      final jsonString = _prefs.readRaw(_cachedProfileKey);
+      final jsonString = _prefs.readRaw(_scopedCacheKey);
       if (jsonString == null) return null;
       final json = jsonDecode(jsonString) as Map<String, dynamic>;
       return UserProfileModel.fromJson(json);
@@ -343,6 +354,8 @@ class UserProfileRepository {
   /// confirms the user has no profile).
   void _clearCachedProfile() {
     try {
+      _prefs.deleteRaw(_scopedCacheKey);
+      // Also clear the legacy unscoped key from older app versions.
       _prefs.deleteRaw(_cachedProfileKey);
     } catch (e) {
       AppLogger.error('Failed to clear cached profile', tag: _tag, error: e);
