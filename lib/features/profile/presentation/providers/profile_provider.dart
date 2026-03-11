@@ -4,6 +4,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/utils/logger.dart';
+import '../../../../providers/auth_state_provider.dart';
 import '../../../../services/api/api_client.dart';
 import '../../../auth/data/models/user_model.dart';
 
@@ -26,6 +27,8 @@ part 'profile_provider.g.dart';
 class Profile extends _$Profile {
   @override
   Future<UserModel> build() async {
+    // Rebuild automatically when the authenticated user changes.
+    ref.watch(authStateProvider);
     final apiClient = ref.watch(apiClientProvider);
     final result = await apiClient.get<Map<String, dynamic>>(
       ApiConstants.userProfile,

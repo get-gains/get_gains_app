@@ -1,6 +1,8 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../core/utils/logger.dart';
+import '../features/profile/presentation/providers/profile_provider.dart';
+import '../features/profile/presentation/providers/user_profile_provider.dart';
+import '../features/subscription/presentation/providers/subscription_provider.dart';
 import '../services/api/api_client.dart';
 import '../services/storage/secure_storage_service.dart';
 
@@ -192,6 +194,12 @@ class AuthStateNotifier extends _$AuthStateNotifier {
       await _storage.delete(key: 'user_email');
 
       state = const AuthState(status: AuthStatus.unauthenticated);
+
+      // Invalidate all user-specific cached providers so the next
+      // login always fetches fresh data for the new account.
+      ref.invalidate(profileProvider);
+      ref.invalidate(userProfileProvider);
+      ref.invalidate(subscriptionProvider);
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
