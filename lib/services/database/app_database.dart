@@ -181,6 +181,30 @@ class StandaloneAssignedPrograms extends Table {
   BoolColumn get isSynced => boolean().withDefault(const Constant(false))();
 }
 
+// ============== Cached Form Tables ==============
+
+/// Generic key-value cache for API responses that have no dedicated table.
+/// Keyed by a stable string (e.g. 'today_routine', 'unified_weekly_stats').
+class CachedApiResponses extends Table {
+  TextColumn get cacheKey => text()();
+  TextColumn get responseJson => text()();
+  DateTimeColumn get cachedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {cacheKey};
+}
+
+/// Cached coach reference forms for offline comparison.
+/// Stores the full API response JSON so forms can be loaded without network.
+class CachedExerciseForms extends Table {
+  TextColumn get exerciseId => text()();
+  TextColumn get responseJson => text()(); // Full JSON from GET /pose/download/exercise/:id
+  DateTimeColumn get cachedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {exerciseId};
+}
+
 // ============== Database Class ==============
 
 /// Application Database
@@ -204,6 +228,8 @@ class StandaloneAssignedPrograms extends Table {
     StandalonePrograms,
     StandaloneProgramRoutines,
     StandaloneAssignedPrograms,
+    CachedExerciseForms,
+    CachedApiResponses,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -211,7 +237,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Database schema version - increment when changing tables
   @override
-  int get schemaVersion => AppConstants.databaseVersion;
+  int get schemaVersion => 4;
 
   /// Handle migrations when schema version changes
   @override
@@ -232,6 +258,14 @@ class AppDatabase extends _$AppDatabase {
           await m.createTable(standalonePrograms);
           await m.createTable(standaloneProgramRoutines);
           await m.createTable(standaloneAssignedPrograms);
+        }
+        if (from < 3) {
+          // v3: Add cached exercise forms table for offline-first
+          await m.createTable(cachedExerciseForms);
+        }
+        if (from < 4) {
+          // v4: Add generic API response cache for offline-first
+          await m.createTable(cachedApiResponses);
         }
       },
       beforeOpen: (details) async {
@@ -737,6 +771,63 @@ class AppDatabase extends _$AppDatabase {
       StandaloneAssignedProgramsCompanion(
         isActive: const Value(false),
         updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  // ============== Cached Exercise Form Operations ==============
+
+  /// Get a cached exercise form by exercise ID
+  Future<CachedExerciseForm?> getCachedExerciseForm(String exerciseId) {
+    return (select(cachedExerciseForms)
+          ..where((c) => c.exerciseId.equals(exerciseId)))
+        .getSingleOrNull();
+  }
+
+  /// Insert or update a cached exercise form
+  Future<void> upsertCachedExerciseForm({
+    required String exerciseId,
+    required String responseJson,
+  }) {
+    return into(cachedExerciseForms).insertOnConflictUpdate(
+      CachedExerciseFormsCompanion.insert(
+        exerciseId: exerciseId,
+        responseJson: responseJson,
+      ),
+    );
+  }
+
+  /// Delete a cached exercise form
+  Future<int> deleteCachedExerciseForm(String exerciseId) {
+    return (delete(cachedExerciseForms)
+          ..where((c) => c.exerciseId.equals(exerciseId)))
+        .go();
+  }
+
+  /// Delete all cached exercise forms
+  Future<int> deleteAllCachedExerciseForms() {
+    return delete(cachedExerciseForms).go();
+  }
+
+  // ============== Generic API Response Cache ==============
+
+  /// Get a cached API response by key (returns null if not cached)
+  Future<String?> getCachedApiResponse(String key) async {
+    final row = await (select(cachedApiResponses)
+          ..where((c) => c.cacheKey.equals(key)))
+        .getSingleOrNull();
+    return row?.responseJson;
+  }
+
+  /// Insert or update a cached API response
+  Future<void> upsertCachedApiResponse({
+    required String key,
+    required String responseJson,
+  }) {
+    return into(cachedApiResponses).insertOnConflictUpdate(
+      CachedApiResponsesCompanion.insert(
+        cacheKey: key,
+        responseJson: responseJson,
       ),
     );
   }
