@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../client_pose/data/client_pose_repository.dart';
 import '../../data/models/models.dart';
 import '../../data/workout_repository.dart';
 import '../providers/workout_session_provider.dart';
@@ -55,6 +56,11 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
 
     final sessionState = ref.read(workoutSessionProvider);
     if (sessionState is WorkoutSessionActive && routine.exercises.isNotEmpty) {
+      // Pre-cache reference forms for all exercises so they're available
+      // offline if connectivity drops during the workout.
+      final exerciseIds = routine.exercises.map((e) => e.exerciseId).toList();
+      ref.read(clientPoseRepositoryProvider).preCacheExerciseForms(exerciseIds);
+
       final firstExercise = routine.exercises.first;
       context.go(
         '/client/exercise/${firstExercise.exerciseId}/unity-record',

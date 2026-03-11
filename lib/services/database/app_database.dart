@@ -198,7 +198,8 @@ class CachedApiResponses extends Table {
 /// Stores the full API response JSON so forms can be loaded without network.
 class CachedExerciseForms extends Table {
   TextColumn get exerciseId => text()();
-  TextColumn get responseJson => text()(); // Full JSON from GET /pose/download/exercise/:id
+  TextColumn get responseJson =>
+      text()(); // Full JSON from GET /pose/download/exercise/:id
   DateTimeColumn get cachedAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
@@ -779,9 +780,9 @@ class AppDatabase extends _$AppDatabase {
 
   /// Get a cached exercise form by exercise ID
   Future<CachedExerciseForm?> getCachedExerciseForm(String exerciseId) {
-    return (select(cachedExerciseForms)
-          ..where((c) => c.exerciseId.equals(exerciseId)))
-        .getSingleOrNull();
+    return (select(
+      cachedExerciseForms,
+    )..where((c) => c.exerciseId.equals(exerciseId))).getSingleOrNull();
   }
 
   /// Insert or update a cached exercise form
@@ -799,9 +800,9 @@ class AppDatabase extends _$AppDatabase {
 
   /// Delete a cached exercise form
   Future<int> deleteCachedExerciseForm(String exerciseId) {
-    return (delete(cachedExerciseForms)
-          ..where((c) => c.exerciseId.equals(exerciseId)))
-        .go();
+    return (delete(
+      cachedExerciseForms,
+    )..where((c) => c.exerciseId.equals(exerciseId))).go();
   }
 
   /// Delete all cached exercise forms
@@ -813,9 +814,9 @@ class AppDatabase extends _$AppDatabase {
 
   /// Get a cached API response by key (returns null if not cached)
   Future<String?> getCachedApiResponse(String key) async {
-    final row = await (select(cachedApiResponses)
-          ..where((c) => c.cacheKey.equals(key)))
-        .getSingleOrNull();
+    final row = await (select(
+      cachedApiResponses,
+    )..where((c) => c.cacheKey.equals(key))).getSingleOrNull();
     return row?.responseJson;
   }
 
