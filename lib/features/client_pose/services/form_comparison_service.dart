@@ -40,7 +40,7 @@ class FormComparisonService {
         workoutSessionId: workoutSessionId,
         routineExerciseId: routineExerciseId,
         overallScore: 0.0,
-        segmentScores: {},
+        segmentScores: defaultSegmentScores(),
         corrections: [],
         cameraAngle: cameraAngle,
         durationMs: 0,
@@ -76,7 +76,7 @@ class FormComparisonService {
         workoutSessionId: workoutSessionId,
         routineExerciseId: routineExerciseId,
         overallScore: 0.0,
-        segmentScores: {},
+        segmentScores: defaultSegmentScores(),
         corrections: [],
         cameraAngle: cameraAngle,
         durationMs: _computeDurationMs(clientFrames),
@@ -237,13 +237,21 @@ class FormComparisonService {
     return BodySegment.FULL_BODY;
   }
 
+  /// Returns a default segment scores map with 0.0 for all segments.
+  static Map<String, double> defaultSegmentScores() {
+    return {for (final segment in BodySegment.values) segment.name: 0.0};
+  }
+
   /// Aggregates per-angle scores into body-segment scores.
   ///
   /// Groups each angle score by its [BodySegment] via [_angleToSegment],
   /// computes the arithmetic mean per segment, and adds a [BodySegment.FULL_BODY]
   /// entry as the mean of all individual angle scores.
+  ///
+  /// Always returns all [BodySegment] keys — the server's Zod schema
+  /// requires every key to be present.
   Map<String, double> _aggregateSegmentScores(Map<String, double> angleScores) {
-    if (angleScores.isEmpty) return {};
+    if (angleScores.isEmpty) return defaultSegmentScores();
 
     // Group angle scores by body segment
     final groups = <BodySegment, List<double>>{};
@@ -256,10 +264,15 @@ class FormComparisonService {
 
     final result = <String, double>{};
 
-    // Compute arithmetic mean per segment
-    for (final entry in groups.entries) {
-      final scores = entry.value;
-      result[entry.key.name] = scores.reduce((a, b) => a + b) / scores.length;
+    // Ensure every BodySegment key is present (the server's Zod schema
+    // requires all BodySegmentEnum keys in segmentScores). Segments without
+    // matching angles default to 0.0.
+    for (final segment in BodySegment.values) {
+      if (segment == BodySegment.FULL_BODY) continue;
+      final scores = groups[segment];
+      result[segment.name] = scores != null && scores.isNotEmpty
+          ? scores.reduce((a, b) => a + b) / scores.length
+          : 0.0;
     }
 
     // FULL_BODY = mean of all individual angle scores

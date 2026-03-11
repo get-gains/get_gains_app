@@ -4,7 +4,9 @@ import 'dart:convert';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../core/constants/api_constants.dart';
+import '../../core/utils/app_error.dart';
 import '../../core/utils/logger.dart';
+import '../../features/client_pose/data/models/body_segment.dart';
 import '../../features/workout/data/workout_repository.dart';
 import '../api/api_client.dart';
 import '../database/app_database.dart';
@@ -379,6 +381,28 @@ class WorkoutSyncService {
       try {
         final payload = jsonDecode(item.payload) as Map<String, dynamic>;
 
+        // Skip entries with invalid/missing required fields — they'll never
+        // pass server validation so there's no point retrying.
+        final exerciseFormId = payload['exerciseFormId'] as String?;
+        if (exerciseFormId == null || exerciseFormId.isEmpty) {
+          AppLogger.warning(
+            'Removing invalid pose result from queue (missing exerciseFormId): ${item.id}',
+            tag: _tag,
+          );
+          await _db.removeFromSyncQueue(item.id);
+          continue;
+        }
+
+        // Ensure segmentScores contains all required BodySegment keys.
+        // Older queued items may have missing keys that fail server
+        // validation. Default missing segments to 0.0.
+        final rawScores = payload['segmentScores'];
+        if (rawScores is Map<String, dynamic>) {
+          for (final segment in BodySegment.values) {
+            rawScores.putIfAbsent(segment.name, () => 0.0);
+          }
+        }
+
         final result = await _apiClient.post<Map<String, dynamic>>(
           ApiConstants.poseResults,
           data: payload,
@@ -391,11 +415,30 @@ class WorkoutSyncService {
             AppLogger.debug('Synced pose result: ${item.recordId}', tag: _tag);
           },
           failure: (error) {
-            AppLogger.error(
-              'Failed to sync pose result ${item.recordId}: ${error.message}',
-              tag: _tag,
-            );
-            _db.incrementRetryCount(item.id);
+            // 4xx client errors (except 401/408/429) are permanent — remove
+            // from queue instead of retrying forever.
+            final statusCode = (error is NetworkError)
+                ? error.statusCode
+                : null;
+            if (statusCode != null &&
+                statusCode >= 400 &&
+                statusCode < 500 &&
+                statusCode != 401 &&
+                statusCode != 408 &&
+                statusCode != 429) {
+              AppLogger.warning(
+                'Removing pose result ${item.recordId} from queue '
+                '(permanent $statusCode error): ${error.message}',
+                tag: _tag,
+              );
+              _db.removeFromSyncQueue(item.id);
+            } else {
+              AppLogger.error(
+                'Failed to sync pose result ${item.recordId}: ${error.message}',
+                tag: _tag,
+              );
+              _db.incrementRetryCount(item.id);
+            }
           },
         );
       } catch (e) {
