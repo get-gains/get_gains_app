@@ -118,6 +118,85 @@ class WorkoutSyncService {
   }
 
   // ──────────────────────────────────────────────────────────
+  // Helpers
+  // ──────────────────────────────────────────────────────────
+
+  /// Auto-create a session on the server and store the returned remoteId.
+  ///
+  /// Used as a fallback when sets/completions reference a session that
+  /// was never synced (e.g. the create queue entry was lost or missing).
+  ///
+  /// If the server responds with 409 (active session already exists), it
+  /// fetches the existing active session and uses its ID instead.
+  Future<String?> _autoCreateSession(WorkoutSession session) async {
+    try {
+      final result = await _apiClient.post<Map<String, dynamic>>(
+        ApiConstants.workoutSessions,
+        data: {
+          if (session.assignedProgramId != null)
+            'assignedProgramId': session.assignedProgramId,
+        },
+      );
+
+      return result.when(
+        success: (data) async {
+          final sessionJson = data['session'] as Map<String, dynamic>;
+          final remoteId = sessionJson['id'] as String;
+          await _db.updateWorkoutSessionRemoteId(session.id, remoteId);
+          AppLogger.info(
+            'Auto-created session ${session.id} → $remoteId',
+            tag: _tag,
+          );
+          return remoteId;
+        },
+        failure: (error) async {
+          // 409 = active session already exists on server — fetch it
+          if (error.message.contains('active workout session')) {
+            return _fetchActiveSessionId(session.id);
+          }
+          AppLogger.warning(
+            'Could not auto-create session ${session.id}: ${error.message}',
+            tag: _tag,
+          );
+          return null;
+        },
+      );
+    } catch (e) {
+      AppLogger.error(
+        'Error auto-creating session ${session.id}',
+        tag: _tag,
+        error: e,
+      );
+      return null;
+    }
+  }
+
+  /// Fetch the server's active session and store its ID on the local session.
+  Future<String?> _fetchActiveSessionId(int localSessionId) async {
+    try {
+      final result = await _apiClient.get<Map<String, dynamic>>(
+        '${ApiConstants.workoutSessions}/active',
+      );
+      return result.when(
+        success: (data) async {
+          final sessionJson = data['session'] as Map<String, dynamic>?;
+          if (sessionJson == null) return null;
+          final remoteId = sessionJson['id'] as String;
+          await _db.updateWorkoutSessionRemoteId(localSessionId, remoteId);
+          AppLogger.info(
+            'Resolved existing active session $localSessionId → $remoteId',
+            tag: _tag,
+          );
+          return remoteId;
+        },
+        failure: (_) => null,
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────
   // Session Sync
   // ──────────────────────────────────────────────────────────
 
@@ -214,6 +293,11 @@ class WorkoutSyncService {
         if (localSessionId != null) {
           final session = await _db.getWorkoutSessionById(localSessionId);
           remoteSessionId = session?.remoteId;
+
+          // Auto-create session on server if no remoteId yet
+          if (remoteSessionId == null && session != null) {
+            remoteSessionId = await _autoCreateSession(session);
+          }
         }
 
         // Resolve local routine exercise ID to remote ID
@@ -317,6 +401,11 @@ class WorkoutSyncService {
         if (localId != null) {
           final session = await _db.getWorkoutSessionById(localId);
           remoteId = session?.remoteId;
+
+          // Auto-create session on server if no remoteId yet
+          if (remoteId == null && session != null) {
+            remoteId = await _autoCreateSession(session);
+          }
         }
 
         if (remoteId == null) {

@@ -403,6 +403,19 @@ class WorkoutRepository {
         ),
       );
 
+      // Add to sync queue so the session is created on the server
+      await _db.addToSyncQueue(
+        SyncQueueCompanion.insert(
+          entityTable: 'workout_sessions',
+          recordId: sessionId.toString(),
+          operation: 'create',
+          payload: jsonEncode({
+            'sessionId': sessionId,
+            'assignedProgramId': assignedProgramId,
+          }),
+        ),
+      );
+
       final session = await _db.getWorkoutSessionById(sessionId);
       if (session == null) {
         return const Failure(

@@ -271,6 +271,7 @@ class _ExerciseListSliver extends ConsumerWidget {
               .setsForExercise(exercise.id)
               .length;
         } else if (sessionState is WorkoutSessionCompleted &&
+            sessionState.routine?.id == routine.id &&
             sessionState.session.performedSets.isNotEmpty) {
           // Just finished — use the completed session data
           completedSets = sessionState.session
@@ -307,7 +308,8 @@ class _StartWorkoutButton extends ConsumerWidget {
     final todaySession = ref.watch(todayCompletedSessionProvider(routine.id));
 
     final bool isCompletedToday =
-        sessionState is WorkoutSessionCompleted ||
+        (sessionState is WorkoutSessionCompleted &&
+            sessionState.routine?.id == routine.id) ||
         (todaySession.value?.isCompleted ?? false);
 
     if (isCompletedToday) {
