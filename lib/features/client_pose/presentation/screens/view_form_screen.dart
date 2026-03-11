@@ -60,8 +60,9 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor:
-          isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+      backgroundColor: isDark
+          ? AppColors.backgroundDark
+          : AppColors.backgroundLight,
       appBar: AppBar(title: const Text('Reference Form'), centerTitle: true),
       body: FutureBuilder<Map<String, dynamic>?>(
         future: _formFuture,
@@ -127,20 +128,6 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
                   const SizedBox(height: 16),
                   _PoseConfigInfo(config: poseConfig, isDark: isDark),
                 ],
-                const SizedBox(height: 24),
-                AppButton.primary(
-                  label: 'Compare My Form',
-                  icon: Icons.view_in_ar,
-                  isFullWidth: true,
-                  onPressed: () {
-                    context.push(
-                      AppRoutes.clientUnityRecord.replaceFirst(
-                        ':id',
-                        widget.exerciseId,
-                      ),
-                    );
-                  },
-                ),
                 const SizedBox(height: 32),
               ],
             ),
@@ -290,9 +277,7 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
                           ),
                         )
                       else
-                        EmbedUnity(
-                          onMessageFromUnity: _onMessageFromUnity,
-                        ),
+                        EmbedUnity(onMessageFromUnity: _onMessageFromUnity),
 
                       // Mode toggle pill (top-right)
                       Positioned(
@@ -415,9 +400,7 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
                       Flexible(
                         child: Text(
                           'Version $version',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
+                          style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.bold),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -583,15 +566,13 @@ class _PoseConfigInfo extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   'Setup Tips',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ],
             ),
-            if (setupInstructions != null &&
-                setupInstructions.isNotEmpty) ...[
+            if (setupInstructions != null && setupInstructions.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
                 setupInstructions,
