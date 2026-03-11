@@ -96,11 +96,13 @@ class WorkoutSyncService {
       final sessionsResult = await _syncPendingSessions();
       final setsResult = await _syncPendingSets();
       final completionsResult = await _syncPendingCompletions();
+      final poseResultsResult = await _syncPendingPoseResults();
 
       final result = WorkoutSyncResult(
         sessionsSynced: sessionsResult,
         setsSynced: setsResult,
         completionsSynced: completionsResult,
+        poseResultsSynced: poseResultsResult,
       );
 
       AppLogger.info('Workout sync complete: $result', tag: _tag);
@@ -354,6 +356,60 @@ class WorkoutSyncService {
 
     return synced;
   }
+
+  // ──────────────────────────────────────────────────────────
+  // Pose Result Sync
+  // ──────────────────────────────────────────────────────────
+
+  /// Sync locally-queued pose comparison results to the server.
+  Future<int> _syncPendingPoseResults() async {
+    final pendingItems = await _db.getPendingSyncItems();
+
+    final poseItems = pendingItems
+        .where(
+          (item) =>
+              item.entityTable == 'pose_results' && item.operation == 'create',
+        )
+        .toList();
+
+    if (poseItems.isEmpty) return 0;
+
+    int synced = 0;
+    for (final item in poseItems) {
+      try {
+        final payload = jsonDecode(item.payload) as Map<String, dynamic>;
+
+        final result = await _apiClient.post<Map<String, dynamic>>(
+          ApiConstants.poseResults,
+          data: payload,
+        );
+
+        result.when(
+          success: (_) {
+            _db.removeFromSyncQueue(item.id);
+            synced++;
+            AppLogger.debug('Synced pose result: ${item.recordId}', tag: _tag);
+          },
+          failure: (error) {
+            AppLogger.error(
+              'Failed to sync pose result ${item.recordId}: ${error.message}',
+              tag: _tag,
+            );
+            _db.incrementRetryCount(item.id);
+          },
+        );
+      } catch (e) {
+        AppLogger.error(
+          'Error syncing pose result ${item.recordId}',
+          tag: _tag,
+          error: e,
+        );
+        await _db.incrementRetryCount(item.id);
+      }
+    }
+
+    return synced;
+  }
 }
 
 /// Provider for [WorkoutSyncService].
@@ -377,19 +433,27 @@ class WorkoutSyncResult {
     required this.sessionsSynced,
     required this.setsSynced,
     required this.completionsSynced,
+    required this.poseResultsSynced,
   });
 
-  factory WorkoutSyncResult.empty() =>
-      WorkoutSyncResult(sessionsSynced: 0, setsSynced: 0, completionsSynced: 0);
+  factory WorkoutSyncResult.empty() => WorkoutSyncResult(
+    sessionsSynced: 0,
+    setsSynced: 0,
+    completionsSynced: 0,
+    poseResultsSynced: 0,
+  );
 
   final int sessionsSynced;
   final int setsSynced;
   final int completionsSynced;
+  final int poseResultsSynced;
 
-  int get total => sessionsSynced + setsSynced + completionsSynced;
+  int get total =>
+      sessionsSynced + setsSynced + completionsSynced + poseResultsSynced;
 
   @override
   String toString() =>
       'WorkoutSyncResult(sessions: $sessionsSynced, '
-      'sets: $setsSynced, completions: $completionsSynced)';
+      'sets: $setsSynced, completions: $completionsSynced, '
+      'poseResults: $poseResultsSynced)';
 }
