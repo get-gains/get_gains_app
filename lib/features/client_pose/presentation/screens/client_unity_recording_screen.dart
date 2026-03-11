@@ -573,7 +573,23 @@ class _ClientUnityRecordingScreenState
           ),
         ],
       ),
-      body: _buildBody(context, state, isDark),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          _buildBody(context, state, isDark),
+          // Pre-warm Unity: keep a 1×1 invisible EmbedUnity in the tree so
+          // Unity finishes loading during setup / countdown, before recording
+          // begins. Removed once scene_loaded fires (_isUnityLoaded = true).
+          if (!_isUnityLoaded)
+            Positioned(
+              left: 0,
+              top: 0,
+              width: 1,
+              height: 1,
+              child: EmbedUnity(onMessageFromUnity: _onMessageFromUnity),
+            ),
+        ],
+      ),
     );
   }
 
