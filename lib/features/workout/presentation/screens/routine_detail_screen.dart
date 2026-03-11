@@ -520,6 +520,33 @@ class _ExerciseCard extends StatelessWidget {
                   ),
                 ),
               ],
+
+              // Analyze Form action
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => context.push(
+                      AppRoutes.clientViewForm.replaceFirst(
+                        ':id',
+                        routineExercise.exerciseId,
+                      ),
+                    ),
+                    icon: const Icon(Icons.analytics_outlined, size: 16),
+                    label: const Text('Analyze Form'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
