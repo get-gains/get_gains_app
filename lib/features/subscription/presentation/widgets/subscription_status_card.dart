@@ -129,10 +129,13 @@ class SubscriptionStatusCard extends ConsumerWidget {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        _formatPlanName(subscription.plan.name),
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                      Flexible(
+                        child: Text(
+                          _formatPlanName(subscription.plan.name),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       AppBadge(

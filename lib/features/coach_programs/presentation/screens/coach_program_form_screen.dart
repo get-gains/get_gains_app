@@ -34,12 +34,13 @@ class _CoachProgramFormScreenState
   void initState() {
     super.initState();
     if (widget.isEditing) {
-      _loadExisting();
+      // Defer load to after the first build so ref.watch() establishes
+      // a subscription before the auto-dispose provider can be collected.
+      Future.microtask(_loadExisting);
     }
   }
 
   Future<void> _loadExisting() async {
-    // Load from the detail provider if editing
     final notifier = ref.read(
       programDetailProvider(widget.programId!).notifier,
     );
