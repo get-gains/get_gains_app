@@ -551,13 +551,15 @@ class AppDatabase extends _$AppDatabase {
     return (delete(workoutSessions)..where((ws) => ws.id.equals(id))).go();
   }
 
-  /// Delete completed sessions older than [days] days (and their sets)
+  /// Delete completed sessions older than [days] days (and their sets).
+  /// Only deletes sessions that have been synced to the server.
   Future<int> deleteOldCompletedSessions({int days = 7}) async {
     final cutoff = DateTime.now().subtract(Duration(days: days));
     return (delete(workoutSessions)..where(
           (ws) =>
               ws.completedAt.isNotNull() &
-              ws.completedAt.isSmallerThanValue(cutoff),
+              ws.completedAt.isSmallerThanValue(cutoff) &
+              ws.isSynced.equals(true),
         ))
         .go();
   }
