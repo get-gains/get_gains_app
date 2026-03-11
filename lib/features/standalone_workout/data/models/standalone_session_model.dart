@@ -11,19 +11,31 @@ part 'standalone_session_model.g.dart';
 /// Standalone session list response (paginated).
 ///
 /// Returned by `GET /api/standalone/sessions`.
+/// Server wraps pagination in a nested `pagination` object.
 @freezed
 abstract class StandaloneSessionListResponse
     with _$StandaloneSessionListResponse {
   const factory StandaloneSessionListResponse({
     required List<StandaloneSessionSummary> sessions,
-    required int total,
-    required int limit,
-    required int offset,
-    @Default(false) bool hasMore,
+    required StandaloneSessionPagination pagination,
   }) = _StandaloneSessionListResponse;
 
   factory StandaloneSessionListResponse.fromJson(Map<String, dynamic> json) =>
       _$StandaloneSessionListResponseFromJson(json);
+}
+
+/// Pagination metadata for standalone session history.
+@freezed
+abstract class StandaloneSessionPagination with _$StandaloneSessionPagination {
+  const factory StandaloneSessionPagination({
+    @Default(0) int total,
+    @Default(20) int limit,
+    @Default(0) int offset,
+    @Default(false) bool hasMore,
+  }) = _StandaloneSessionPagination;
+
+  factory StandaloneSessionPagination.fromJson(Map<String, dynamic> json) =>
+      _$StandaloneSessionPaginationFromJson(json);
 }
 
 /// Lightweight session summary for history list views.

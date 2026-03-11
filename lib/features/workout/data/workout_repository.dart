@@ -1362,6 +1362,10 @@ class WorkoutRepository {
   /// and pagination. Returns sessions with source badges ("standalone"
   /// or "coach"), program names, and coach names.
   ///
+  /// **Offline-first**: On success the first page (offset 0) is cached
+  /// locally. On network failure the cached page is returned so the
+  /// user can still browse their history without connectivity.
+  ///
   /// All sessions are returned regardless of subscription status —
   /// coach session history is never gated (user's own training data).
   Future<Result<UnifiedSessionHistoryResponse, AppError>>
@@ -1382,6 +1386,8 @@ class WorkoutRepository {
       'offset': offset,
     };
 
+    final cacheKey = 'unified_history_$source';
+
     final result = await _apiClient.get<Map<String, dynamic>>(
       ApiConstants.unifiedSessionHistory,
       queryParameters: queryParams,
@@ -1396,6 +1402,22 @@ class WorkoutRepository {
             '(total: ${response.pagination.total}, source: $source)',
             tag: 'WorkoutRepo',
           );
+
+          // Cache the first page for offline use.
+          if (offset == 0) {
+            _db
+                .upsertCachedApiResponse(
+                  key: cacheKey,
+                  responseJson: jsonEncode(data),
+                )
+                .catchError((e) {
+                  AppLogger.warning(
+                    'Failed to cache unified history: $e',
+                    tag: 'WorkoutRepo',
+                  );
+                });
+          }
+
           return Success(response);
         } catch (e) {
           AppLogger.error(
@@ -1417,9 +1439,37 @@ class WorkoutRepository {
           tag: 'WorkoutRepo',
           error: error,
         );
+
+        // Network failed — try returning cached first page.
+        if (offset == 0) {
+          return _loadCachedUnifiedHistory(cacheKey, error);
+        }
         return Failure(error);
       },
     );
+  }
+
+  /// Attempt to load cached unified history on network failure.
+  Future<Result<UnifiedSessionHistoryResponse, AppError>>
+  _loadCachedUnifiedHistory(String cacheKey, AppError originalError) async {
+    try {
+      final cached = await _db.getCachedApiResponse(cacheKey);
+      if (cached != null) {
+        AppLogger.info(
+          'Loaded cached unified history ($cacheKey)',
+          tag: 'WorkoutRepo',
+        );
+        final data = jsonDecode(cached) as Map<String, dynamic>;
+        final response = UnifiedSessionHistoryResponse.fromJson(data);
+        return Success(response);
+      }
+    } catch (e) {
+      AppLogger.warning(
+        'Failed to read cached unified history: $e',
+        tag: 'WorkoutRepo',
+      );
+    }
+    return Failure(originalError);
   }
 }
 

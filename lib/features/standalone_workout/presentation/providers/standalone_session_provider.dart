@@ -185,10 +185,10 @@ class StandaloneSessionHistoryNotifier
       success: (response) {
         state = StandaloneSessionHistoryLoaded(
           sessions: response.sessions,
-          total: response.total,
-          hasMore: response.hasMore,
-          offset: response.offset,
-          limit: response.limit,
+          total: response.pagination.total,
+          hasMore: response.pagination.hasMore,
+          offset: response.pagination.offset,
+          limit: response.pagination.limit,
         );
       },
       failure: (error) {
@@ -213,10 +213,10 @@ class StandaloneSessionHistoryNotifier
       success: (response) {
         state = StandaloneSessionHistoryLoaded(
           sessions: [...current.sessions, ...response.sessions],
-          total: response.total,
-          hasMore: response.hasMore,
-          offset: response.offset,
-          limit: response.limit,
+          total: response.pagination.total,
+          hasMore: response.pagination.hasMore,
+          offset: response.pagination.offset,
+          limit: response.pagination.limit,
         );
       },
       failure: (error) {
