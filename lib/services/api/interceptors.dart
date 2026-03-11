@@ -267,10 +267,13 @@ class RetryInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    // Only retry on network errors or 5xx server errors
+    // Only retry on timeouts or 5xx server errors.
+    // Do NOT retry connectionError — the server is unreachable so retrying
+    // just wastes time and delays offline fallbacks.
     final shouldRetry =
-        err.type == DioExceptionType.connectionError ||
         err.type == DioExceptionType.connectionTimeout ||
+        err.type == DioExceptionType.receiveTimeout ||
+        err.type == DioExceptionType.sendTimeout ||
         (err.response?.statusCode ?? 0) >= 500;
 
     if (!shouldRetry) {
@@ -291,7 +294,8 @@ class RetryInterceptor extends Interceptor {
 
     if (retryCount < maxRetries) {
       // Rebuild from baseUrl + path so retry never uses a corrupted URI (e.g. 1192.168...)
-      final retryUrl = '${ApiConstants.baseUrl}${err.requestOptions.path.startsWith('/') ? '' : '/'}${err.requestOptions.path}';
+      final retryUrl =
+          '${ApiConstants.baseUrl}${err.requestOptions.path.startsWith('/') ? '' : '/'}${err.requestOptions.path}';
       AppLogger.info(
         'Retrying request (${retryCount + 1}/$maxRetries): $retryUrl',
         tag: 'RetryInterceptor',
