@@ -2,22 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_embed_unity/flutter_embed_unity.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
+import '../../../../services/database/app_database.dart';
+import '../../data/unity_cosmetics_loader.dart';
 import '../../data/unity_message_contract.dart';
 
 /// Unity Test Screen
 ///
 /// Screen for testing Unity integration. Displays the Unity widget
 /// and provides controls to send/receive messages from Unity.
-class UnityTestScreen extends StatefulWidget {
+class UnityTestScreen extends ConsumerStatefulWidget {
   const UnityTestScreen({super.key});
 
   @override
-  State<UnityTestScreen> createState() => _UnityTestScreenState();
+  ConsumerState<UnityTestScreen> createState() => _UnityTestScreenState();
 }
 
-class _UnityTestScreenState extends State<UnityTestScreen> {
+class _UnityTestScreenState extends ConsumerState<UnityTestScreen> {
   final List<String> _messagesFromUnity = [];
   final TextEditingController _sendController = TextEditingController();
   final FocusNode _sendFocusNode = FocusNode();
@@ -243,6 +247,10 @@ class _UnityTestScreenState extends State<UnityTestScreen> {
       if (message == UnityMessageContract.unityEventSceneLoaded) {
         _isUnityLoaded = true;
         _messagesFromUnity.insert(0, '[Scene ready]');
+        // Load equipped cosmetics onto the character
+        UnityCosmeticsLoader.loadEquippedCosmetics(
+          ref.read(appDatabaseProvider),
+        );
       } else {
         _messagesFromUnity.insert(0, message);
       }

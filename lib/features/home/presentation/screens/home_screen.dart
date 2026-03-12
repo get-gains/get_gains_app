@@ -216,7 +216,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                     const SizedBox(height: 12),
 
-                    // Shop quick action
+                    // Shop & Wardrobe quick actions
                     Row(
                       children: [
                         Expanded(
@@ -236,6 +236,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                         ),
                         const SizedBox(width: 12),
+                        Expanded(
+                          child: QuickActionCard(
+                            icon: Icons.checkroom_rounded,
+                            title: 'Wardrobe',
+                            subtitle: 'Equip cosmetics',
+                            gradient: LinearGradient(
+                              colors: [
+                                const Color(0xFF8B5CF6),
+                                const Color(0xFF8B5CF6).withValues(alpha: 0.7),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            onTap: () => context.push(AppRoutes.inventory),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Progress quick action
+                    Row(
+                      children: [
                         Expanded(
                           child: QuickActionCard(
                             icon: Icons.trending_up_rounded,
