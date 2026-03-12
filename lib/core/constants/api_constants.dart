@@ -97,4 +97,12 @@ class ApiConstants {
   static const String subscriptionStatus = '/subscriptions/status';
   static const String subscriptionHistory = '/subscriptions/history';
   static const String subscriptionVerify = '/subscriptions/verify';
+
+  // Coins Endpoints
+  static const String coinBalance = '/coins/balance';
+  static const String coinHistory = '/coins/history';
+
+  // Shop Endpoints
+  static const String shopCatalog = '/shop/catalog';
+  static const String shopPurchase = '/shop/purchase';
 }

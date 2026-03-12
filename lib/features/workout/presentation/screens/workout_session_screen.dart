@@ -128,7 +128,13 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
             onPressed: () {
               Navigator.of(context).pop();
               ref.invalidate(activeTodayProvider);
-              context.go(AppRoutes.home);
+              context.go(
+                AppRoutes.coinReward,
+                extra: <String, dynamic>{
+                  'setsCompleted': session.completedSetsCount,
+                  'sessionDurationMin': session.duration?.inMinutes ?? 0,
+                },
+              );
             },
             child: const Text('Done'),
           ),

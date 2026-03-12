@@ -129,6 +129,7 @@ class _StandaloneTodayScreenState extends ConsumerState<StandaloneTodayScreen> {
     }
 
     if (sessionState is StandaloneSessionCompleted) {
+      final completedSession = sessionState.session;
       return Padding(
         padding: const EdgeInsets.only(bottom: 16),
         child: AppCard.elevated(
@@ -154,11 +155,26 @@ class _StandaloneTodayScreenState extends ConsumerState<StandaloneTodayScreen> {
                 ],
               ),
               const SizedBox(height: 8),
+              AppButton.primary(
+                label: 'View Coin Reward',
+                onPressed: () {
+                  ref.read(standaloneSessionProvider.notifier).reset();
+                  context.go(
+                    AppRoutes.coinReward,
+                    extra: <String, dynamic>{
+                      'setsCompleted': completedSession.completedSetsCount,
+                      'sessionDurationMin':
+                          completedSession.duration?.inMinutes ?? 0,
+                    },
+                  );
+                },
+                isFullWidth: true,
+              ),
+              const SizedBox(height: 8),
               AppButton.outline(
                 label: 'Dismiss',
-                onPressed: () => ref
-                    .read(standaloneSessionProvider.notifier)
-                    .reset(),
+                onPressed: () =>
+                    ref.read(standaloneSessionProvider.notifier).reset(),
                 isFullWidth: true,
               ),
             ],
