@@ -14,7 +14,7 @@ abstract class CosmeticModel with _$CosmeticModel {
     required String category,
     required String previewImageUrl,
     required String unityAssetRef,
-    required String status,
+    @Default('ACTIVE') String status,
     @Default(0) int sortOrder,
   }) = _CosmeticModel;
 
