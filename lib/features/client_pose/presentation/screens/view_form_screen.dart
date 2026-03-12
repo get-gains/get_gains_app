@@ -7,8 +7,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
+import '../../../../services/database/app_database.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../coach_pose/data/models/landmark_models.dart';
+import '../../../unity/data/unity_cosmetics_loader.dart';
 import '../../../unity/data/unity_message_contract.dart';
 import '../../data/client_pose_repository.dart';
 import '../widgets/pose_view_widget.dart';
@@ -187,6 +189,11 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
     if (!mounted || _mode != _PreviewMode.threeD) return;
     if (message == UnityMessageContract.unityEventSceneLoaded) {
       setState(() => _unityReady = true);
+      // Load equipped cosmetics onto the character
+      final container = ProviderScope.containerOf(context);
+      UnityCosmeticsLoader.loadEquippedCosmetics(
+        container.read(appDatabaseProvider),
+      );
       _sendPoseToUnity();
     }
   }

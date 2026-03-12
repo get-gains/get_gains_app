@@ -97,4 +97,22 @@ class ApiConstants {
   static const String subscriptionStatus = '/subscriptions/status';
   static const String subscriptionHistory = '/subscriptions/history';
   static const String subscriptionVerify = '/subscriptions/verify';
+
+  // Coins Endpoints
+  static const String coinBalance = '/coins/balance';
+  static const String coinHistory = '/coins/history';
+
+  // Shop Endpoints
+  static const String shopCatalog = '/shop/catalog';
+  static const String shopPurchase = '/shop/purchase';
+
+  // Cosmetics Endpoints
+  static const String cosmeticsInventory = '/cosmetics/inventory';
+  static const String cosmeticsEquip = '/cosmetics/equip';
+  static const String cosmeticsUnequip = '/cosmetics/unequip';
+  static const String cosmeticsEquipped = '/cosmetics/equipped';
+
+  // Leaderboard Endpoints
+  static const String leaderboardClass = '/leaderboard/class';
+  static const String leaderboardMyCoaches = '/leaderboard/my-coaches';
 }
