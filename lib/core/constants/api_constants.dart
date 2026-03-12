@@ -105,4 +105,10 @@ class ApiConstants {
   // Shop Endpoints
   static const String shopCatalog = '/shop/catalog';
   static const String shopPurchase = '/shop/purchase';
+
+  // Cosmetics Endpoints
+  static const String cosmeticsInventory = '/cosmetics/inventory';
+  static const String cosmeticsEquip = '/cosmetics/equip';
+  static const String cosmeticsUnequip = '/cosmetics/unequip';
+  static const String cosmeticsEquipped = '/cosmetics/equipped';
 }

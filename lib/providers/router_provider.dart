@@ -19,6 +19,7 @@ import '../features/gains_coins/presentation/screens/coin_history_screen.dart';
 import '../features/gains_coins/presentation/screens/coin_reward_screen.dart';
 import '../features/gains_coins/presentation/screens/shop_screen.dart';
 import '../features/gains_coins/presentation/screens/cosmetic_detail_screen.dart';
+import '../features/gains_coins/presentation/screens/inventory_screen.dart';
 import '../features/gains_coins/data/models/cosmetic_model.dart';
 import 'auth_state_provider.dart';
 import '../features/programs/screens/program_screen.dart';
@@ -124,6 +125,7 @@ class AppRoutes {
   static const String coinHistory = '/coins/history';
   static const String shop = '/shop';
   static const String cosmeticDetail = '/shop/cosmetic';
+  static const String inventory = '/inventory';
 }
 
 /// Router Provider
@@ -643,6 +645,10 @@ GoRouter router(Ref ref) {
           final cosmetic = state.extra as CosmeticModel;
           return CosmeticDetailScreen(cosmetic: cosmetic);
         },
+      ),
+      GoRoute(
+        path: AppRoutes.inventory,
+        builder: (context, state) => const InventoryScreen(),
       ),
     ],
 

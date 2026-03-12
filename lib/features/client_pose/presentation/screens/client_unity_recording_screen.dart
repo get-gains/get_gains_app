@@ -13,11 +13,13 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../../providers/router_provider.dart';
+import '../../../../services/database/app_database.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../coach_pose/data/models/landmark_models.dart';
 import '../../../coach_pose/services/pose_detection_service.dart';
 import '../../../coach_pose/services/setup_validation_service.dart';
 import '../../../coach_pose/presentation/widgets/setup_checklist.dart';
+import '../../../unity/data/unity_cosmetics_loader.dart';
 import '../../../unity/data/unity_message_contract.dart';
 import '../../../workout/data/models/models.dart';
 import '../../../workout/presentation/providers/workout_session_provider.dart';
@@ -293,6 +295,8 @@ class _ClientUnityRecordingScreenState
         _showUnity =
             true; // Unity successfully loaded — switch from 2D fallback
       });
+      // Load equipped cosmetics onto the character
+      UnityCosmeticsLoader.loadEquippedCosmetics(ref.read(appDatabaseProvider));
       // Send reference frames now that Unity scene is ready
       _sendReferenceFramesToUnity();
     } else if (message == UnityMessageContract.unityEventPoseReady) {
