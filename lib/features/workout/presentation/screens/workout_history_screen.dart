@@ -89,6 +89,7 @@ class _WorkoutHistoryScreenState extends ConsumerState<WorkoutHistoryScreen> {
     });
 
     final repo = ref.read(workoutRepositoryProvider);
+    final userId = ref.read(authStateProvider).userId;
     final result = await repo.getUnifiedSessionHistory(
       source: _activeFilter.queryValue,
       limit: _pageSize,
@@ -98,23 +99,87 @@ class _WorkoutHistoryScreenState extends ConsumerState<WorkoutHistoryScreen> {
     if (!mounted) return;
 
     result.when(
+      success: (response) async {
+        if (response.sessions.isNotEmpty) {
+          setState(() {
+            if (page == 0) _sessions.clear();
+            _sessions.addAll(response.sessions);
+            _hasMore = response.pagination.hasMore;
+            _currentPage = page;
+            _isLoadingMore = false;
+            _isInitialLoad = false;
+          });
+          return;
+        }
+        // Server returned empty — fall back to local DB
+        await _loadFromLocal(repo, userId, page);
+      },
+      failure: (error) async {
+        await _loadFromLocal(repo, userId, page, serverError: '$error');
+      },
+    );
+  }
+
+  Future<void> _loadFromLocal(
+    WorkoutRepository repo,
+    String? userId,
+    int page, {
+    String? serverError,
+  }) async {
+    if (userId == null) {
+      setState(() {
+        _isLoadingMore = false;
+        _isInitialLoad = false;
+        if (page == 0 && serverError != null) {
+          _hasError = true;
+          _errorMessage = serverError;
+        }
+      });
+      return;
+    }
+
+    final localResult = await repo.getLocalSessionHistory(
+      userId: userId,
+      limit: _pageSize,
+      offset: page * _pageSize,
+    );
+
+    if (!mounted) return;
+
+    localResult.when(
       success: (response) {
+        final mapped = response.sessions
+            .map(
+              (s) => UnifiedSessionSummary(
+                id: s.id,
+                userId: s.userId,
+                assignedProgramId: s.assignedProgramId,
+                routineId: s.routineId,
+                startedAt: s.startedAt,
+                completedAt: s.completedAt,
+                notes: s.notes,
+                totalSets: s.totalSets,
+                routineName: s.routineName,
+                source: s.assignedProgramId != null ? 'coach' : 'standalone',
+              ),
+            )
+            .toList();
         setState(() {
           if (page == 0) _sessions.clear();
-          _sessions.addAll(response.sessions);
+          _sessions.addAll(mapped);
           _hasMore = response.pagination.hasMore;
           _currentPage = page;
           _isLoadingMore = false;
           _isInitialLoad = false;
         });
       },
-      failure: (error) {
+      failure: (localError) {
         setState(() {
           _isLoadingMore = false;
           _isInitialLoad = false;
           if (page == 0) {
             _hasError = true;
-            _errorMessage = '$error';
+            _errorMessage = serverError ?? '$localError';
           }
         });
       },

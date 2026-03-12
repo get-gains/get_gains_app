@@ -403,6 +403,19 @@ class WorkoutRepository {
         ),
       );
 
+      // Add to sync queue so the session is created on the server
+      await _db.addToSyncQueue(
+        SyncQueueCompanion.insert(
+          entityTable: 'workout_sessions',
+          recordId: sessionId.toString(),
+          operation: 'create',
+          payload: jsonEncode({
+            'sessionId': sessionId,
+            'assignedProgramId': assignedProgramId,
+          }),
+        ),
+      );
+
       final session = await _db.getWorkoutSessionById(sessionId);
       if (session == null) {
         return const Failure(
@@ -929,38 +942,64 @@ class WorkoutRepository {
       queryParameters: queryParams.isNotEmpty ? queryParams : null,
     );
 
-    return result.when(
-      success: (data) {
-        try {
-          final model = TodayRoutineModel.fromJson(data);
-          AppLogger.info(
-            'Today routine: ${model.isRestDay ? "Rest Day" : model.today?.routine.name}',
-            tag: 'WorkoutRepo',
-          );
-          return Success(model);
-        } catch (e) {
-          AppLogger.error(
-            'Failed to parse today routine',
-            tag: 'WorkoutRepo',
-            error: e,
-          );
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse today routine: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
-      failure: (error) {
-        AppLogger.error(
-          'Failed to fetch today routine',
+    if (result is Success<Map<String, dynamic>, AppError>) {
+      final data = result.value;
+      try {
+        final model = TodayRoutineModel.fromJson(data);
+        AppLogger.info(
+          'Today routine: ${model.isRestDay ? "Rest Day" : model.today?.routine.name}',
           tag: 'WorkoutRepo',
-          error: error,
         );
-        return Failure(error);
-      },
+        // Cache the response for offline use (fire-and-forget)
+        _db.upsertCachedApiResponse(
+          key: 'today_routine',
+          responseJson: jsonEncode(data),
+        );
+        return Success(model);
+      } catch (e) {
+        AppLogger.error(
+          'Failed to parse today routine',
+          tag: 'WorkoutRepo',
+          error: e,
+        );
+        return Failure(
+          UnknownError(
+            message: 'Failed to parse today routine: $e',
+            originalError: e,
+          ),
+        );
+      }
+    }
+
+    // Server failed — attempt to load from cache
+    AppLogger.warning(
+      'Server unavailable — trying cached today routine',
+      tag: 'WorkoutRepo',
     );
+    try {
+      final cached = await _db.getCachedApiResponse('today_routine');
+      if (cached != null) {
+        final model = TodayRoutineModel.fromJson(
+          jsonDecode(cached) as Map<String, dynamic>,
+        );
+        AppLogger.info('Loaded today routine from cache', tag: 'WorkoutRepo');
+        return Success(model);
+      }
+    } catch (e) {
+      AppLogger.error(
+        'Failed to load cached today routine',
+        tag: 'WorkoutRepo',
+        error: e,
+      );
+    }
+
+    final failure = result as Failure<Map<String, dynamic>, AppError>;
+    AppLogger.error(
+      'Failed to fetch today routine — no cache available',
+      tag: 'WorkoutRepo',
+      error: failure.error,
+    );
+    return Failure(failure.error);
   }
 
   /// Fetch aggregated weekly workout statistics from the server.
@@ -1039,40 +1078,66 @@ class WorkoutRepository {
       queryParameters: queryParams.isNotEmpty ? queryParams : null,
     );
 
-    return result.when(
-      success: (data) {
-        try {
-          final model = UnifiedWeeklyStats.fromJson(data);
-          AppLogger.info(
-            'Unified weekly stats: ${model.workoutsCompleted} workouts, '
-            '${model.totalMinutes}min, ${model.streakDays} streak, '
-            '${model.sources.length} sources',
-            tag: 'WorkoutRepo',
-          );
-          return Success(model);
-        } catch (e) {
-          AppLogger.error(
-            'Failed to parse unified weekly stats',
-            tag: 'WorkoutRepo',
-            error: e,
-          );
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse unified weekly stats: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
-      failure: (error) {
-        AppLogger.error(
-          'Failed to fetch unified weekly stats',
+    if (result is Success<Map<String, dynamic>, AppError>) {
+      final data = result.value;
+      try {
+        final model = UnifiedWeeklyStats.fromJson(data);
+        AppLogger.info(
+          'Unified weekly stats: ${model.workoutsCompleted} workouts, '
+          '${model.totalMinutes}min, ${model.streakDays} streak, '
+          '${model.sources.length} sources',
           tag: 'WorkoutRepo',
-          error: error,
         );
-        return Failure(error);
-      },
+        // Cache for offline use (fire-and-forget)
+        _db.upsertCachedApiResponse(
+          key: 'unified_weekly_stats',
+          responseJson: jsonEncode(data),
+        );
+        return Success(model);
+      } catch (e) {
+        AppLogger.error(
+          'Failed to parse unified weekly stats',
+          tag: 'WorkoutRepo',
+          error: e,
+        );
+        return Failure(
+          UnknownError(
+            message: 'Failed to parse unified weekly stats: $e',
+            originalError: e,
+          ),
+        );
+      }
+    }
+
+    // Server failed — attempt to load from cache
+    AppLogger.warning(
+      'Server unavailable — trying cached weekly stats',
+      tag: 'WorkoutRepo',
     );
+    try {
+      final cached = await _db.getCachedApiResponse('unified_weekly_stats');
+      if (cached != null) {
+        final model = UnifiedWeeklyStats.fromJson(
+          jsonDecode(cached) as Map<String, dynamic>,
+        );
+        AppLogger.info('Loaded weekly stats from cache', tag: 'WorkoutRepo');
+        return Success(model);
+      }
+    } catch (e) {
+      AppLogger.error(
+        'Failed to load cached weekly stats',
+        tag: 'WorkoutRepo',
+        error: e,
+      );
+    }
+
+    final failure = result as Failure<Map<String, dynamic>, AppError>;
+    AppLogger.error(
+      'Failed to fetch unified weekly stats — no cache available',
+      tag: 'WorkoutRepo',
+      error: failure.error,
+    );
+    return Failure(failure.error);
   }
 
   /// Fetch paginated workout session history from the server.
@@ -1310,6 +1375,10 @@ class WorkoutRepository {
   /// and pagination. Returns sessions with source badges ("standalone"
   /// or "coach"), program names, and coach names.
   ///
+  /// **Offline-first**: On success the first page (offset 0) is cached
+  /// locally. On network failure the cached page is returned so the
+  /// user can still browse their history without connectivity.
+  ///
   /// All sessions are returned regardless of subscription status —
   /// coach session history is never gated (user's own training data).
   Future<Result<UnifiedSessionHistoryResponse, AppError>>
@@ -1330,6 +1399,8 @@ class WorkoutRepository {
       'offset': offset,
     };
 
+    final cacheKey = 'unified_history_$source';
+
     final result = await _apiClient.get<Map<String, dynamic>>(
       ApiConstants.unifiedSessionHistory,
       queryParameters: queryParams,
@@ -1344,6 +1415,22 @@ class WorkoutRepository {
             '(total: ${response.pagination.total}, source: $source)',
             tag: 'WorkoutRepo',
           );
+
+          // Cache the first page for offline use.
+          if (offset == 0) {
+            _db
+                .upsertCachedApiResponse(
+                  key: cacheKey,
+                  responseJson: jsonEncode(data),
+                )
+                .catchError((e) {
+                  AppLogger.warning(
+                    'Failed to cache unified history: $e',
+                    tag: 'WorkoutRepo',
+                  );
+                });
+          }
+
           return Success(response);
         } catch (e) {
           AppLogger.error(
@@ -1365,9 +1452,37 @@ class WorkoutRepository {
           tag: 'WorkoutRepo',
           error: error,
         );
+
+        // Network failed — try returning cached first page.
+        if (offset == 0) {
+          return _loadCachedUnifiedHistory(cacheKey, error);
+        }
         return Failure(error);
       },
     );
+  }
+
+  /// Attempt to load cached unified history on network failure.
+  Future<Result<UnifiedSessionHistoryResponse, AppError>>
+  _loadCachedUnifiedHistory(String cacheKey, AppError originalError) async {
+    try {
+      final cached = await _db.getCachedApiResponse(cacheKey);
+      if (cached != null) {
+        AppLogger.info(
+          'Loaded cached unified history ($cacheKey)',
+          tag: 'WorkoutRepo',
+        );
+        final data = jsonDecode(cached) as Map<String, dynamic>;
+        final response = UnifiedSessionHistoryResponse.fromJson(data);
+        return Success(response);
+      }
+    } catch (e) {
+      AppLogger.warning(
+        'Failed to read cached unified history: $e',
+        tag: 'WorkoutRepo',
+      );
+    }
+    return Failure(originalError);
   }
 }
 

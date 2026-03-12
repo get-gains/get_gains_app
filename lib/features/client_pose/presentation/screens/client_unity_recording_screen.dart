@@ -21,6 +21,7 @@ import '../../../coach_pose/presentation/widgets/setup_checklist.dart';
 import '../../../unity/data/unity_message_contract.dart';
 import '../../../workout/data/models/models.dart';
 import '../../../workout/presentation/providers/workout_session_provider.dart';
+import '../../data/client_pose_repository.dart';
 import '../providers/client_recording_provider.dart';
 import '../widgets/pose_view_widget.dart';
 
@@ -126,6 +127,20 @@ class _ClientUnityRecordingScreenState
             .loadReferenceForm();
       }
     });
+
+    // Pre-cache forms for remaining exercises so they load instantly
+    // (and are available offline if connectivity drops mid-workout).
+    final exercises = widget.routineExercises;
+    if (exercises != null && exercises.length > 1) {
+      final remaining = exercises
+          .where((e) => e.exerciseId != widget.exerciseId)
+          .map((e) => e.exerciseId)
+          .toList();
+      if (remaining.isNotEmpty) {
+        ref.read(clientPoseRepositoryProvider).preCacheExerciseForms(remaining);
+      }
+    }
+
     // Init device camera in parallel
     await _initCamera();
   }
@@ -558,7 +573,23 @@ class _ClientUnityRecordingScreenState
           ),
         ],
       ),
-      body: _buildBody(context, state, isDark),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          _buildBody(context, state, isDark),
+          // Pre-warm Unity: keep a 1×1 invisible EmbedUnity in the tree so
+          // Unity finishes loading during setup / countdown, before recording
+          // begins. Removed once scene_loaded fires (_isUnityLoaded = true).
+          if (!_isUnityLoaded)
+            Positioned(
+              left: 0,
+              top: 0,
+              width: 1,
+              height: 1,
+              child: EmbedUnity(onMessageFromUnity: _onMessageFromUnity),
+            ),
+        ],
+      ),
     );
   }
 
@@ -603,11 +634,21 @@ class _ClientUnityRecordingScreenState
           icon: Icons.error_outline,
           title: 'Error',
           description: message,
-          actionLabel: 'Go Back',
-          onAction: _handleCloseTap,
+          actionLabel: _isWorkoutMode
+              ? 'Continue Without Recording'
+              : 'Go Back',
+          onAction: _isWorkoutMode ? _skipToWorkoutLogger : _handleCloseTap,
+          secondaryActionLabel: _isWorkoutMode ? 'Go Back' : null,
+          onSecondaryAction: _isWorkoutMode ? _handleCloseTap : null,
         ),
       ),
     );
+  }
+
+  /// Skip form recording and go to the workout session logger so the
+  /// user can continue logging sets offline.
+  void _skipToWorkoutLogger() {
+    context.go(AppRoutes.workoutSession);
   }
 
   Widget _buildProcessing(BuildContext context) {

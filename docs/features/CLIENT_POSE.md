@@ -1,7 +1,7 @@
 # Client Pose Feature Documentation
 
 > **Created**: February 18, 2026
-> **Updated**: March 9, 2026
+> **Updated**: March 12, 2026
 > **Status**: Implemented
 
 ---
@@ -38,6 +38,8 @@ The feature now integrates directly into the **workout session flow**: pressing 
 | **Side-by-side skeleton replay (coach vs user)**             | ✅     |
 | **Workout mode: record → compare → log set → next exercise** | ✅     |
 | Upload comparison result to server                           | ✅     |
+| **Offline recording** — reference forms cached; results queued for sync | ✅ |
+| **Offline history** — first-page history cached in Drift     | ✅     |
 | Error shown (not infinite spinner) when server times out     | ✅     |
 | Error shown when camera is unavailable                       | ✅     |
 
@@ -204,12 +206,37 @@ ClientRecordingReady
 
 ---
 
+## Offline-First Behaviour
+
+### Reference Form Caching
+
+Forms are cached in the `CachedExerciseForms` Drift table keyed by `exerciseId`. The cache is populated proactively:
+
+1. **On workout start** (`_startWorkout()` in `RoutineDetailScreen`) — `preCacheExerciseForms()` is called for **all** exercises in the routine before navigation, while the device is still known-online.
+2. **On recording screen init** — remaining exercises (not the current one) are pre-cached in the background.
+3. **On each form download** (`downloadExerciseForm()`) — the server response is always written to cache on success.
+
+If the device is offline when `loadReferenceForm()` runs, `downloadExerciseForm()` falls back to the `CachedExerciseForms` table automatically.
+
+### Result Queuing
+
+`submitResult()` queues to the local `SyncQueue` (`entityTable: 'pose_results'`) when `POST /pose/results` fails. `WorkoutSyncService._syncPendingPoseResults()` processes the queue when connectivity is restored.
+
+### History Caching
+
+`getHistory()` caches the first page (`offset == 0`) in `CachedApiResponses` under key `'pose_history'` (or `'pose_history_$exerciseId'` for filtered queries). On network failure the cached page is returned so history is still browsable offline.
+
+---
+
 ## Repository: `ClientPoseRepository`
 
-| Method                             | Endpoint                          | Description                                                               |
-| ---------------------------------- | --------------------------------- | ------------------------------------------------------------------------- |
-| `downloadExerciseForm(exerciseId)` | `GET /pose/download/exercise/:id` | Returns exercise name, forms (with landmark + feature frames), poseConfig |
-| `submitResult(...)`                | `POST /pose/results`              | Uploads DTW comparison result                                             |
+| Method | Endpoint | Offline-first? | Description |
+| --- | --- | --- | --- |
+| `downloadExerciseForm(exerciseId)` | `GET /pose/download/exercise/:id` | ✅ Cache | Returns exercise name, forms (landmark + feature frames), poseConfig |
+| `preCacheExerciseForms(exerciseIds)` | *(calls downloadExerciseForm)* | ✅ Fire-forget | Pre-caches multiple forms; called on workout start and recording init |
+| `submitResult(...)` | `POST /pose/results` | ✅ Queue | Uploads DTW result; queued to SyncQueue when offline |
+| `getHistory({exerciseId, limit, offset})` | `GET /pose/results` | ✅ Cache | Fetches comparison history; first page cached in CachedApiResponses |
+| `getPoseConfig(exerciseId)` | `GET /pose/exercises/:id/config` | ❌ | Fetches limb isolation config |
 
 ---
 

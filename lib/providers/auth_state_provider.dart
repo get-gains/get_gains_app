@@ -99,6 +99,12 @@ class AuthStateNotifier extends _$AuthStateNotifier {
   }
 
   /// Check if user has valid stored credentials
+  ///
+  /// Offline-first: if the access token is expired and refresh fails
+  /// (e.g. no internet), the user is still considered authenticated
+  /// as long as stored credentials (userId, email) exist. The expired
+  /// token will be refreshed automatically on the next successful API
+  /// call via the Dio interceptor's 401 handling.
   Future<void> _checkAuthStatus() async {
     // ignore: avoid_print
     print('[AuthState] _checkAuthStatus started');
@@ -117,7 +123,26 @@ class AuthStateNotifier extends _$AuthStateNotifier {
           final refreshed = await apiClient.tryRefreshToken();
           if (!refreshed) {
             // ignore: avoid_print
-            print('[AuthState] Token refresh failed, setting unauthenticated');
+            print('[AuthState] Token refresh failed, checking offline credentials');
+
+            // Offline-first: allow degraded mode if we still have
+            // cached user info — the token will refresh on next
+            // successful network call (Dio interceptor handles 401).
+            final userId = await _storage.getUserId();
+            final email = await _storage.getUserEmail();
+            if (userId != null) {
+              // ignore: avoid_print
+              print('[AuthState] Offline auth: using cached credentials');
+              state = state.copyWith(
+                status: AuthStatus.authenticated,
+                userId: userId,
+                email: email,
+                isLoading: false,
+              );
+              return;
+            }
+
+            // No cached credentials — truly unauthenticated
             state = state.copyWith(
               status: AuthStatus.unauthenticated,
               isLoading: false,

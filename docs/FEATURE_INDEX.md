@@ -61,6 +61,21 @@
 | Persistent Start Workout  | `routine_detail_screen.dart`                        | Start Workout button moved to `Scaffold.bottomNavigationBar`                               |
 | Nullable assign-program   | `program_request_models.dart`                       | `endDate`/`notes` omitted from JSON when null via `@JsonKey(includeIfNull: false)`         |
 
+### Recent Changes (offline-first-recording)
+
+| Change | Files Affected | Description |
+| --- | --- | --- |
+| Subscription gate offline fix | `subscription_guard.dart` | Gate shows `child` when subscription state is not loaded (offline optimistic access) |
+| Retry interceptor offline fix | `interceptors.dart` | `connectionError` excluded from retry — no 42 s delay when offline |
+| Form download caching | `client_pose_repository.dart`, `app_database.dart` | `CachedExerciseForms` Drift table; `downloadExerciseForm()` caches on success, falls back on failure |
+| Proactive form pre-caching | `routine_detail_screen.dart`, `client_unity_recording_screen.dart` | All routine forms pre-cached when workout starts |
+| Pose result queuing | `client_pose_repository.dart`, `workout_sync_service.dart` | `submitResult()` queues to SyncQueue offline; `_syncPendingPoseResults()` uploads on reconnect |
+| History offline cache | `client_pose_repository.dart` | `getHistory()` caches first page in `CachedApiResponses`; served from cache when offline |
+| API response cache table | `app_database.dart` | `CachedApiResponses` Drift table (schema v4) for generic key-value response caching |
+| Today's routine + stats caching | `workout_repository.dart` | `getTodayRoutine()` / `getUnifiedWeeklyStats()` cached in `CachedApiResponses` |
+| Recent activity local fallback | `home_providers.dart` | `recentActivityProvider` falls back to local Drift session history when offline |
+| Profile offline cache | `profile_provider.dart` | `profileProvider` reads Hive cache when server unreachable |
+
 ---
 
 ## Feature Categories
@@ -134,14 +149,16 @@
 
 ### Client Pose & Form Comparison
 
-| Feature               | Description                                    | Status             | Documentation                                            |
-| --------------------- | ---------------------------------------------- | ------------------ | -------------------------------------------------------- |
-| View Reference Form   | Animated 2D skeleton playback of coach's form  | ✅ Complete        | [features/CLIENT_POSE.md](features/CLIENT_POSE.md)       |
-| Unity 3D Recording    | Record + compare with 3D Unity avatar skeleton | ✅ Complete        | [features/CLIENT_POSE.md](features/CLIENT_POSE.md)       |
-| 2D Recording (legacy) | Camera + 2D skeleton recording + compare       | ✅ Complete        | [features/CLIENT_POSE.md](features/CLIENT_POSE.md)       |
-| DTW Comparison        | On-device similarity scoring                   | ✅ Complete        | [features/CLIENT_POSE.md](features/CLIENT_POSE.md)       |
-| Score + Corrections   | Result display with segment breakdown          | ✅ Complete        | [features/CLIENT_POSE.md](features/CLIENT_POSE.md)       |
-| Offline Form Cache    | Download & cache forms in Drift                | 🔮 Not Implemented | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) |
+| Feature               | Description                                                          | Status      | Documentation                                      |
+| --------------------- | -------------------------------------------------------------------- | ----------- | -------------------------------------------------- |
+| View Reference Form   | Animated 2D skeleton playback of coach's form                        | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Unity 3D Recording    | Record + compare with 3D Unity avatar skeleton                       | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| 2D Recording (legacy) | Camera + 2D skeleton recording + compare                             | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| DTW Comparison        | On-device similarity scoring                                         | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Score + Corrections   | Result display with segment breakdown                                | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Offline Form Cache    | Forms cached in Drift; proactively pre-cached on workout start       | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Offline Result Queue  | Results queued in SyncQueue when offline; synced on reconnect        | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Offline History Cache | First-page history cached in CachedApiResponses for offline browsing | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
 
 **Primary Files:**
 

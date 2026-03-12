@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../client_pose/data/client_pose_repository.dart';
 import '../../data/models/models.dart';
 import '../../data/workout_repository.dart';
 import '../providers/workout_session_provider.dart';
@@ -55,6 +56,11 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
 
     final sessionState = ref.read(workoutSessionProvider);
     if (sessionState is WorkoutSessionActive && routine.exercises.isNotEmpty) {
+      // Pre-cache reference forms for all exercises so they're available
+      // offline if connectivity drops during the workout.
+      final exerciseIds = routine.exercises.map((e) => e.exerciseId).toList();
+      ref.read(clientPoseRepositoryProvider).preCacheExerciseForms(exerciseIds);
+
       final firstExercise = routine.exercises.first;
       context.go(
         '/client/exercise/${firstExercise.exerciseId}/unity-record',
@@ -265,6 +271,7 @@ class _ExerciseListSliver extends ConsumerWidget {
               .setsForExercise(exercise.id)
               .length;
         } else if (sessionState is WorkoutSessionCompleted &&
+            sessionState.routine?.id == routine.id &&
             sessionState.session.performedSets.isNotEmpty) {
           // Just finished — use the completed session data
           completedSets = sessionState.session
@@ -301,7 +308,8 @@ class _StartWorkoutButton extends ConsumerWidget {
     final todaySession = ref.watch(todayCompletedSessionProvider(routine.id));
 
     final bool isCompletedToday =
-        sessionState is WorkoutSessionCompleted ||
+        (sessionState is WorkoutSessionCompleted &&
+            sessionState.routine?.id == routine.id) ||
         (todaySession.value?.isCompleted ?? false);
 
     if (isCompletedToday) {
@@ -512,6 +520,33 @@ class _ExerciseCard extends StatelessWidget {
                   ),
                 ),
               ],
+
+              // Analyze Form action
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => context.push(
+                      AppRoutes.clientViewForm.replaceFirst(
+                        ':id',
+                        routineExercise.exerciseId,
+                      ),
+                    ),
+                    icon: const Icon(Icons.analytics_outlined, size: 16),
+                    label: const Text('Analyze Form'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
