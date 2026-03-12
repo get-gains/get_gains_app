@@ -2,6 +2,16 @@
 
 A new Flutter project.
 
+## Unity (embedded)
+
+This app embeds a Unity build on Android. The Unity export (`android/unityLibrary`) is **not** in the repo. To build and run:
+
+1. Clone the repo and run `flutter pub get`.
+2. Export your Unity 6000.0 project into `android/unityLibrary` (or copy the exported folder there).
+3. Run `flutter run` on an ARM64 device or emulator.
+
+Full steps: **[docs/unity/SETUP.md](docs/unity/SETUP.md)**.
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.
