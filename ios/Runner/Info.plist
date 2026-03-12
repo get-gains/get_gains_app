@@ -3,7 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Camera access is required for pose detection</string>
+	<string>Camera access is needed for pose detection and profile photos</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photo library access is needed to select a profile picture</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Microphone access may be needed</string>
 	<key>CFBundleDevelopmentRegion</key>
@@ -49,5 +51,31 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Google Sign-In URL Scheme -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<!-- Replace with your REVERSED_CLIENT_ID from GoogleService-Info.plist -->
+				<string>com.googleusercontent.apps.YOUR_CLIENT_ID</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.getgains.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>getgains</string>
+			</array>
+		</dict>
+	</array>
+	<!-- Google Sign-In requires this for iOS 9+ -->
+	<key>GIDClientID</key>
+	<string>YOUR_CLIENT_ID.apps.googleusercontent.com</string>
 </dict>
 </plist>
