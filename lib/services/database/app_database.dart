@@ -181,6 +181,96 @@ class StandaloneAssignedPrograms extends Table {
   BoolColumn get isSynced => boolean().withDefault(const Constant(false))();
 }
 
+// ============== Gains Coins Tables ==============
+
+/// Local cache of the user's coin balance.
+class CoinBalances extends Table {
+  TextColumn get id => text()();
+  TextColumn get remoteId => text().nullable()();
+  IntColumn get currentBalance => integer().withDefault(const Constant(0))();
+  IntColumn get lifetimeEarned => integer().withDefault(const Constant(0))();
+  IntColumn get lifetimeSpent => integer().withDefault(const Constant(0))();
+  DateTimeColumn get updatedAt => dateTime()();
+  BoolColumn get isSynced => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Local cache of coin transactions (earnings and spending).
+class CoinTransactions extends Table {
+  TextColumn get id => text()();
+  TextColumn get remoteId => text().nullable()();
+  TextColumn get type => text()(); // SESSION_REWARD or SHOP_PURCHASE
+  IntColumn get amount => integer()();
+  IntColumn get balanceAfter => integer()();
+  // Earning breakdown
+  IntColumn get setCoins => integer().nullable()();
+  RealColumn get accuracyMultiplier => real().nullable()();
+  IntColumn get completionBonus => integer().nullable()();
+  IntColumn get durationBonus => integer().nullable()();
+  IntColumn get streakBonus => integer().nullable()();
+  IntColumn get streakValue => integer().nullable()();
+  IntColumn get setsCompleted => integer().nullable()();
+  RealColumn get avgAccuracy => real().nullable()();
+  IntColumn get sessionDurationMin => integer().nullable()();
+  // References
+  TextColumn get workoutSessionId => text().nullable()();
+  TextColumn get cosmeticId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  BoolColumn get isSynced => boolean().withDefault(const Constant(true))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Local cache of the cosmetic shop catalog.
+class CosmeticsTable extends Table {
+  @override
+  String get tableName => 'cosmetics';
+
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get description => text().nullable()();
+  IntColumn get tier => integer()();
+  IntColumn get coinCost => integer()();
+  TextColumn get category => text()(); // HEADWEAR, TOP, BOTTOM, ACCESSORY
+  TextColumn get previewImageUrl => text()();
+  TextColumn get unityAssetRef => text()();
+  TextColumn get status => text()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Local cache of cosmetics owned by the user.
+class UserCosmeticsTable extends Table {
+  @override
+  String get tableName => 'user_cosmetics';
+
+  TextColumn get id => text()();
+  TextColumn get cosmeticId => text()();
+  DateTimeColumn get purchasedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Local cache of currently equipped cosmetics.
+class EquippedCosmeticsTable extends Table {
+  @override
+  String get tableName => 'equipped_cosmetics';
+
+  TextColumn get id => text()();
+  TextColumn get cosmeticId => text()();
+  TextColumn get category => text()(); // Slot identifier
+  DateTimeColumn get equippedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ============== Cached Form Tables ==============
 
 /// Generic key-value cache for API responses that have no dedicated table.
@@ -231,6 +321,12 @@ class CachedExerciseForms extends Table {
     StandaloneAssignedPrograms,
     CachedExerciseForms,
     CachedApiResponses,
+    // Gains Coins tables
+    CoinBalances,
+    CoinTransactions,
+    CosmeticsTable,
+    UserCosmeticsTable,
+    EquippedCosmeticsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -238,7 +334,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Database schema version - increment when changing tables
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   /// Handle migrations when schema version changes
   @override
@@ -267,6 +363,14 @@ class AppDatabase extends _$AppDatabase {
         if (from < 4) {
           // v4: Add generic API response cache for offline-first
           await m.createTable(cachedApiResponses);
+        }
+        if (from < 5) {
+          // v5: Add Gains Coins economy tables
+          await m.createTable(coinBalances);
+          await m.createTable(coinTransactions);
+          await m.createTable(cosmeticsTable);
+          await m.createTable(userCosmeticsTable);
+          await m.createTable(equippedCosmeticsTable);
         }
       },
       beforeOpen: (details) async {

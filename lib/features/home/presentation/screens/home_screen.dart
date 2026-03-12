@@ -9,6 +9,7 @@ import '../../../../providers/auth_state_provider.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../services/api/api_client.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../gains_coins/presentation/widgets/coin_balance_widget.dart';
 import '../../../profile/profile.dart';
 import '../../../subscription/subscription.dart';
 import '../../../workout/data/models/models.dart';
@@ -130,6 +131,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ],
                 ),
                 actions: [
+                  CoinBalanceWidget(
+                    compact: true,
+                    onTap: () => context.push(AppRoutes.coinHistory),
+                  ),
+                  const SizedBox(width: 4),
                   IconButton(
                     icon: const Icon(Icons.notifications_outlined),
                     onPressed: () {
@@ -203,6 +209,103 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               end: Alignment.bottomRight,
                             ),
                             onTap: () => context.push(AppRoutes.workoutHistory),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Shop & Wardrobe quick actions
+                    Row(
+                      children: [
+                        Expanded(
+                          child: QuickActionCard(
+                            icon: Icons.storefront_rounded,
+                            title: 'Shop',
+                            subtitle: 'Cosmetics & gear',
+                            gradient: LinearGradient(
+                              colors: [
+                                const Color(0xFFFFD700),
+                                const Color(0xFFFFD700).withValues(alpha: 0.7),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            onTap: () => context.push(AppRoutes.shop),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: QuickActionCard(
+                            icon: Icons.checkroom_rounded,
+                            title: 'Wardrobe',
+                            subtitle: 'Equip cosmetics',
+                            gradient: LinearGradient(
+                              colors: [
+                                const Color(0xFF8B5CF6),
+                                const Color(0xFF8B5CF6).withValues(alpha: 0.7),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            onTap: () => context.push(AppRoutes.inventory),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Leaderboard quick action
+                    Row(
+                      children: [
+                        Expanded(
+                          child: QuickActionCard(
+                            icon: Icons.leaderboard_rounded,
+                            title: 'Leaderboard',
+                            subtitle: 'Class rankings',
+                            gradient: LinearGradient(
+                              colors: [
+                                const Color(0xFF3B82F6),
+                                const Color(0xFF3B82F6).withValues(alpha: 0.7),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            onTap: () => context.push(AppRoutes.leaderboard),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Progress quick action
+                    Row(
+                      children: [
+                        Expanded(
+                          child: QuickActionCard(
+                            icon: Icons.trending_up_rounded,
+                            title: 'Progress',
+                            subtitle: 'Track your gains',
+                            gradient: LinearGradient(
+                              colors: [
+                                isDark
+                                    ? AppColors.accentDark
+                                    : const Color(0xFF22C55E),
+                                isDark
+                                    ? AppColors.accentDark.withValues(
+                                        alpha: 0.7,
+                                      )
+                                    : const Color(
+                                        0xFF22C55E,
+                                      ).withValues(alpha: 0.7),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            onTap: () => context.push(AppRoutes.progress),
                           ),
                         ),
                       ],

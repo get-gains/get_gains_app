@@ -19,12 +19,17 @@ pluginManagement {
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
-    id("com.android.application") version "8.9.1" apply false
+    id("com.android.application") version "8.10.0" apply false
+    id("com.android.library") version "8.10.0" apply false
     id("org.jetbrains.kotlin.android") version "2.1.0" apply false
 }
 
 include(":app")
 // Unity export is optional (not in repo); include only when present so CI/fresh clones can build.
-if (file("unityLibrary/build.gradle").exists() || file("unityLibrary/build.gradle.kts").exists()) {
+// The Unity export produces a nested structure: unityLibrary/ (root project) -> unityLibrary/unityLibrary/ (library module).
+// We include only the inner library module so Gradle sees a proper Android library with consumable variants.
+val unityLibraryModuleDir = file("unityLibrary/unityLibrary")
+if (unityLibraryModuleDir.exists() && (file("${unityLibraryModuleDir}/build.gradle").exists() || file("${unityLibraryModuleDir}/build.gradle.kts").exists())) {
     include(":unityLibrary")
+    project(":unityLibrary").projectDir = unityLibraryModuleDir
 }
