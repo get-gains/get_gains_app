@@ -4,6 +4,8 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/utils/app_error.dart';
 import '../../../../core/utils/logger.dart';
+import '../../../../core/utils/result.dart';
+import '../../../../providers/auth_state_provider.dart';
 import '../../../coaches/data/coach_repository.dart';
 import '../../../coaches/data/models/models.dart';
 import '../../../standalone_workout/data/standalone_workout_repository.dart';
@@ -124,14 +126,33 @@ Future<WeeklyStatsModel> weeklyStats(Ref ref) async {
 
 /// Fetches recent completed workout sessions (limit 5) for the
 /// "Recent Activity" section on the home screen.
+/// Falls back to local database when offline.
 @riverpod
 Future<List<WorkoutSessionSummary>> recentActivity(Ref ref) async {
   final repo = ref.watch(workoutRepositoryProvider);
   final result = await repo.getSessionHistory(limit: 5, offset: 0);
-  return result.when(
-    success: (response) => response.sessions,
-    failure: (error) => throw error,
+
+  if (result is Success<WorkoutHistoryResponse, AppError>) {
+    return result.value.sessions;
+  }
+
+  // Server unavailable — fall back to local completed sessions
+  AppLogger.warning(
+    'Session history unavailable — loading from local DB',
+    tag: 'HomeProviders',
   );
+  final userId = ref.read(authStateProvider).userId;
+  if (userId != null) {
+    final localResult = await repo.getLocalSessionHistory(
+      userId: userId,
+      limit: 5,
+      offset: 0,
+    );
+    if (localResult is Success<WorkoutHistoryResponse, AppError>) {
+      return localResult.value.sessions;
+    }
+  }
+  return const [];
 }
 
 // ──────────────────────────────────────────────────────────

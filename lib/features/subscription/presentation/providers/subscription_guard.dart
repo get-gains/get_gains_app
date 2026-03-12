@@ -410,9 +410,11 @@ class SubscriptionGatedWidget extends ConsumerWidget {
       return _buildLoadingSkeleton(context);
     }
 
-    // Error or not-loaded: treat as non-subscribed (server is authoritative)
+    // Error or not-loaded: allow through so offline users aren't blocked.
+    // The server remains authoritative when reachable; offline access is
+    // optimistic so previously-synced data stays usable.
     if (subState is! SubscriptionLoaded) {
-      return _buildFallback(context);
+      return child;
     }
 
     final currentTier = subState.status.tierLevel;

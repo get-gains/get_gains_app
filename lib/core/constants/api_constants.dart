@@ -85,6 +85,9 @@ class ApiConstants {
   static const String discoverCoaches = '/user/coaches';
   static const String subscribedCoaches = '/user/coaches/subscribed';
 
+  // Pose Detection Endpoints
+  static const String poseResults = '/pose/results';
+
   // Sync Endpoints
   static const String sync = '/sync';
   static const String syncStatus = '/sync/status';
