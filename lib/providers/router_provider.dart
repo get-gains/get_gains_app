@@ -15,6 +15,11 @@ import '../features/profile/profile.dart';
 import '../features/workout/workout.dart';
 import '../features/standalone_workout/standalone_workout.dart';
 import '../features/unity/unity.dart';
+import '../features/gains_coins/presentation/screens/coin_history_screen.dart';
+import '../features/gains_coins/presentation/screens/coin_reward_screen.dart';
+import '../features/gains_coins/presentation/screens/shop_screen.dart';
+import '../features/gains_coins/presentation/screens/cosmetic_detail_screen.dart';
+import '../features/gains_coins/data/models/cosmetic_model.dart';
 import 'auth_state_provider.dart';
 import '../features/programs/screens/program_screen.dart';
 import '../features/programs/screens/program_details_screen.dart';
@@ -67,7 +72,8 @@ class AppRoutes {
 
   // Client Pose routes
   static const String clientViewForm = '/client/exercise/:id/view-form';
-  static const String clientForm3DPreview = '/client/exercise/:id/form-3d-preview';
+  static const String clientForm3DPreview =
+      '/client/exercise/:id/form-3d-preview';
   static const String clientCompareForm = '/client/exercise/:id/compare';
   static const String clientUnityRecord = '/client/exercise/:id/unity-record';
   // Coach Program routes
@@ -112,6 +118,12 @@ class AppRoutes {
   static const String standaloneEditProgram = '/standalone/programs/:id/edit';
   static const String standaloneToday = '/standalone/today';
   static const String standaloneSessionHistory = '/standalone/sessions';
+
+  // Gains Coins routes
+  static const String coinReward = '/coins/reward';
+  static const String coinHistory = '/coins/history';
+  static const String shop = '/shop';
+  static const String cosmeticDetail = '/shop/cosmetic';
 }
 
 /// Router Provider
@@ -602,6 +614,35 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: AppRoutes.standaloneSessionHistory,
         builder: (context, state) => const StandaloneSessionHistoryScreen(),
+      ),
+
+      // ── Gains Coins ──
+      GoRoute(
+        path: AppRoutes.coinReward,
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return CoinRewardScreen(
+            setsCompleted: (extra['setsCompleted'] as int?) ?? 0,
+            sessionDurationMin: (extra['sessionDurationMin'] as int?) ?? 0,
+            avgAccuracy: (extra['avgAccuracy'] as double?) ?? 1.0,
+            streakDays: (extra['streakDays'] as int?) ?? 0,
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.coinHistory,
+        builder: (context, state) => const CoinHistoryScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.shop,
+        builder: (context, state) => const ShopScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.cosmeticDetail,
+        builder: (context, state) {
+          final cosmetic = state.extra as CosmeticModel;
+          return CosmeticDetailScreen(cosmetic: cosmetic);
+        },
       ),
     ],
 
