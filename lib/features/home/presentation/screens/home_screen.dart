@@ -257,6 +257,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                     const SizedBox(height: 12),
 
+                    // Leaderboard quick action
+                    Row(
+                      children: [
+                        Expanded(
+                          child: QuickActionCard(
+                            icon: Icons.leaderboard_rounded,
+                            title: 'Leaderboard',
+                            subtitle: 'Class rankings',
+                            gradient: LinearGradient(
+                              colors: [
+                                const Color(0xFF3B82F6),
+                                const Color(0xFF3B82F6).withValues(alpha: 0.7),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            onTap: () => context.push(AppRoutes.leaderboard),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
                     // Progress quick action
                     Row(
                       children: [

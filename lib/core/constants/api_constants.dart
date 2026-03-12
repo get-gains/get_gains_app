@@ -111,4 +111,8 @@ class ApiConstants {
   static const String cosmeticsEquip = '/cosmetics/equip';
   static const String cosmeticsUnequip = '/cosmetics/unequip';
   static const String cosmeticsEquipped = '/cosmetics/equipped';
+
+  // Leaderboard Endpoints
+  static const String leaderboardClass = '/leaderboard/class';
+  static const String leaderboardMyCoaches = '/leaderboard/my-coaches';
 }
