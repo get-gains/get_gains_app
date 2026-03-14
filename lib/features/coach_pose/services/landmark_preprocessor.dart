@@ -182,6 +182,85 @@ class LandmarkPreprocessor {
     return total / frame.landmarks.length;
   }
 
+  /// Upsample a sequence of pose frames to [targetFps] using linear interpolation.
+  /// Use in post-processing when capture/detection rate is below target (e.g. 20 FPS → 30 FPS).
+  /// [durationMs] is the recording duration; [frames] are assumed to span that duration.
+  static List<LandmarkFrame> upsampleToTargetFps(
+    List<LandmarkFrame> frames,
+    int durationMs,
+    int targetFps,
+  ) {
+    if (frames.isEmpty || durationMs <= 0 || targetFps <= 0) return frames;
+    if (frames.length == 1) {
+      final targetCount = (durationMs * targetFps / 1000).round();
+      if (targetCount <= 1) return frames;
+      return List.generate(
+        targetCount,
+        (i) => LandmarkFrame(
+          timestampMs: frames.first.timestampMs + (i * 1000 ~/ targetFps),
+          landmarks: Map.from(frames.first.landmarks),
+        ),
+      );
+    }
+
+    final startMs = frames.first.timestampMs;
+    final targetCount = (durationMs * targetFps / 1000).round().clamp(1, 900);
+    final result = <LandmarkFrame>[];
+
+    for (var i = 0; i < targetCount; i++) {
+      final targetTimeMs = startMs + (i * 1000 ~/ targetFps);
+      final (a, b, t) = _findBracketAndT(frames, targetTimeMs);
+      result.add(_interpolateFrames(a, b, t, targetTimeMs));
+    }
+
+    return result;
+  }
+
+  static (LandmarkFrame a, LandmarkFrame b, double t) _findBracketAndT(
+    List<LandmarkFrame> frames,
+    int targetTimeMs,
+  ) {
+    if (targetTimeMs <= frames.first.timestampMs) {
+      return (frames.first, frames[1], 0.0);
+    }
+    if (targetTimeMs >= frames.last.timestampMs) {
+      return (frames[frames.length - 2], frames.last, 1.0);
+    }
+    for (var i = 0; i < frames.length - 1; i++) {
+      final a = frames[i];
+      final b = frames[i + 1];
+      if (targetTimeMs >= a.timestampMs && targetTimeMs <= b.timestampMs) {
+        final span = (b.timestampMs - a.timestampMs);
+        final t = span > 0
+            ? (targetTimeMs - a.timestampMs) / span
+            : 0.0;
+        return (a, b, t.clamp(0.0, 1.0));
+      }
+    }
+    return (frames.first, frames.last, 0.5);
+  }
+
+  static LandmarkFrame _interpolateFrames(
+    LandmarkFrame a,
+    LandmarkFrame b,
+    double t,
+    int timestampMs,
+  ) {
+    final keys = a.landmarks.keys.toSet().intersection(b.landmarks.keys.toSet());
+    final landmarks = <String, LandmarkPoint>{};
+    for (final key in keys) {
+      final pa = a.landmarks[key]!;
+      final pb = b.landmarks[key]!;
+      landmarks[key] = LandmarkPoint(
+        x: pa.x + t * (pb.x - pa.x),
+        y: pa.y + t * (pb.y - pa.y),
+        z: pa.z + t * (pb.z - pa.z),
+        confidence: pa.confidence + t * (pb.confidence - pa.confidence),
+      );
+    }
+    return LandmarkFrame(timestampMs: timestampMs, landmarks: landmarks);
+  }
+
   /// Process a batch of raw frames: filter → smooth → normalize.
   List<LandmarkFrame> processBatch(List<LandmarkFrame> rawFrames) {
     AppLogger.debug(

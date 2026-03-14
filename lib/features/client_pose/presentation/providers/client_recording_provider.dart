@@ -7,15 +7,15 @@ import '../../../../core/utils/logger.dart';
 import '../../../coach_pose/data/models/models.dart';
 import '../../../coach_pose/services/feature_extractor.dart';
 import '../../../coach_pose/services/landmark_preprocessor.dart';
+import '../../../coach_pose/services/pose_detection_service.dart';
 import '../../data/client_pose_repository.dart';
 import '../../data/models/models.dart';
 import '../../services/form_comparison_service.dart';
-import '../../services/rep_counter.dart';
 
 part 'client_recording_provider.g.dart';
 
-/// Minimum acceptable frame rate (FPS) for a client recording.
-/// Recordings below this threshold produce unreliable DTW scores.
+/// Minimum pose/vertex data rate (FPS) for client recording.
+/// We require 30+ landmark frames per second for DTW; video FPS is irrelevant.
 const kMinClientFrameRate = 30;
 
 /// State for the client recording + comparison pipeline.
@@ -119,13 +119,12 @@ class ClientRecordingError extends ClientRecordingState {
 class ClientRecording extends _$ClientRecording {
   late final FeatureExtractor _featureExtractor;
   late final LandmarkPreprocessor _preprocessor;
-  late final RepCounter _repCounter;
   late final FormComparisonService _comparisonService;
 
-  // Recording state
-  final List<LandmarkFrame> _clientLandmarks = []; // Raw 0-1 coords for display
-  final List<LandmarkFrame> _clientNormalizedLandmarks =
-      []; // Procrustes-normalized for comparison
+  // Recording state: raw capture only during recording; no live MLKit or rep counter
+  final List<CapturedFrame> _capturedFramesBuffer = [];
+  final List<LandmarkFrame> _clientLandmarks = [];
+  final List<LandmarkFrame> _clientNormalizedLandmarks = [];
   final List<FeatureFrame> _clientFeatures = [];
   List<FeatureFrame> _referenceFeatures = [];
   List<LandmarkFrame> _referenceLandmarks = [];
@@ -136,21 +135,12 @@ class ClientRecording extends _$ClientRecording {
   String? _coachName;
   PoseConfigModel? _poseConfig;
   int _recordingStartMs = 0;
-  Map<String, LandmarkPoint> _lastDisplayLandmarks = {};
-
-  // Velocity-adaptive EMA parameters
-  static const double _emaAlphaMin = 0.12; // heavy smoothing for noise
-  static const double _emaAlphaMax = 0.55; // light smoothing for real movement
-  static const double _noiseGate = 0.005; // movement below this is clamped to 0
-  static const double _velocitySaturation =
-      0.06; // movement above this gets max alpha
-  static const double _minDisplayConfidence = 0.5;
+  Timer? _elapsedTimer;
 
   @override
   ClientRecordingState build(String exerciseId) {
     _featureExtractor = FeatureExtractor();
     _preprocessor = LandmarkPreprocessor();
-    _repCounter = RepCounter();
     _comparisonService = FormComparisonService();
     return const ClientRecordingInitial();
   }
@@ -242,9 +232,6 @@ class ClientRecording extends _$ClientRecording {
             }
           }
 
-          // Tell the rep counter which exercise this is
-          _repCounter.configure(exerciseName: _exerciseName);
-
           state = ClientRecordingReady(
             exerciseName: _exerciseName ?? 'Exercise',
             referenceFrames: referenceFrames,
@@ -271,14 +258,14 @@ class ClientRecording extends _$ClientRecording {
     }
   }
 
-  /// Step 2: Start recording
+  /// Step 2: Start recording (capture only; no live MLKit or rep counter)
   void startRecording() {
+    _capturedFramesBuffer.clear();
     _clientLandmarks.clear();
     _clientNormalizedLandmarks.clear();
     _clientFeatures.clear();
-    _lastDisplayLandmarks = {};
-    _repCounter.reset();
     _recordingStartMs = DateTime.now().millisecondsSinceEpoch;
+    _elapsedTimer?.cancel();
 
     state = ClientRecordingActive(
       exerciseName: _exerciseName ?? 'Exercise',
@@ -286,103 +273,115 @@ class ClientRecording extends _$ClientRecording {
       cameraAngle: _cameraAngle ?? 'FRONT',
       referenceLandmarkFrames: _referenceLandmarks,
       referenceFeatureFrames: _referenceFeatures,
-      clientLandmarkFrames: List.unmodifiable(_clientLandmarks),
-      clientFeatureFrames: List.unmodifiable(_clientFeatures),
+      clientLandmarkFrames: const [],
+      clientFeatureFrames: const [],
       repCount: 0,
       recordingDurationMs: 0,
       poseConfig: _poseConfig,
       coachName: _coachName,
     );
+
+    // Update elapsed time every second so REC badge counts up
+    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (state is! ClientRecordingActive) return;
+      final active = state as ClientRecordingActive;
+      final elapsedMs = DateTime.now().millisecondsSinceEpoch - _recordingStartMs;
+      state = ClientRecordingActive(
+        exerciseName: active.exerciseName,
+        formId: active.formId,
+        cameraAngle: active.cameraAngle,
+        referenceLandmarkFrames: active.referenceLandmarkFrames,
+        referenceFeatureFrames: active.referenceFeatureFrames,
+        clientLandmarkFrames: active.clientLandmarkFrames,
+        clientFeatureFrames: active.clientFeatureFrames,
+        repCount: active.repCount,
+        recordingDurationMs: elapsedMs,
+        poseConfig: active.poseConfig,
+        coachName: active.coachName,
+      );
+    });
   }
 
-  /// Step 3: Process each camera frame during recording.
-  ///
-  /// Only performs lightweight work to keep 30+ FPS capture rate:
-  ///   - Stabilise landmarks for display
-  ///   - Extract a single primary angle for the rep counter
-  ///
-  /// Full 3D normalisation and multi-angle feature extraction is deferred
-  /// to [stopRecordingAndCompare] (post-record batch processing).
-  void processFrame(LandmarkFrame landmarkFrame) {
+  /// Add a raw camera frame during recording (no MLKit). Post-processing runs after stop.
+  void addCapturedFrame(CapturedFrame frame) {
     if (state is! ClientRecordingActive) return;
-
-    // Stabilize raw landmarks for smooth display (keeps 0-1 range)
-    final stabilized = _stabilizeForDisplay(landmarkFrame);
-    _clientLandmarks.add(stabilized);
-
-    // Lightweight: only extract the single primary angle for rep counting
-    final primaryAngle = _repCounter.trackedAngle;
-    FeatureFrame repFeature;
-    if (primaryAngle != null) {
-      repFeature = _featureExtractor.extractSingleAngle(
-        stabilized,
-        primaryAngle,
-      );
-    } else {
-      // First frame — let the rep counter auto-detect from a full extraction
-      repFeature = _featureExtractor.extractFrame(stabilized);
-    }
-
-    final repCount = _repCounter.processFrame(repFeature);
-
-    final elapsed = DateTime.now().millisecondsSinceEpoch - _recordingStartMs;
-
-    state = ClientRecordingActive(
-      exerciseName: _exerciseName ?? 'Exercise',
-      formId: _formId ?? '',
-      cameraAngle: _cameraAngle ?? 'FRONT',
-      referenceLandmarkFrames: _referenceLandmarks,
-      referenceFeatureFrames: _referenceFeatures,
-      clientLandmarkFrames: List.unmodifiable(_clientLandmarks),
-      clientFeatureFrames: const [],
-      repCount: repCount,
-      recordingDurationMs: elapsed,
-      poseConfig: _poseConfig,
-      coachName: _coachName,
-    );
+    _capturedFramesBuffer.add(frame);
   }
 
   /// Step 4: Stop recording and run comparison.
   ///
-  /// All heavy processing happens here (post-record, during the loading
-  /// screen) so that the live camera loop stays at 30+ FPS:
-  ///   1. Trim raw landmarks to reference length
-  ///   2. Batch normalise (3D Procrustes)
-  ///   3. Extract features using only relevant angles
-  ///   4. Run DTW comparison
-  ///   5. Upload results
+  /// Same quality as coach: batch MLKit on captured frames, then normalize, features, DTW.
+  ///   1. Run MLKit on each captured frame (post-record, high sampling)
+  ///   2. Upsample to 30 FPS if needed
+  ///   3. Trim to reference length, batch normalise, extract features, DTW, upload
   Future<void> stopRecordingAndCompare() async {
     if (state is! ClientRecordingActive) return;
     final activeState = state as ClientRecordingActive;
+    _elapsedTimer?.cancel();
+    _elapsedTimer = null;
 
     state = const ClientRecordingProcessing();
 
     try {
-      // Validate minimum frame rate before processing
       final recordingDurationMs =
           DateTime.now().millisecondsSinceEpoch - _recordingStartMs;
-      final clientFps = recordingDurationMs > 0
-          ? (_clientLandmarks.length * 1000 / recordingDurationMs).round()
+      final captured = List<CapturedFrame>.from(_capturedFramesBuffer);
+      _capturedFramesBuffer.clear();
+
+      // Batch MLKit on captured frames (same as coach — high-quality pose data from full capture rate)
+      final poseService = ref.read(poseDetectionServiceProvider);
+      final startMs = _recordingStartMs;
+      final rawLandmarks = <LandmarkFrame>[];
+      for (var i = 0; i < captured.length; i++) {
+        final timestampMs = startMs + (i * 1000 ~/ 30);
+        final frame = await poseService.processCapturedFrame(
+          captured[i],
+          timestampMs,
+        );
+        if (frame != null) rawLandmarks.add(frame);
+      }
+
+      var clientLandmarksForPipeline = rawLandmarks;
+      var poseFps = recordingDurationMs > 0 && clientLandmarksForPipeline.isNotEmpty
+          ? (clientLandmarksForPipeline.length * 1000 / recordingDurationMs).round()
           : 0;
 
-      if (clientFps < kMinClientFrameRate) {
+      // Post-processing: if below 30 FPS but we have enough data, upsample to 30 FPS
+      // (e.g. when Unity + camera run together, capture rate can drop to ~12 FPS)
+      const minFpsToUpsample = 10;
+      if (poseFps < kMinClientFrameRate &&
+          poseFps >= minFpsToUpsample &&
+          recordingDurationMs > 0) {
+        AppLogger.info(
+          'Upsampling client pose data from $poseFps FPS to $kMinClientFrameRate FPS (post-processing)',
+          tag: 'ClientRecording',
+        );
+        clientLandmarksForPipeline = LandmarkPreprocessor.upsampleToTargetFps(
+          clientLandmarksForPipeline,
+          recordingDurationMs,
+          kMinClientFrameRate,
+        );
+        poseFps = (clientLandmarksForPipeline.length * 1000 / recordingDurationMs).round();
+      }
+
+      if (poseFps < kMinClientFrameRate) {
         AppLogger.warning(
-          'Client recording frame rate ($clientFps FPS) below minimum '
+          'Pose data rate ($poseFps FPS) below minimum '
           '($kMinClientFrameRate FPS)',
           tag: 'ClientRecording',
         );
         state = ClientRecordingError(
-          'Recording quality too low ($clientFps FPS). '
-          'Minimum $kMinClientFrameRate FPS required. '
-          'Please ensure good lighting and try again.',
+          'Pose data rate too low ($poseFps FPS). '
+          'Minimum $kMinClientFrameRate FPS of pose data required for accurate analysis. '
+          'Keep your whole body in frame and try again.',
         );
         return;
       }
 
       // Trim client landmarks to reference length (US2)
       final refLen = _referenceLandmarks.length;
-      final trimLen = math.min(_clientLandmarks.length, refLen);
-      final trimmedLandmarks = _clientLandmarks.sublist(0, trimLen);
+      final trimLen = math.min(clientLandmarksForPipeline.length, refLen);
+      final trimmedLandmarks = clientLandmarksForPipeline.sublist(0, trimLen);
 
       // Batch normalise the raw landmarks (3D Procrustes)
       final normalizedLandmarks = _preprocessor.processBatch(trimmedLandmarks);
@@ -420,8 +419,6 @@ class ClientRecording extends _$ClientRecording {
         avgLandmarkConfidence: null,
       );
 
-      final repCount = _repCounter.repCount;
-
       // Upload result to server
       bool uploadSuccess = false;
       try {
@@ -446,7 +443,7 @@ class ClientRecording extends _$ClientRecording {
 
       state = ClientRecordingComplete(
         result: result,
-        repCount: repCount,
+        repCount: 0,
         uploadSuccess: uploadSuccess,
         referenceLandmarkFrames: List.unmodifiable(_referenceLandmarks),
         clientLandmarkFrames: List.unmodifiable(
@@ -466,11 +463,10 @@ class ClientRecording extends _$ClientRecording {
 
   /// Reset to initial state for another attempt
   void resetForNewAttempt() {
+    _capturedFramesBuffer.clear();
     _clientLandmarks.clear();
     _clientNormalizedLandmarks.clear();
     _clientFeatures.clear();
-    _lastDisplayLandmarks = {};
-    _repCounter.reset();
 
     if (_formId != null) {
       state = ClientRecordingReady(
@@ -487,72 +483,4 @@ class ClientRecording extends _$ClientRecording {
     }
   }
 
-  /// Velocity-adaptive EMA stabilization for smooth, jitter-free display.
-  ///
-  /// Instead of a fixed alpha, the blend factor scales with how much each
-  /// landmark actually moved. Tiny movements (noise) get heavy smoothing,
-  /// large movements (real motion) pass through quickly.
-  LandmarkFrame _stabilizeForDisplay(LandmarkFrame frame) {
-    final filtered = _preprocessor.filterByConfidence(frame);
-
-    final current = filtered.landmarks;
-    final prev = _lastDisplayLandmarks;
-    final allKeys = <String>{...current.keys, ...prev.keys};
-    final stabilized = <String, LandmarkPoint>{};
-
-    for (final key in allKeys) {
-      final curr = current[key];
-      final old = prev[key];
-
-      if (curr != null && old != null) {
-        // Compute per-landmark velocity (Euclidean distance)
-        final dx = curr.x - old.x;
-        final dy = curr.y - old.y;
-        final velocity = math.sqrt(dx * dx + dy * dy);
-
-        // Below noise gate → snap to previous (no jitter)
-        if (velocity < _noiseGate) {
-          stabilized[key] = old;
-          continue;
-        }
-
-        // Adaptive alpha: scales linearly from min to max based on velocity
-        final t = ((velocity - _noiseGate) / (_velocitySaturation - _noiseGate))
-            .clamp(0.0, 1.0);
-        final alpha = _emaAlphaMin + t * (_emaAlphaMax - _emaAlphaMin);
-
-        final x = (curr.x * alpha) + (old.x * (1 - alpha));
-        final y = (curr.y * alpha) + (old.y * (1 - alpha));
-        final z = (curr.z * alpha) + (old.z * (1 - alpha));
-        stabilized[key] = LandmarkPoint(
-          x: x.clamp(0.0, 1.0),
-          y: y.clamp(0.0, 1.0),
-          z: z,
-          confidence: curr.confidence,
-        );
-      } else if (curr != null) {
-        // New landmark — use as-is
-        stabilized[key] = LandmarkPoint(
-          x: curr.x.clamp(0.0, 1.0),
-          y: curr.y.clamp(0.0, 1.0),
-          z: curr.z,
-          confidence: curr.confidence,
-        );
-      } else if (old != null) {
-        // Landmark disappeared — hold with decaying confidence
-        final decayedConfidence = old.confidence * 0.92;
-        if (decayedConfidence >= _minDisplayConfidence) {
-          stabilized[key] = LandmarkPoint(
-            x: old.x,
-            y: old.y,
-            z: old.z,
-            confidence: decayedConfidence,
-          );
-        }
-      }
-    }
-
-    _lastDisplayLandmarks = stabilized;
-    return LandmarkFrame(timestampMs: frame.timestampMs, landmarks: stabilized);
-  }
 }

@@ -6,6 +6,7 @@ import '../../../../core/utils/logger.dart';
 import '../../data/coach_pose_repository.dart';
 import '../../data/models/models.dart';
 import '../../services/feature_extractor.dart';
+import '../../services/pose_detection_service.dart';
 import '../../services/landmark_preprocessor.dart';
 import '../../services/setup_validation_service.dart';
 
@@ -33,8 +34,8 @@ const kMaxRecordingDurationSeconds = 7;
 /// countdown starts automatically.
 const kAutoStartDelaySeconds = 3;
 
-/// Minimum acceptable frame rate (FPS) for a reference form recording.
-/// Recordings below this threshold are rejected to ensure DTW accuracy.
+/// Minimum pose/vertex data rate (FPS) for reference form.
+/// We require 30+ landmark frames per second for DTW accuracy; video FPS is irrelevant.
 const kMinFrameRate = 30;
 
 /// Full state for the form recording flow.
@@ -47,6 +48,8 @@ class FormRecordingState {
     this.rawFrames = const [],
     this.processedFrames = const [],
     this.featureFrames = const [],
+    this.capturedFrames = const [],
+    this.capturedFrameCount = 0,
     this.recordingStartMs,
     this.recordingDurationMs = 0,
     this.frameCount = 0,
@@ -64,6 +67,10 @@ class FormRecordingState {
   final List<LandmarkFrame> rawFrames;
   final List<LandmarkFrame> processedFrames;
   final List<FeatureFrame> featureFrames;
+  /// Raw camera frames captured during recording (no MLKit). Processed in batch after stop.
+  final List<CapturedFrame> capturedFrames;
+  /// Set when recording stops; used for FPS = capturedFrameCount / duration (camera FPS).
+  final int capturedFrameCount;
   final int? recordingStartMs;
   final int recordingDurationMs;
   final int frameCount;
@@ -88,6 +95,8 @@ class FormRecordingState {
     List<LandmarkFrame>? rawFrames,
     List<LandmarkFrame>? processedFrames,
     List<FeatureFrame>? featureFrames,
+    List<CapturedFrame>? capturedFrames,
+    int? capturedFrameCount,
     int? recordingStartMs,
     int? recordingDurationMs,
     int? frameCount,
@@ -106,6 +115,8 @@ class FormRecordingState {
       rawFrames: rawFrames ?? this.rawFrames,
       processedFrames: processedFrames ?? this.processedFrames,
       featureFrames: featureFrames ?? this.featureFrames,
+      capturedFrames: capturedFrames ?? this.capturedFrames,
+      capturedFrameCount: capturedFrameCount ?? this.capturedFrameCount,
       recordingStartMs: recordingStartMs ?? this.recordingStartMs,
       recordingDurationMs: recordingDurationMs ?? this.recordingDurationMs,
       frameCount: frameCount ?? this.frameCount,
@@ -127,10 +138,14 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
   late SetupValidationService _setupValidator;
   Timer? _countdownTimer;
   Timer? _recordingTimer;
+  Timer? _elapsedTimer;
 
   /// Tracks when all setup checks first started passing continuously.
   /// Reset to `null` whenever a check fails.
   DateTime? _setupStableSince;
+
+  /// Mutable buffer for frames during recording. No state updates per frame.
+  final List<CapturedFrame> _capturedFramesBuffer = [];
 
   @override
   FormRecordingState build(String exerciseId) {
@@ -141,6 +156,7 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
     ref.onDispose(() {
       _countdownTimer?.cancel();
       _recordingTimer?.cancel();
+      _elapsedTimer?.cancel();
     });
 
     return FormRecordingState(exerciseId: exerciseId);
@@ -261,10 +277,13 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
   /// Internal: transition from countdown to active recording.
   void _beginRecording() {
     _recordingTimer?.cancel();
+    _capturedFramesBuffer.clear();
 
     state = state.copyWith(
       phase: RecordingPhase.recording,
       rawFrames: [],
+      capturedFrames: [],
+      capturedFrameCount: 0,
       recordingStartMs: DateTime.now().millisecondsSinceEpoch,
       frameCount: 0,
       countdownSeconds: 0,
@@ -284,42 +303,91 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
       },
     );
 
+    // Update elapsed time every second so the UI timer (0:00) counts up
+    _elapsedTimer?.cancel();
+    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (state.phase != RecordingPhase.recording) return;
+      final startMs = state.recordingStartMs ?? 0;
+      state = state.copyWith(
+        recordingDurationMs: DateTime.now().millisecondsSinceEpoch - startMs,
+      );
+    });
+
     AppLogger.info(
       'Recording started (auto-stop in ${kMaxRecordingDurationSeconds}s)',
       tag: 'FormRecording',
     );
   }
 
-  /// Add a frame captured during recording.
-  void addFrame(LandmarkFrame frame) {
+  /// Add a raw camera frame during recording (no MLKit, no pose detection).
+  /// Frames are buffered in memory; state is updated only when recording stops.
+  void addCapturedFrame(CapturedFrame frame) {
     if (state.phase != RecordingPhase.recording) return;
-
-    state = state.copyWith(
-      rawFrames: [...state.rawFrames, frame],
-      frameCount: state.frameCount + 1,
-    );
+    _capturedFramesBuffer.add(frame);
   }
 
-  /// Stop recording and begin processing.
+  /// Stop recording and begin processing (batch MLKit then pipeline).
   Future<void> stopRecording() async {
     if (state.phase != RecordingPhase.recording) return;
     _recordingTimer?.cancel();
+    _elapsedTimer?.cancel();
 
     final endMs = DateTime.now().millisecondsSinceEpoch;
     final durationMs = endMs - (state.recordingStartMs ?? endMs);
+    final capturedCount = _capturedFramesBuffer.length;
+    final captured = List<CapturedFrame>.from(_capturedFramesBuffer);
+    _capturedFramesBuffer.clear();
 
     state = state.copyWith(
       phase: RecordingPhase.processing,
       recordingDurationMs: durationMs,
+      capturedFrames: captured,
+      capturedFrameCount: capturedCount,
+      frameCount: capturedCount,
       processingProgress: 0.0,
     );
 
     AppLogger.info(
-      'Recording stopped. ${state.rawFrames.length} frames, ${durationMs}ms',
+      'Recording stopped. $capturedCount captured frames, ${durationMs}ms',
       tag: 'FormRecording',
     );
 
-    await _processFrames();
+    await _processCapturedFrames();
+  }
+
+  /// Run MLKit on each captured frame (batch, after recording), then pipeline.
+  Future<void> _processCapturedFrames() async {
+    try {
+      final poseService = ref.read(poseDetectionServiceProvider);
+      final startMs = state.recordingStartMs ?? 0;
+      final captured = state.capturedFrames;
+
+      final rawFrames = <LandmarkFrame>[];
+      for (var i = 0; i < captured.length; i++) {
+        state = state.copyWith(
+          processingProgress: 0.05 + 0.15 * (i / captured.length),
+        );
+        final timestampMs = startMs + (i * 1000 ~/ 30);
+        final frame = await poseService.processCapturedFrame(
+          captured[i],
+          timestampMs,
+        );
+        if (frame != null) rawFrames.add(frame);
+      }
+
+      state = state.copyWith(rawFrames: rawFrames);
+      await _processFrames();
+    } catch (e) {
+      AppLogger.error(
+        'Batch pose processing failed',
+        tag: 'FormRecording',
+        error: e,
+      );
+      state = state.copyWith(
+        phase: RecordingPhase.error,
+        errorMessage: 'Failed to process recording: $e',
+      );
+    }
   }
 
   /// Process recorded frames: filter+smooth → extract features → normalize.
@@ -382,34 +450,60 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
     try {
       final repo = ref.read(coachPoseRepositoryProvider);
 
-      final frameRate = state.recordingDurationMs > 0
-          ? (state.rawFrames.length * 1000 / state.recordingDurationMs).round()
-          : 30;
+      // FPS = pose/vertex data rate (landmark frames per second), not video FPS
+      var processedFrames = state.processedFrames;
+      var featureFrames = state.featureFrames;
+      var normalizedForUpload = normalizedFrames;
+
+      var poseFrameCount = processedFrames.length;
+      var frameRate = state.recordingDurationMs > 0 && poseFrameCount > 0
+          ? (poseFrameCount * 1000 / state.recordingDurationMs).round()
+          : 0;
+
+      // Post-processing: if pose data is below 30 FPS but we have enough to interpolate, upsample
+      const minFpsToUpsample = 15;
+      if (frameRate < kMinFrameRate &&
+          frameRate >= minFpsToUpsample &&
+          state.recordingDurationMs > 0) {
+        AppLogger.info(
+          'Upsampling pose data from $frameRate FPS to $kMinFrameRate FPS (post-processing)',
+          tag: 'FormRecording',
+        );
+        processedFrames = LandmarkPreprocessor.upsampleToTargetFps(
+          processedFrames,
+          state.recordingDurationMs,
+          kMinFrameRate,
+        );
+        featureFrames = _featureExtractor.extractBatch(processedFrames);
+        normalizedForUpload = processedFrames.map(_preprocessor.normalize).toList();
+        poseFrameCount = processedFrames.length;
+        frameRate = kMinFrameRate;
+      }
 
       if (frameRate < kMinFrameRate) {
         AppLogger.warning(
-          'Recording frame rate ($frameRate FPS) below minimum '
+          'Pose data rate ($frameRate FPS) below minimum '
           '($kMinFrameRate FPS) — rejecting upload',
           tag: 'FormRecording',
         );
         state = state.copyWith(
           phase: RecordingPhase.error,
           errorMessage:
-              'Recording quality too low ($frameRate FPS). '
-              'Minimum $kMinFrameRate FPS required. '
-              'Please ensure good lighting and try again.',
+              'Pose data rate too low ($frameRate FPS). '
+              'Minimum $kMinFrameRate FPS of pose data required for accurate analysis. '
+              'Keep your whole body in frame and try again.',
         );
         return;
       }
 
       // Compute average confidence
       double avgConfidence = 0;
-      if (state.processedFrames.isNotEmpty) {
-        final totalConfidence = state.processedFrames
+      if (processedFrames.isNotEmpty) {
+        final totalConfidence = processedFrames
             .expand((f) => f.landmarks.values)
             .map((p) => p.confidence)
             .fold<double>(0, (sum, c) => sum + c);
-        final totalPoints = state.processedFrames.fold<int>(
+        final totalPoints = processedFrames.fold<int>(
           0,
           (sum, f) => sum + f.landmarks.length,
         );
@@ -423,10 +517,10 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
         cameraAngle: state.cameraAngle.serverValue,
         durationMs: state.recordingDurationMs,
         frameRate: frameRate,
-        totalFrames: state.rawFrames.length,
-        landmarkFrames: state.processedFrames.map((f) => f.toJson()).toList(),
-        featureFrames: state.featureFrames.map((f) => f.toJson()).toList(),
-        normalizedFrames: normalizedFrames?.map((f) => f.toJson()).toList(),
+        totalFrames: poseFrameCount,
+        landmarkFrames: processedFrames.map((f) => f.toJson()).toList(),
+        featureFrames: featureFrames.map((f) => f.toJson()).toList(),
+        normalizedFrames: normalizedForUpload?.map((f) => f.toJson()).toList(),
         relevantAngles: state.relevantAngles.isNotEmpty
             ? state.relevantAngles
             : null,

@@ -11,6 +11,7 @@ import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../data/models/exercise_form_model.dart';
+import '../../data/models/models.dart';
 import '../../services/pose_detection_service.dart';
 import '../providers/form_recording_provider.dart';
 import '../widgets/recording_controls.dart';
@@ -37,7 +38,6 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
   int _frameCount = 0;
   bool _isStreamingImages = false;
   bool _isProcessingSetupFrame = false;
-  bool _isProcessingRecordingFrame = false;
 
   @override
   void initState() {
@@ -104,9 +104,10 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
       tag: 'FormRecording',
     );
 
+    // Use low resolution so frame copy is fast and camera can deliver ~30 FPS.
     _cameraController = CameraController(
       camera,
-      ResolutionPreset.medium,
+      ResolutionPreset.low,
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.nv21,
     );
@@ -195,8 +196,8 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
           _processSetupFrame(image);
         }
       } else if (state.phase == RecordingPhase.recording) {
-        if (_isProcessingRecordingFrame) return;
-        _processRecordingFrame(image);
+        // No MLKit here — only copy frame bytes to buffer; pose runs in batch after stop.
+        _captureRecordingFrame(image);
       }
     });
   }
@@ -243,29 +244,15 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
     }
   }
 
-  /// Process a single frame during active recording.
-  Future<void> _processRecordingFrame(CameraImage image) async {
-    _isProcessingRecordingFrame = true;
-    try {
-      final poseService = ref.read(poseDetectionServiceProvider);
-      final frame = await poseService.processFrame(
-        image,
-        _getCameraRotation(),
-        DateTime.now().millisecondsSinceEpoch,
-      );
-
-      if (frame != null && mounted) {
-        ref
-            .read(formRecordingProvider(widget.exerciseId).notifier)
-            .addFrame(frame);
-      }
-    } catch (e) {
-      AppLogger.warning(
-        'Recording frame processing error: $e',
-        tag: 'FormRecording',
-      );
-    } finally {
-      _isProcessingRecordingFrame = false;
+  /// Capture a raw frame during recording (no MLKit). Bytes are copied
+  /// synchronously; processing runs in batch after stop so FPS = camera FPS.
+  void _captureRecordingFrame(CameraImage image) {
+    final rotationDegrees = _getCameraRotationDegrees();
+    final captured = CapturedFrame.fromCameraImage(image, rotationDegrees);
+    if (mounted) {
+      ref
+          .read(formRecordingProvider(widget.exerciseId).notifier)
+          .addCapturedFrame(captured);
     }
   }
 
@@ -296,11 +283,16 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
         .stopRecording();
   }
 
+  int _getCameraRotationDegrees() {
+    final camera = _cameraController?.description;
+    if (camera == null) return 0;
+    final o = camera.sensorOrientation;
+    return o == 90 || o == 180 || o == 270 ? o : 0;
+  }
+
   InputImageRotation _getCameraRotation() {
-    // Default to 0 rotation; in production, use sensor orientation
     final camera = _cameraController?.description;
     if (camera == null) return InputImageRotation.rotation0deg;
-
     final sensorOrientation = camera.sensorOrientation;
     return switch (sensorOrientation) {
       0 => InputImageRotation.rotation0deg,
@@ -504,7 +496,9 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'REC · ${state.frameCount} frames',
+                      state.phase == RecordingPhase.recording
+                          ? 'REC · Recording… (analyzed when you stop)'
+                          : 'REC · ${state.frameCount} frames',
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
