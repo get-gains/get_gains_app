@@ -313,7 +313,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                     const SizedBox(height: 12),
 
-                    // Coach-only quick actions (M-CF1-1 + M-CF1-2)
+                    // Coach-only quick action (M-CF1-1)
                     if (isCoach) ...[
                       Row(
                         children: [
@@ -321,32 +321,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             child: QuickActionCard(
                               icon: Icons.sports,
                               title: 'Coach Tools',
-                              subtitle: 'Programs & exercises',
-                              gradient: LinearGradient(
-                                colors: [
-                                  isDark
-                                      ? AppColors.accentDark
-                                      : const Color(0xFF22C55E),
-                                  isDark
-                                      ? AppColors.accentDark.withValues(
-                                          alpha: 0.7,
-                                        )
-                                      : const Color(
-                                          0xFF22C55E,
-                                        ).withValues(alpha: 0.7),
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              onTap: () => context.push(AppRoutes.coachHub),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: QuickActionCard(
-                              icon: Icons.people,
-                              title: 'Clients',
-                              subtitle: 'Manage your roster',
+                              subtitle: 'Programs, exercises & clients',
                               gradient: LinearGradient(
                                 colors: [
                                   const Color(0xFF3B82F6),
@@ -357,7 +332,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
-                              onTap: () => context.push(AppRoutes.coachRoster),
+                              onTap: () => context.push(AppRoutes.coachHub),
                             ),
                           ),
                         ],
