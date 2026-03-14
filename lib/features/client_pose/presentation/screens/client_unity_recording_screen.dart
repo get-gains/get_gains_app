@@ -1585,7 +1585,7 @@ class _ClientUnityRecordingScreenState
     bool didLogSuccessfully = false;
     // Log via workout session provider
     try {
-      await ref
+      didLogSuccessfully = await ref
           .read(workoutSessionProvider.notifier)
           .logSet(
             setNumber: setNumber,
@@ -1593,7 +1593,6 @@ class _ClientUnityRecordingScreenState
             weight: weight,
             routineExerciseIdOverride: routineExerciseIdForLookup,
           );
-      didLogSuccessfully = true;
     } catch (e) {
       AppLogger.warning('Failed to log set: $e', tag: 'ClientUnityRecording');
       if (mounted) {
@@ -1611,12 +1610,14 @@ class _ClientUnityRecordingScreenState
     _navigateAfterLog(
       isLastSetForExercise: isLastSetForExercise,
       isLastExercise: isLastExercise,
+      routineExerciseIdForCurrentExercise: routineExerciseIdForLookup,
     );
   }
 
   void _navigateAfterLog({
     required bool isLastSetForExercise,
     required bool isLastExercise,
+    required String? routineExerciseIdForCurrentExercise,
   }) {
     final exercises = widget.routineExercises;
     Map<String, dynamic>? nextSetNavigation;
@@ -1625,7 +1626,7 @@ class _ClientUnityRecordingScreenState
       // Same exercise, next set.
       nextSetNavigation = {
         'workoutSessionId': widget.workoutSessionId,
-        'routineExerciseId': widget.routineExerciseId,
+        'routineExerciseId': routineExerciseIdForCurrentExercise,
         'routineExercises': exercises,
         'currentExerciseIndex': widget.currentExerciseIndex,
         'currentSetNumber': _workoutSetNumber,

@@ -50,7 +50,12 @@ class _ExerciseLogCardState extends ConsumerState<ExerciseLogCard> {
   @override
   void didUpdateWidget(covariant ExerciseLogCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.routineExercise.id != widget.routineExercise.id) {
+    final exerciseChanged =
+        oldWidget.routineExercise.id != widget.routineExercise.id;
+    final completedSetsChanged =
+        oldWidget.completedSets.length != widget.completedSets.length;
+
+    if (exerciseChanged || completedSetsChanged) {
       ref
           .read(exerciseLogProvider.notifier)
           .initializeForExercise(
@@ -191,9 +196,9 @@ class _ExerciseLogCardState extends ConsumerState<ExerciseLogCard> {
           children: [
             const SizedBox(width: 8),
             Text(
-              'No sets logged', 
+              'No sets logged',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: AppColors.warning, 
+                color: AppColors.warning,
                 fontWeight: FontWeight.bold,
               ),
             ),

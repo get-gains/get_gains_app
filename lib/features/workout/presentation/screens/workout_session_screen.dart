@@ -38,6 +38,42 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
   final PageController _pageController = PageController();
 
   @override
+  void initState() {
+    super.initState();
+
+    if (widget.readOnly) {
+      final preferredIndex =
+          widget.nextSetNavigation?['currentExerciseIndex'] as int?;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref
+            .read(workoutSessionProvider.notifier)
+            .refreshActiveSession(preferredExerciseIndex: preferredIndex);
+      });
+    }
+  }
+
+  void _syncPageToCurrentExercise(int index, {required bool animate}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_pageController.hasClients) return;
+
+      final currentPage = (_pageController.page ?? 0).round();
+      if (currentPage == index) return;
+
+      if (animate) {
+        _pageController.animateToPage(
+          index,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      } else {
+        _pageController.jumpToPage(index);
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _pageController.dispose();
     super.dispose();
@@ -59,11 +95,7 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
       if (newIndex != oldIndex &&
           newIndex < (next.routine?.exercises.length ?? 0) &&
           _pageController.hasClients) {
-        _pageController.animateToPage(
-          newIndex,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
+        _syncPageToCurrentExercise(newIndex, animate: true);
       }
     }
   }
@@ -203,6 +235,15 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
 
     final sessionState = ref.watch(workoutSessionProvider);
 
+    if (sessionState is WorkoutSessionActive &&
+        sessionState.currentExerciseIndex <
+            (sessionState.routine?.exercises.length ?? 0)) {
+      _syncPageToCurrentExercise(
+        sessionState.currentExerciseIndex,
+        animate: false,
+      );
+    }
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
@@ -333,8 +374,14 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
             itemBuilder: (context, index) {
               final exercise = state.routine!.exercises[index];
               final completedSets = state.session.setsForExercise(exercise.id);
+              final latestSetId = completedSets.isNotEmpty
+                  ? completedSets.last.id
+                  : 'none';
 
               return ExerciseLogCard(
+                key: ValueKey(
+                  '${exercise.id}-${completedSets.length}-$latestSetId',
+                ),
                 routineExercise: exercise,
                 completedSets: completedSets,
                 onSetCompleted: _onSetCompleted,
