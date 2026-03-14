@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -31,137 +30,13 @@ class SecureStorageService {
 
   // Android options - data will be encrypted using custom ciphers
   static const AndroidOptions _androidOptions = AndroidOptions();
-  static final Map<String, String?> _memoryFallback = <String, String?>{};
-  static bool _memoryFallbackEnabled = false;
-
-  void _enableMemoryFallback(Object error) {
-    if (_memoryFallbackEnabled) return;
-    _memoryFallbackEnabled = true;
-    AppLogger.warning(
-      'Secure storage plugin unavailable; using in-memory fallback for this session: $error',
-      tag: 'SecureStorage',
-    );
-  }
-
-  bool _isChannelInitError(Object error) {
-    if (error is MissingPluginException) return true;
-    if (error is PlatformException) {
-      final msg = '${error.message ?? ''} ${error.code}'.toLowerCase();
-      return msg.contains('unable to establish connection on channel') ||
-          msg.contains('channel-error');
-    }
-    return false;
-  }
-
-  Future<T> _withPluginRetry<T>(
-    Future<T> Function() action, {
-    int attempts = 5,
-    Duration initialDelay = const Duration(milliseconds: 120),
-  }) async {
-    for (var i = 0; i < attempts; i++) {
-      try {
-        return await action();
-      } catch (e) {
-        final isRetryable = _isChannelInitError(e);
-        if (!isRetryable || i == attempts - 1) rethrow;
-        final delayMs = initialDelay.inMilliseconds * (1 << i);
-        await Future.delayed(Duration(milliseconds: delayMs));
-      }
-    }
-    throw StateError('Secure storage operation failed unexpectedly');
-  }
-
-  Future<void> _writeWithRetry({
-    required String key,
-    required String? value,
-  }) async {
-    if (_memoryFallbackEnabled) {
-      _memoryFallback[key] = value;
-      return;
-    }
-
-    try {
-      await _withPluginRetry(() => _storage.write(key: key, value: value));
-    } catch (e) {
-      if (_isChannelInitError(e)) {
-        _enableMemoryFallback(e);
-        _memoryFallback[key] = value;
-        return;
-      }
-      rethrow;
-    }
-  }
-
-  Future<String?> _readWithRetry({required String key}) async {
-    if (_memoryFallbackEnabled) return _memoryFallback[key];
-
-    try {
-      return await _withPluginRetry(() => _storage.read(key: key));
-    } catch (e) {
-      if (_isChannelInitError(e)) {
-        _enableMemoryFallback(e);
-        return _memoryFallback[key];
-      }
-      rethrow;
-    }
-  }
-
-  Future<void> _deleteWithRetry({required String key}) async {
-    if (_memoryFallbackEnabled) {
-      _memoryFallback.remove(key);
-      return;
-    }
-
-    try {
-      await _withPluginRetry(() => _storage.delete(key: key));
-    } catch (e) {
-      if (_isChannelInitError(e)) {
-        _enableMemoryFallback(e);
-        _memoryFallback.remove(key);
-        return;
-      }
-      rethrow;
-    }
-  }
-
-  Future<void> _deleteAllWithRetry() async {
-    if (_memoryFallbackEnabled) {
-      _memoryFallback.clear();
-      return;
-    }
-
-    try {
-      await _withPluginRetry(() => _storage.deleteAll());
-    } catch (e) {
-      if (_isChannelInitError(e)) {
-        _enableMemoryFallback(e);
-        _memoryFallback.clear();
-        return;
-      }
-      rethrow;
-    }
-  }
-
-  Future<bool> _containsKeyWithRetry({required String key}) async {
-    if (_memoryFallbackEnabled) return _memoryFallback.containsKey(key);
-
-    try {
-      return await _withPluginRetry(() => _storage.containsKey(key: key));
-    } catch (e) {
-      if (_isChannelInitError(e)) {
-        _enableMemoryFallback(e);
-        return _memoryFallback.containsKey(key);
-      }
-      rethrow;
-    }
-  }
 
   // ============== Token Management ==============
 
   /// Save access token
   Future<void> saveAccessToken(String token) async {
     try {
-      await _writeWithRetry(key: StorageKeys.accessToken, value: token);
+      await _storage.write(key: StorageKeys.accessToken, value: token);
       AppLogger.debug('Access token saved', tag: 'SecureStorage');
     } catch (e) {
       AppLogger.error(
@@ -176,7 +51,7 @@ class SecureStorageService {
   /// Get access token
   Future<String?> getAccessToken() async {
     try {
-      return await _readWithRetry(key: StorageKeys.accessToken);
+      return await _storage.read(key: StorageKeys.accessToken);
     } catch (e) {
       AppLogger.error(
         'Failed to read access token',
@@ -190,7 +65,7 @@ class SecureStorageService {
   /// Delete access token
   Future<void> deleteAccessToken() async {
     try {
-      await _deleteWithRetry(key: StorageKeys.accessToken);
+      await _storage.delete(key: StorageKeys.accessToken);
       AppLogger.debug('Access token deleted', tag: 'SecureStorage');
     } catch (e) {
       AppLogger.error(
@@ -205,7 +80,7 @@ class SecureStorageService {
   /// Save refresh token
   Future<void> saveRefreshToken(String token) async {
     try {
-      await _writeWithRetry(key: StorageKeys.refreshToken, value: token);
+      await _storage.write(key: StorageKeys.refreshToken, value: token);
       AppLogger.debug('Refresh token saved', tag: 'SecureStorage');
     } catch (e) {
       AppLogger.error(
@@ -220,7 +95,7 @@ class SecureStorageService {
   /// Get refresh token
   Future<String?> getRefreshToken() async {
     try {
-      return await _readWithRetry(key: StorageKeys.refreshToken);
+      return await _storage.read(key: StorageKeys.refreshToken);
     } catch (e) {
       AppLogger.error(
         'Failed to read refresh token',
@@ -234,7 +109,7 @@ class SecureStorageService {
   /// Delete refresh token
   Future<void> deleteRefreshToken() async {
     try {
-      await _deleteWithRetry(key: StorageKeys.refreshToken);
+      await _storage.delete(key: StorageKeys.refreshToken);
       AppLogger.debug('Refresh token deleted', tag: 'SecureStorage');
     } catch (e) {
       AppLogger.error(
@@ -249,7 +124,7 @@ class SecureStorageService {
   /// Save token expiry timestamp
   Future<void> saveTokenExpiry(DateTime expiry) async {
     try {
-      await _writeWithRetry(
+      await _storage.write(
         key: StorageKeys.tokenExpiry,
         value: expiry.toIso8601String(),
       );
@@ -266,7 +141,7 @@ class SecureStorageService {
   /// Get token expiry timestamp
   Future<DateTime?> getTokenExpiry() async {
     try {
-      final value = await _readWithRetry(key: StorageKeys.tokenExpiry);
+      final value = await _storage.read(key: StorageKeys.tokenExpiry);
       if (value == null) return null;
       return DateTime.tryParse(value);
     } catch (e) {
@@ -356,7 +231,7 @@ class SecureStorageService {
     await Future.wait([
       deleteAccessToken(),
       deleteRefreshToken(),
-      _deleteWithRetry(key: StorageKeys.tokenExpiry),
+      _storage.delete(key: StorageKeys.tokenExpiry),
     ]);
     AppLogger.info('All tokens cleared', tag: 'SecureStorage');
   }
@@ -365,22 +240,22 @@ class SecureStorageService {
 
   /// Save user ID
   Future<void> saveUserId(String userId) async {
-    await _writeWithRetry(key: StorageKeys.userId, value: userId);
+    await _storage.write(key: StorageKeys.userId, value: userId);
   }
 
   /// Get user ID
   Future<String?> getUserId() async {
-    return await _readWithRetry(key: StorageKeys.userId);
+    return await _storage.read(key: StorageKeys.userId);
   }
 
   /// Save user email
   Future<void> saveUserEmail(String email) async {
-    await _writeWithRetry(key: StorageKeys.userEmail, value: email);
+    await _storage.write(key: StorageKeys.userEmail, value: email);
   }
 
   /// Get user email
   Future<String?> getUserEmail() async {
-    return await _readWithRetry(key: StorageKeys.userEmail);
+    return await _storage.read(key: StorageKeys.userEmail);
   }
 
   // ============== Recovery Token Methods (Password Reset) ==============
@@ -388,7 +263,7 @@ class SecureStorageService {
   /// Save recovery access token (from password reset deep link)
   Future<void> saveRecoveryToken(String token) async {
     try {
-      await _writeWithRetry(key: StorageKeys.recoveryAccessToken, value: token);
+      await _storage.write(key: StorageKeys.recoveryAccessToken, value: token);
       AppLogger.debug('Recovery access token saved', tag: 'SecureStorage');
     } catch (e) {
       AppLogger.error(
@@ -403,7 +278,7 @@ class SecureStorageService {
   /// Get the stored recovery access token
   Future<String?> getRecoveryToken() async {
     try {
-      return await _readWithRetry(key: StorageKeys.recoveryAccessToken);
+      return await _storage.read(key: StorageKeys.recoveryAccessToken);
     } catch (e) {
       AppLogger.error(
         'Failed to read recovery access token',
@@ -417,10 +292,7 @@ class SecureStorageService {
   /// Save recovery refresh token
   Future<void> saveRecoveryRefreshToken(String token) async {
     try {
-      await _writeWithRetry(
-        key: StorageKeys.recoveryRefreshToken,
-        value: token,
-      );
+      await _storage.write(key: StorageKeys.recoveryRefreshToken, value: token);
       AppLogger.debug('Recovery refresh token saved', tag: 'SecureStorage');
     } catch (e) {
       AppLogger.error(
@@ -435,7 +307,7 @@ class SecureStorageService {
   /// Get recovery refresh token
   Future<String?> getRecoveryRefreshToken() async {
     try {
-      return await _readWithRetry(key: StorageKeys.recoveryRefreshToken);
+      return await _storage.read(key: StorageKeys.recoveryRefreshToken);
     } catch (e) {
       AppLogger.error(
         'Failed to read recovery refresh token',
@@ -449,8 +321,8 @@ class SecureStorageService {
   /// Clear recovery tokens after password reset is complete
   Future<void> clearRecoveryTokens() async {
     await Future.wait([
-      _deleteWithRetry(key: StorageKeys.recoveryAccessToken),
-      _deleteWithRetry(key: StorageKeys.recoveryRefreshToken),
+      _storage.delete(key: StorageKeys.recoveryAccessToken),
+      _storage.delete(key: StorageKeys.recoveryRefreshToken),
     ]);
     AppLogger.debug('Recovery tokens cleared', tag: 'SecureStorage');
   }
@@ -459,27 +331,27 @@ class SecureStorageService {
 
   /// Write a generic key-value pair
   Future<void> write({required String key, required String value}) async {
-    await _writeWithRetry(key: key, value: value);
+    await _storage.write(key: key, value: value);
   }
 
   /// Read a value by key
   Future<String?> read({required String key}) async {
-    return await _readWithRetry(key: key);
+    return await _storage.read(key: key);
   }
 
   /// Delete a value by key
   Future<void> delete({required String key}) async {
-    await _deleteWithRetry(key: key);
+    await _storage.delete(key: key);
   }
 
   /// Check if a key exists
   Future<bool> containsKey({required String key}) async {
-    return await _containsKeyWithRetry(key: key);
+    return await _storage.containsKey(key: key);
   }
 
   /// Clear all stored data (use with caution)
   Future<void> clearAll() async {
-    await _deleteAllWithRetry();
+    await _storage.deleteAll();
     AppLogger.warning('All secure storage cleared', tag: 'SecureStorage');
   }
 
