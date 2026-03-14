@@ -4,8 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_embed_unity/flutter_embed_unity.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../../core/theme/app_colors.dart';
+import '../../../../services/database/app_database.dart';
 import '../../../coach_pose/data/models/landmark_models.dart';
+import '../../../unity/data/unity_cosmetics_loader.dart';
 import '../../../unity/data/unity_message_contract.dart';
 
 /// Full-screen 3D preview of a single form's pose playback via Unity.
@@ -13,7 +17,7 @@ import '../../../unity/data/unity_message_contract.dart';
 /// Receives [landmarkFrames] and [cameraAngle] from route extra. When Unity
 /// sends [scene_loaded], sends LoadPoseFrames, SetCameraAngle, SetSkeletonColor,
 /// and PlayPose so the stick figure (or future humanoid) plays in 3D.
-class Form3DPreviewScreen extends StatefulWidget {
+class Form3DPreviewScreen extends ConsumerStatefulWidget {
   const Form3DPreviewScreen({
     super.key,
     required this.landmarkFrames,
@@ -24,10 +28,11 @@ class Form3DPreviewScreen extends StatefulWidget {
   final String cameraAngle;
 
   @override
-  State<Form3DPreviewScreen> createState() => _Form3DPreviewScreenState();
+  ConsumerState<Form3DPreviewScreen> createState() =>
+      _Form3DPreviewScreenState();
 }
 
-class _Form3DPreviewScreenState extends State<Form3DPreviewScreen> {
+class _Form3DPreviewScreenState extends ConsumerState<Form3DPreviewScreen> {
   bool _unityLoaded = false;
   bool _poseSent = false;
 
@@ -47,6 +52,8 @@ class _Form3DPreviewScreenState extends State<Form3DPreviewScreen> {
     if (!mounted) return;
     if (message == UnityMessageContract.unityEventSceneLoaded) {
       setState(() => _unityLoaded = true);
+      // Load equipped cosmetics onto the character
+      UnityCosmeticsLoader.loadEquippedCosmetics(ref.read(appDatabaseProvider));
       _sendPoseToUnity();
     }
   }
@@ -124,7 +131,9 @@ class _Form3DPreviewScreenState extends State<Form3DPreviewScreen> {
                   borderRadius: BorderRadius.circular(20),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [

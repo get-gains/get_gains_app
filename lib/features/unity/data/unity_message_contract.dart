@@ -65,6 +65,43 @@ class UnityMessageContract {
   /// Format: "frame_update:<index>"
   static const String unityEventFrameUpdate = 'frame_update';
 
+  // ── Cosmetic methods ──────────────────────────────────────────
+
+  /// Load and apply all currently equipped cosmetics to the character model.
+  /// Message: JSON string with format:
+  /// ```json
+  /// {
+  ///   "cosmetics": [
+  ///     { "category": "HEADWEAR", "assetRef": "headwear_flame_headband" },
+  ///     { "category": "TOP", "assetRef": "top_iron_tank" }
+  ///   ]
+  /// }
+  /// ```
+  static const String methodLoadEquippedCosmetics = 'LoadEquippedCosmetics';
+
+  /// Temporarily preview a cosmetic item (for shop browsing). Does NOT persist.
+  /// Message: JSON string with format:
+  /// ```json
+  /// {
+  ///   "category": "HEADWEAR",
+  ///   "assetRef": "headwear_viking_helm",
+  ///   "showOnly": true
+  /// }
+  /// ```
+  static const String methodPreviewCosmetic = 'PreviewCosmetic';
+
+  /// Revert to the actual equipped state after previewing.
+  /// Message: "" (empty string)
+  static const String methodClearPreview = 'ClearPreview';
+
+  // ── Cosmetic events from Unity ───────────────────────────────
+
+  /// Confirms that cosmetics have been applied to the character.
+  static const String unityEventCosmeticsLoaded = 'cosmetics_loaded';
+
+  /// Confirms a preview cosmetic has been applied.
+  static const String unityEventCosmeticPreviewReady = 'cosmetic_preview_ready';
+
   /// Optional: Unity can send JSON. Suggested keys for consistency.
   static const String jsonKeyType = 'type';
   static const String jsonKeyPayload = 'payload';

@@ -11,6 +11,7 @@ import '../../../../providers/auth_state_provider.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../auth/data/models/user_model.dart';
+import '../../../gains_coins/presentation/widgets/coin_balance_widget.dart';
 import '../../../home/presentation/screens/home_screen.dart'
     show isCoachProvider;
 import '../../data/models/user_profile_model.dart';
@@ -369,6 +370,14 @@ class _ProfileContent extends StatelessWidget {
                   const SizedBox(height: 24),
                 ],
               ],
+
+              // ── Gains Coins section ────────────────────────────────
+              _SectionHeader(title: 'Gains Coins', isDark: isDark),
+              const SizedBox(height: 12),
+              CoinBalanceWidget(
+                onTap: () => context.push(AppRoutes.coinHistory),
+              ),
+              const SizedBox(height: 24),
 
               // ── Stats placeholder section ─────────────────────────
               _SectionHeader(title: 'Stats', isDark: isDark),
