@@ -100,11 +100,92 @@ class LandmarkPreprocessor {
     return averaged;
   }
 
+  /// Normalize for comparison: center + scale + align torso to vertical.
+  ///
+  /// Use this when comparing coach vs client so global orientation
+  /// (e.g. bent vs upright) does not dominate; joint angles still differ.
+  LandmarkFrame normalizeForComparison(LandmarkFrame frame) {
+    return alignTorsoToVertical(normalize(frame));
+  }
+
+  /// Align torso (shoulder–hip axis) to vertical so orientation differences
+  /// are reduced before angle extraction. Missing torso landmarks → no rotation.
+  LandmarkFrame alignTorsoToVertical(LandmarkFrame frame) {
+    if (frame.landmarks.isEmpty) return frame;
+
+    const targetY = 1.0; // canonical up (0, 1, 0)
+    final ls = frame.landmarks['LEFT_SHOULDER'];
+    final rs = frame.landmarks['RIGHT_SHOULDER'];
+    final lh = frame.landmarks['LEFT_HIP'];
+    final rh = frame.landmarks['RIGHT_HIP'];
+
+    if (ls == null || rs == null || lh == null || rh == null) return frame;
+
+    final shoulderX = (ls.x + rs.x) / 2;
+    final shoulderY = (ls.y + rs.y) / 2;
+    final shoulderZ = (ls.z + rs.z) / 2;
+    final hipX = (lh.x + rh.x) / 2;
+    final hipY = (lh.y + rh.y) / 2;
+    final hipZ = (lh.z + rh.z) / 2;
+
+    double tx = shoulderX - hipX;
+    double ty = shoulderY - hipY;
+    double tz = shoulderZ - hipZ;
+    final len = math.sqrt(tx * tx + ty * ty + tz * tz);
+    if (len < 1e-6) return frame;
+    tx /= len;
+    ty /= len;
+    tz /= len;
+
+    // Rotation axis: torso x (0, targetY, 0)
+    final ax = tz * targetY;
+    final ay = 0.0;
+    final az = -tx * targetY;
+    final axisLen = math.sqrt(ax * ax + ay * ay + az * az);
+    if (axisLen < 1e-6) {
+      // Torso already aligned to vertical
+      if (ty * targetY > 0) return frame;
+      // Opposite direction: rotate 180 around X or Z
+      return _rotateLandmarks(frame, 0, 1, 0, math.pi);
+    }
+    final axn = ax / axisLen;
+    final ayn = ay / axisLen;
+    final azn = az / axisLen;
+    final angle = math.acos((ty * targetY).clamp(-1.0, 1.0));
+
+    return _applyRodrigues(frame, axn, ayn, azn, angle);
+  }
+
+  LandmarkFrame _rotateLandmarks(LandmarkFrame frame, double ax, double ay, double az, double angle) {
+    final rotated = <String, LandmarkPoint>{};
+    for (final entry in frame.landmarks.entries) {
+      final p = entry.value;
+      final (rx, ry, rz) = _rodrigues(p.x, p.y, p.z, ax, ay, az, angle);
+      rotated[entry.key] = LandmarkPoint(x: rx, y: ry, z: rz, confidence: p.confidence);
+    }
+    return LandmarkFrame(timestampMs: frame.timestampMs, landmarks: rotated);
+  }
+
+  LandmarkFrame _applyRodrigues(LandmarkFrame frame, double ax, double ay, double az, double angle) {
+    return _rotateLandmarks(frame, ax, ay, az, angle);
+  }
+
+  (double, double, double) _rodrigues(double x, double y, double z, double ax, double ay, double az, double angle) {
+    final cosA = math.cos(angle);
+    final sinA = math.sin(angle);
+    final dot = ax * x + ay * y + az * z;
+    final rx = x * cosA + sinA * (ay * z - az * y) + ax * dot * (1 - cosA);
+    final ry = y * cosA + sinA * (az * x - ax * z) + ay * dot * (1 - cosA);
+    final rz = z * cosA + sinA * (ax * y - ay * x) + az * dot * (1 - cosA);
+    return (rx, ry, rz);
+  }
+
   /// Normalize landmark positions using 3D centroid alignment.
   ///
   /// Centers all landmarks around (0, 0, 0) and scales to a unit sphere.
   /// This allows comparison between different body sizes and camera distances
   /// while preserving depth (z-axis) information for accurate 3D analysis.
+  /// Does not apply rotation alignment; use [normalizeForComparison] for that.
   LandmarkFrame normalize(LandmarkFrame frame) {
     if (frame.landmarks.isEmpty) return frame;
 
@@ -261,21 +342,27 @@ class LandmarkPreprocessor {
     return LandmarkFrame(timestampMs: timestampMs, landmarks: landmarks);
   }
 
-  /// Process a batch of raw frames: filter → smooth → normalize.
-  List<LandmarkFrame> processBatch(List<LandmarkFrame> rawFrames) {
+  /// Process a batch of raw frames: filter → smooth (optional) → normalize for comparison.
+  ///
+  /// When [skipSmooth] is true (e.g. for reference from server), only filter and
+  /// normalize+align are applied so both sides use the same comparison pipeline.
+  List<LandmarkFrame> processBatch(
+    List<LandmarkFrame> rawFrames, {
+    bool skipSmooth = false,
+  }) {
     AppLogger.debug(
-      'Processing batch of ${rawFrames.length} frames',
+      'Processing batch of ${rawFrames.length} frames (skipSmooth: $skipSmooth)',
       tag: 'LandmarkPreprocessor',
     );
 
     // Step 1: Filter low-confidence landmarks per frame
     final filtered = rawFrames.map(filterByConfidence).toList();
 
-    // Step 2: Temporal smoothing
-    final smoothed = smoothFrames(filtered);
+    // Step 2: Temporal smoothing (skip for reference if already smoothed on server)
+    final smoothed = skipSmooth ? filtered : smoothFrames(filtered);
 
-    // Step 3: Normalize each frame
-    final normalized = smoothed.map(normalize).toList();
+    // Step 3: Normalize + torso alignment for comparison
+    final normalized = smoothed.map(normalizeForComparison).toList();
 
     AppLogger.debug(
       'Batch processing complete: ${normalized.length} frames',

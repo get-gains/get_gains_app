@@ -85,7 +85,12 @@ class ClientRecordingActive extends ClientRecordingState {
 
 /// Recording stopped, processing comparison
 class ClientRecordingProcessing extends ClientRecordingState {
-  const ClientRecordingProcessing();
+  const ClientRecordingProcessing({
+    this.progress = 0.0,
+    this.message = 'Preparing...',
+  });
+  final double progress;
+  final String message;
 }
 
 /// Comparison complete — show results
@@ -320,7 +325,10 @@ class ClientRecording extends _$ClientRecording {
     _elapsedTimer?.cancel();
     _elapsedTimer = null;
 
-    state = const ClientRecordingProcessing();
+    state = const ClientRecordingProcessing(
+      progress: 0.0,
+      message: 'Detecting pose...',
+    );
 
     try {
       final recordingDurationMs =
@@ -333,6 +341,10 @@ class ClientRecording extends _$ClientRecording {
       final startMs = _recordingStartMs;
       final rawLandmarks = <LandmarkFrame>[];
       for (var i = 0; i < captured.length; i++) {
+        state = ClientRecordingProcessing(
+          progress: 0.05 + 0.25 * (i / math.max(1, captured.length)),
+          message: 'Detecting pose...',
+        );
         final timestampMs = startMs + (i * 1000 ~/ 30);
         final frame = await poseService.processCapturedFrame(
           captured[i],
@@ -340,6 +352,11 @@ class ClientRecording extends _$ClientRecording {
         );
         if (frame != null) rawLandmarks.add(frame);
       }
+
+      state = const ClientRecordingProcessing(
+        progress: 0.35,
+        message: 'Analyzing form...',
+      );
 
       var clientLandmarksForPipeline = rawLandmarks;
       var poseFps = recordingDurationMs > 0 && clientLandmarksForPipeline.isNotEmpty
@@ -378,45 +395,99 @@ class ClientRecording extends _$ClientRecording {
         return;
       }
 
-      // Trim client landmarks to reference length (US2)
+      state = const ClientRecordingProcessing(
+        progress: 0.45,
+        message: 'Comparing to reference...',
+      );
+
+      // Reference: same pipeline as client (filter + normalize+align; skip smooth if already smoothed on server)
       final refLen = _referenceLandmarks.length;
-      final trimLen = math.min(clientLandmarksForPipeline.length, refLen);
-      final trimmedLandmarks = clientLandmarksForPipeline.sublist(0, trimLen);
-
-      // Batch normalise the raw landmarks (3D Procrustes)
-      final normalizedLandmarks = _preprocessor.processBatch(trimmedLandmarks);
-
-      // Extract features using only the relevant angles (vertex-dilution fix)
       final angleDefinitions = _relevantAngles.isNotEmpty
           ? FeatureExtractor.filteredDefinitions(_relevantAngles)
           : null;
-
-      final clientFeatures = _featureExtractor.extractBatch(
-        normalizedLandmarks,
+      final referenceNormalized = _preprocessor.processBatch(
+        _referenceLandmarks,
+        skipSmooth: true,
+      );
+      final referenceFeatures = _featureExtractor.extractBatch(
+        referenceNormalized,
         angleDefinitions: angleDefinitions,
       );
 
-      // Re-extract reference features with the same filtered definitions so
-      // DTW compares apples to apples
-      final referenceFeatures = _featureExtractor.extractBatch(
-        _referenceLandmarks.map(_preprocessor.normalize).toList(),
-        angleDefinitions: angleDefinitions,
+      // Temporal alignment: try several client start offsets, keep best-scoring comparison
+      const maxOffsetFrames = 30;
+      const offsetStep = 2;
+      const maxTries = 15;
+      final clientLen = clientLandmarksForPipeline.length;
+      final trimLen = math.min(clientLen, refLen);
+      if (trimLen < refLen) {
+        AppLogger.warning(
+          'Client frames ($clientLen) shorter than reference ($refLen); no offset search',
+          tag: 'ClientRecording',
+        );
+      }
+
+      int bestOffset = 0;
+      ComparisonResultModel bestResult = _comparisonService.compare(
+        exerciseFormId: activeState.formId,
+        referenceFrames: referenceFeatures,
+        clientFrames: _featureExtractor.extractBatch(
+          _preprocessor.processBatch(
+            clientLandmarksForPipeline.sublist(0, trimLen),
+          ),
+          angleDefinitions: angleDefinitions,
+        ),
+        cameraAngle: activeState.cameraAngle,
+        avgLandmarkConfidence: null,
+      );
+      List<LandmarkFrame> bestTrimmedLandmarks =
+          clientLandmarksForPipeline.sublist(0, trimLen);
+
+      final maxOffset = trimLen == refLen
+          ? math.min(maxOffsetFrames, clientLen - refLen)
+          : -1;
+      if (maxOffset > 0) {
+        int tries = 0;
+        for (int o = 0; o <= maxOffset && tries < maxTries; o += offsetStep, tries++) {
+          if (o + refLen > clientLen) break;
+          final trimmed = clientLandmarksForPipeline.sublist(o, o + refLen);
+          final normalizedLandmarks = _preprocessor.processBatch(trimmed);
+          final clientFeatures = _featureExtractor.extractBatch(
+            normalizedLandmarks,
+            angleDefinitions: angleDefinitions,
+          );
+          final result = _comparisonService.compare(
+            exerciseFormId: activeState.formId,
+            referenceFrames: referenceFeatures,
+            clientFrames: clientFeatures,
+            cameraAngle: activeState.cameraAngle,
+            avgLandmarkConfidence: null,
+          );
+          if (result.overallScore > bestResult.overallScore) {
+            bestResult = result;
+            bestOffset = o;
+            bestTrimmedLandmarks = trimmed;
+          }
+        }
+        if (bestOffset > 0) {
+          AppLogger.info(
+            'Best temporal offset: $bestOffset frames (score: ${(bestResult.overallScore * 100).toStringAsFixed(1)}%)',
+            tag: 'ClientRecording',
+          );
+        }
+      }
+
+      final result = bestResult;
+
+      state = const ClientRecordingProcessing(
+        progress: 0.9,
+        message: 'Uploading result...',
       );
 
       AppLogger.info(
-        'Post-record batch: ${normalizedLandmarks.length} frames, '
-        '${clientFeatures.length} feature frames, '
+        'Post-record batch: ${bestTrimmedLandmarks.length} frames, '
         'angles: ${_relevantAngles.isNotEmpty ? _relevantAngles : "all"}',
         tag: 'ClientRecording',
-      );
-
-      // Run DTW comparison with batch-processed features
-      final result = _comparisonService.compare(
-        exerciseFormId: activeState.formId,
-        referenceFrames: referenceFeatures,
-        clientFrames: clientFeatures,
-        cameraAngle: activeState.cameraAngle,
-        avgLandmarkConfidence: null,
       );
 
       // Upload result to server
@@ -447,7 +518,7 @@ class ClientRecording extends _$ClientRecording {
         uploadSuccess: uploadSuccess,
         referenceLandmarkFrames: List.unmodifiable(_referenceLandmarks),
         clientLandmarkFrames: List.unmodifiable(
-          _preprocessor.smoothFrames(trimmedLandmarks),
+          _preprocessor.smoothFrames(bestTrimmedLandmarks),
         ),
         exerciseName: _exerciseName,
       );

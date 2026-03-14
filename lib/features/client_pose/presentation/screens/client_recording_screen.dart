@@ -242,7 +242,8 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
       ClientRecordingError(message: final msg) => _buildError(context, msg),
       ClientRecordingReady() => _buildReadyState(context, state, isDark),
       ClientRecordingActive() => _buildRecordingState(context, state, isDark),
-      ClientRecordingProcessing() => _buildProcessing(context),
+      ClientRecordingProcessing(:final progress, :final message) =>
+          _buildProcessing(context, progress: progress, message: message),
       ClientRecordingComplete() => _buildResults(context, state, isDark),
     };
   }
@@ -561,32 +562,50 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
     );
   }
 
-  Widget _buildProcessing(BuildContext context) {
+  Widget _buildProcessing(
+    BuildContext context, {
+    required double progress,
+    required String message,
+  }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final percent = (progress * 100).toStringAsFixed(0);
     return Container(
       color: isDark ? Colors.black87 : Colors.white.withValues(alpha: 0.95),
-      child: const Center(
+      child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             SizedBox(
-              width: 48,
-              height: 48,
-              child: CircularProgressIndicator(strokeWidth: 3),
+              width: 72,
+              height: 72,
+              child: CircularProgressIndicator(
+                value: progress > 0 ? progress : null,
+                strokeWidth: 4,
+              ),
             ),
-            SizedBox(height: 24),
+            const SizedBox(height: 24),
             Text(
-              'Processing your recording...',
-              style: TextStyle(
+              message,
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
               ),
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
+            Text(
+              '$percent%',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white70 : Colors.black87,
+                fontFamily: 'JetBrains Mono',
+              ),
+            ),
+            const SizedBox(height: 8),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 32),
+              padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Text(
-                'Analyzing pose data & comparing to reference.\nThis may take a moment.',
+                'This may take a moment.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.grey,

@@ -54,6 +54,7 @@ class FormRecordingState {
     this.recordingDurationMs = 0,
     this.frameCount = 0,
     this.processingProgress = 0.0,
+    this.processingMessage,
     this.countdownSeconds = 0,
     this.relevantAngles = const [],
     this.errorMessage,
@@ -75,6 +76,7 @@ class FormRecordingState {
   final int recordingDurationMs;
   final int frameCount;
   final double processingProgress; // 0.0 to 1.0
+  final String? processingMessage; // e.g. "Detecting pose...", "Uploading..."
   final int countdownSeconds;
   final List<String> relevantAngles;
   final String? errorMessage;
@@ -101,6 +103,7 @@ class FormRecordingState {
     int? recordingDurationMs,
     int? frameCount,
     double? processingProgress,
+    String? processingMessage,
     int? countdownSeconds,
     List<String>? relevantAngles,
     String? errorMessage,
@@ -121,6 +124,7 @@ class FormRecordingState {
       recordingDurationMs: recordingDurationMs ?? this.recordingDurationMs,
       frameCount: frameCount ?? this.frameCount,
       processingProgress: processingProgress ?? this.processingProgress,
+      processingMessage: processingMessage ?? this.processingMessage,
       countdownSeconds: countdownSeconds ?? this.countdownSeconds,
       relevantAngles: relevantAngles ?? this.relevantAngles,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
@@ -345,6 +349,7 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
       capturedFrameCount: capturedCount,
       frameCount: capturedCount,
       processingProgress: 0.0,
+      processingMessage: 'Detecting pose...',
     );
 
     AppLogger.info(
@@ -366,6 +371,7 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
       for (var i = 0; i < captured.length; i++) {
         state = state.copyWith(
           processingProgress: 0.05 + 0.15 * (i / captured.length),
+          processingMessage: 'Detecting pose...',
         );
         final timestampMs = startMs + (i * 1000 ~/ 30);
         final frame = await poseService.processCapturedFrame(
@@ -394,7 +400,10 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
   Future<void> _processFrames() async {
     try {
       // Step 1: Filter low-confidence landmarks + smooth
-      state = state.copyWith(processingProgress: 0.1);
+      state = state.copyWith(
+        processingProgress: 0.2,
+        processingMessage: 'Analyzing form...',
+      );
       final filtered = state.rawFrames
           .map(_preprocessor.filterByConfidence)
           .toList();
@@ -402,7 +411,8 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
 
       state = state.copyWith(
         processedFrames: smoothed,
-        processingProgress: 0.3,
+        processingProgress: 0.4,
+        processingMessage: 'Extracting angles...',
       );
 
       // Step 2: Extract features (joint angles) from smoothed frames
@@ -411,20 +421,26 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
       // Step 2b: Auto-detect which angles are relevant (ROM >= 15°)
       final relevantAngles = FeatureExtractor.detectRelevantAngles(features);
 
-      state = state.copyWith(featureFrames: features, processingProgress: 0.5);
+      state = state.copyWith(
+        featureFrames: features,
+        processingProgress: 0.6,
+        processingMessage: 'Preparing upload...',
+      );
 
       // Step 3: Normalize (Procrustes) for the normalizedFrames payload
       final normalized = smoothed.map(_preprocessor.normalize).toList();
 
       state = state.copyWith(
         processingProgress: 0.8,
+        processingMessage: 'Preparing upload...',
         relevantAngles: relevantAngles,
       );
 
       // Step 4: Move to upload phase
       state = state.copyWith(
         phase: RecordingPhase.uploading,
-        processingProgress: 1.0,
+        processingProgress: 0.9,
+        processingMessage: 'Uploading form...',
       );
 
       AppLogger.info(
@@ -534,6 +550,8 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
           state = state.copyWith(
             phase: RecordingPhase.complete,
             uploadedForm: form,
+            processingProgress: 1.0,
+            processingMessage: 'Done',
           );
         },
         failure: (error) {

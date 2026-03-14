@@ -102,8 +102,8 @@ class FormComparisonService {
       final alignedLen = math.max(refSeries.length, clientSeries.length);
       final meanDev = alignedLen > 0 ? dtwDistance / alignedLen : 180.0;
 
-      // Score: 0° mean deviation → 1.0, ≥45° → 0.0
-      final score = (1.0 - meanDev / 45.0).clamp(0.0, 1.0);
+      // Score: 0° mean deviation → 1.0, ≥60° → 0.0 (softer curve after alignment fixes)
+      final score = (1.0 - meanDev / 60.0).clamp(0.0, 1.0);
       angleScores[angleName] = score;
 
       // Generate correction if score is below threshold

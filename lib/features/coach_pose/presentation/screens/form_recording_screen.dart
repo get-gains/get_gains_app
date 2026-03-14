@@ -628,6 +628,11 @@ class _ProcessingOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final message = state.processingMessage ??
+        (state.phase == RecordingPhase.processing
+            ? 'Processing landmarks...'
+            : 'Uploading form...');
+    final percent = (state.processingProgress * 100).toStringAsFixed(0);
     return Container(
       color: Colors.black87,
       child: Center(
@@ -647,18 +652,18 @@ class _ProcessingOverlay extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              state.phase == RecordingPhase.processing
-                  ? 'Processing landmarks...'
-                  : 'Uploading form...',
+              message,
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(color: Colors.white),
+              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(
-              '${(state.processingProgress * 100).toStringAsFixed(0)}%',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.white70,
+              '$percent%',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
                 fontFamily: 'JetBrains Mono',
               ),
             ),
