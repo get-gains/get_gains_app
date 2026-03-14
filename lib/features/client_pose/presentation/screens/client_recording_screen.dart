@@ -40,8 +40,6 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
   bool _isCameraError = false;
   bool _isProcessingFrame = false;
   bool _isFlipping = false;
-  int _frameSkipCount = 0;
-  static const _processEveryNFrames = 3; // Process every 3rd frame
 
   @override
   void initState() {
@@ -97,8 +95,6 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
     }
 
     _cameraController!.startImageStream((CameraImage image) {
-      _frameSkipCount++;
-      if (_frameSkipCount % _processEveryNFrames != 0) return;
       if (_isProcessingFrame) return;
 
       _isProcessingFrame = true;

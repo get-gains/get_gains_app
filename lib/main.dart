@@ -27,12 +27,9 @@ Future<void> main() async {
   // This is necessary because plugins like flutter_embed_unity can delay channel initialization
   await _waitForPlatformChannels();
 
-  // Initialize Hive for user preferences
-  final userPrefsBox = await _initWithRetry(
-    () => UserPreferencesService.init(),
-    maxRetries: 5,
-    initialDelay: const Duration(milliseconds: 300),
-  );
+  // Initialize Hive for user preferences. If path_provider channels are still
+  // not ready, fall back to a filesystem path that does not require platform channels.
+  final userPrefsBox = await _initUserPrefsBox();
 
   // Initialize Sentry for error tracking
   final sentryDsn = dotenv.env['SENTRY_DSN'];
@@ -144,6 +141,23 @@ Future<void> _waitForPlatformChannels() async {
       final delayMs = initialDelay.inMilliseconds * (1 << i);
       await Future.delayed(Duration(milliseconds: delayMs));
     }
+  }
+}
+
+Future<Box<dynamic>> _initUserPrefsBox() async {
+  try {
+    return await _initWithRetry(
+      () => UserPreferencesService.init(),
+      maxRetries: 5,
+      initialDelay: const Duration(milliseconds: 300),
+    );
+  } catch (e) {
+    final fallbackPath = UserPreferencesService.buildFallbackHivePath();
+    AppLogger.warning(
+      'Using fallback Hive path due to platform channel startup issue: $e',
+      tag: 'Main',
+    );
+    return UserPreferencesService.init(fallbackPath: fallbackPath);
   }
 }
 

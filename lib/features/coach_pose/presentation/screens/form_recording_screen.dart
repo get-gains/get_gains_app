@@ -37,6 +37,7 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
   int _frameCount = 0;
   bool _isStreamingImages = false;
   bool _isProcessingSetupFrame = false;
+  bool _isProcessingRecordingFrame = false;
 
   @override
   void initState() {
@@ -105,7 +106,7 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
 
     _cameraController = CameraController(
       camera,
-      ResolutionPreset.high,
+      ResolutionPreset.medium,
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.nv21,
     );
@@ -171,7 +172,7 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
 
   /// Start a single continuous image stream.
   /// During setup: processes every ~10th frame for validation.
-  /// During recording: processes every 3rd frame for landmarks.
+  /// During recording: processes every frame for ≥30 FPS landmark capture.
   void _startImageStream() {
     if (_isStreamingImages) return;
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
@@ -190,15 +191,12 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
 
       if (state.phase == RecordingPhase.setupGuidance ||
           state.phase == RecordingPhase.countdown) {
-        // During setup/countdown: process every 10th frame (~3 checks/sec at 30fps)
         if (_frameCount % 10 == 0) {
           _processSetupFrame(image);
         }
       } else if (state.phase == RecordingPhase.recording) {
-        // During recording: process every 3rd frame
-        if (_frameCount % 3 == 0) {
-          _processRecordingFrame(image);
-        }
+        if (_isProcessingRecordingFrame) return;
+        _processRecordingFrame(image);
       }
     });
   }
@@ -247,6 +245,7 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
 
   /// Process a single frame during active recording.
   Future<void> _processRecordingFrame(CameraImage image) async {
+    _isProcessingRecordingFrame = true;
     try {
       final poseService = ref.read(poseDetectionServiceProvider);
       final frame = await poseService.processFrame(
@@ -265,6 +264,8 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
         'Recording frame processing error: $e',
         tag: 'FormRecording',
       );
+    } finally {
+      _isProcessingRecordingFrame = false;
     }
   }
 

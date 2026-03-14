@@ -14,6 +14,10 @@ import '../../services/rep_counter.dart';
 
 part 'client_recording_provider.g.dart';
 
+/// Minimum acceptable frame rate (FPS) for a client recording.
+/// Recordings below this threshold produce unreliable DTW scores.
+const kMinClientFrameRate = 30;
+
 /// State for the client recording + comparison pipeline.
 sealed class ClientRecordingState {
   const ClientRecordingState();
@@ -125,6 +129,7 @@ class ClientRecording extends _$ClientRecording {
   final List<FeatureFrame> _clientFeatures = [];
   List<FeatureFrame> _referenceFeatures = [];
   List<LandmarkFrame> _referenceLandmarks = [];
+  List<String> _relevantAngles = [];
   String? _formId;
   String? _cameraAngle;
   String? _exerciseName;
@@ -205,6 +210,21 @@ class ClientRecording extends _$ClientRecording {
           _referenceFeatures = referenceFeatureFrames;
           _referenceLandmarks = referenceFrames;
 
+          // Parse relevant angles from the form (hybrid vertex-dilution fix)
+          final relevantAnglesJson = form['relevantAngles'] as List?;
+          if (relevantAnglesJson != null && relevantAnglesJson.isNotEmpty) {
+            _relevantAngles = relevantAnglesJson.cast<String>();
+          } else {
+            // Fallback: auto-detect from reference feature frames
+            _relevantAngles = FeatureExtractor.detectRelevantAngles(
+              referenceFeatureFrames,
+            );
+          }
+          AppLogger.info(
+            'Relevant angles for comparison: $_relevantAngles',
+            tag: 'ClientRecording',
+          );
+
           // Parse pose config if available
           final configJson = data['poseConfig'] as Map<String, dynamic>?;
           if (configJson != null) {
@@ -275,7 +295,14 @@ class ClientRecording extends _$ClientRecording {
     );
   }
 
-  /// Step 3: Process each camera frame during recording
+  /// Step 3: Process each camera frame during recording.
+  ///
+  /// Only performs lightweight work to keep 30+ FPS capture rate:
+  ///   - Stabilise landmarks for display
+  ///   - Extract a single primary angle for the rep counter
+  ///
+  /// Full 3D normalisation and multi-angle feature extraction is deferred
+  /// to [stopRecordingAndCompare] (post-record batch processing).
   void processFrame(LandmarkFrame landmarkFrame) {
     if (state is! ClientRecordingActive) return;
 
@@ -283,16 +310,20 @@ class ClientRecording extends _$ClientRecording {
     final stabilized = _stabilizeForDisplay(landmarkFrame);
     _clientLandmarks.add(stabilized);
 
-    // Normalize for comparison (Procrustes: centered around 0, unit scale)
-    final normalized = _preprocessor.normalize(stabilized);
-    _clientNormalizedLandmarks.add(normalized);
+    // Lightweight: only extract the single primary angle for rep counting
+    final primaryAngle = _repCounter.trackedAngle;
+    FeatureFrame repFeature;
+    if (primaryAngle != null) {
+      repFeature = _featureExtractor.extractSingleAngle(
+        stabilized,
+        primaryAngle,
+      );
+    } else {
+      // First frame — let the rep counter auto-detect from a full extraction
+      repFeature = _featureExtractor.extractFrame(stabilized);
+    }
 
-    // Extract features from normalized landmarks
-    final features = _featureExtractor.extractFrame(normalized);
-    _clientFeatures.add(features);
-
-    // Count reps
-    final repCount = _repCounter.processFrame(features);
+    final repCount = _repCounter.processFrame(repFeature);
 
     final elapsed = DateTime.now().millisecondsSinceEpoch - _recordingStartMs;
 
@@ -303,7 +334,7 @@ class ClientRecording extends _$ClientRecording {
       referenceLandmarkFrames: _referenceLandmarks,
       referenceFeatureFrames: _referenceFeatures,
       clientLandmarkFrames: List.unmodifiable(_clientLandmarks),
-      clientFeatureFrames: List.unmodifiable(_clientFeatures),
+      clientFeatureFrames: const [],
       repCount: repCount,
       recordingDurationMs: elapsed,
       poseConfig: _poseConfig,
@@ -311,7 +342,15 @@ class ClientRecording extends _$ClientRecording {
     );
   }
 
-  /// Step 4: Stop recording and run comparison
+  /// Step 4: Stop recording and run comparison.
+  ///
+  /// All heavy processing happens here (post-record, during the loading
+  /// screen) so that the live camera loop stays at 30+ FPS:
+  ///   1. Trim raw landmarks to reference length
+  ///   2. Batch normalise (3D Procrustes)
+  ///   3. Extract features using only relevant angles
+  ///   4. Run DTW comparison
+  ///   5. Upload results
   Future<void> stopRecordingAndCompare() async {
     if (state is! ClientRecordingActive) return;
     final activeState = state as ClientRecordingActive;
@@ -319,21 +358,64 @@ class ClientRecording extends _$ClientRecording {
     state = const ClientRecordingProcessing();
 
     try {
-      // Trim client frames to reference length to prevent over-length
-      // recordings from corrupting the form score (US2).
-      final refLen = _referenceFeatures.length;
-      final trimLen = math.min(_clientFeatures.length, refLen);
-      final trimmedFeatures = _clientFeatures.sublist(0, trimLen);
-      final trimmedLandmarks = _clientLandmarks.sublist(
-        0,
-        math.min(_clientLandmarks.length, trimLen),
+      // Validate minimum frame rate before processing
+      final recordingDurationMs =
+          DateTime.now().millisecondsSinceEpoch - _recordingStartMs;
+      final clientFps = recordingDurationMs > 0
+          ? (_clientLandmarks.length * 1000 / recordingDurationMs).round()
+          : 0;
+
+      if (clientFps < kMinClientFrameRate) {
+        AppLogger.warning(
+          'Client recording frame rate ($clientFps FPS) below minimum '
+          '($kMinClientFrameRate FPS)',
+          tag: 'ClientRecording',
+        );
+        state = ClientRecordingError(
+          'Recording quality too low ($clientFps FPS). '
+          'Minimum $kMinClientFrameRate FPS required. '
+          'Please ensure good lighting and try again.',
+        );
+        return;
+      }
+
+      // Trim client landmarks to reference length (US2)
+      final refLen = _referenceLandmarks.length;
+      final trimLen = math.min(_clientLandmarks.length, refLen);
+      final trimmedLandmarks = _clientLandmarks.sublist(0, trimLen);
+
+      // Batch normalise the raw landmarks (3D Procrustes)
+      final normalizedLandmarks = _preprocessor.processBatch(trimmedLandmarks);
+
+      // Extract features using only the relevant angles (vertex-dilution fix)
+      final angleDefinitions = _relevantAngles.isNotEmpty
+          ? FeatureExtractor.filteredDefinitions(_relevantAngles)
+          : null;
+
+      final clientFeatures = _featureExtractor.extractBatch(
+        normalizedLandmarks,
+        angleDefinitions: angleDefinitions,
       );
 
-      // Run DTW comparison with trimmed frames
+      // Re-extract reference features with the same filtered definitions so
+      // DTW compares apples to apples
+      final referenceFeatures = _featureExtractor.extractBatch(
+        _referenceLandmarks.map(_preprocessor.normalize).toList(),
+        angleDefinitions: angleDefinitions,
+      );
+
+      AppLogger.info(
+        'Post-record batch: ${normalizedLandmarks.length} frames, '
+        '${clientFeatures.length} feature frames, '
+        'angles: ${_relevantAngles.isNotEmpty ? _relevantAngles : "all"}',
+        tag: 'ClientRecording',
+      );
+
+      // Run DTW comparison with batch-processed features
       final result = _comparisonService.compare(
         exerciseFormId: activeState.formId,
-        referenceFrames: _referenceFeatures,
-        clientFrames: trimmedFeatures,
+        referenceFrames: referenceFeatures,
+        clientFrames: clientFeatures,
         cameraAngle: activeState.cameraAngle,
         avgLandmarkConfidence: null,
       );
@@ -367,7 +449,6 @@ class ClientRecording extends _$ClientRecording {
         repCount: repCount,
         uploadSuccess: uploadSuccess,
         referenceLandmarkFrames: List.unmodifiable(_referenceLandmarks),
-        // Apply batch smoothing to trimmed client landmarks for clean results playback
         clientLandmarkFrames: List.unmodifiable(
           _preprocessor.smoothFrames(trimmedLandmarks),
         ),

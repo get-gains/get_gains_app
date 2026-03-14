@@ -74,7 +74,6 @@ class _ClientUnityRecordingScreenState
   bool _isProcessingFrame = false;
   bool _isFlipping = false;
   int _frameSkipCount = 0;
-  static const _processEveryNFrames = 3;
 
   // ── Unity ───────────────────────────────────────────────────────────────
   bool _isUnityLoaded = false;
@@ -369,8 +368,6 @@ class _ClientUnityRecordingScreenState
       return;
     }
     _cameraController!.startImageStream((CameraImage image) {
-      _frameSkipCount++;
-      if (_frameSkipCount % _processEveryNFrames != 0) return;
       if (_isProcessingFrame) return;
 
       _isProcessingFrame = true;
