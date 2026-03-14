@@ -108,10 +108,9 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                   child: Text(
                     'Start From Exercise',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 const Divider(height: 1),
@@ -122,7 +121,8 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
                     itemBuilder: (context, index) {
                       final routineExercise = routine.exercises[index];
                       final exerciseName =
-                          routineExercise.exercise?.name ?? 'Exercise ${index + 1}';
+                          routineExercise.exercise?.name ??
+                          'Exercise ${index + 1}';
 
                       return ListTile(
                         contentPadding: const EdgeInsets.symmetric(
@@ -517,134 +517,131 @@ class _ExerciseCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-                    // Exercise header
-                    Row(
-                      children: [
-                        // Order number / completion indicator
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: isExerciseComplete
-                                ? AppColors.success.withValues(alpha: 0.2)
-                                : isDark
-                                ? AppColors.primaryDark.withValues(alpha: 0.2)
-                                : AppColors.primaryLight.withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: isExerciseComplete
-                                ? Icon(
-                                    Icons.check,
-                                    size: 18,
-                                    color: AppColors.success,
-                                  )
-                                : Text(
-                                    '${index + 1}',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleSmall
-                                        ?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                          color: isDark
-                                              ? AppColors.primaryDark
-                                              : AppColors.primaryLight,
-                                        ),
-                                  ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        // Exercise name and details
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                exerciseName,
-                                style: Theme.of(context).textTheme.titleSmall
-                                    ?.copyWith(fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${routineExercise.sets} sets x '
-                                '${routineExercise.repsMin}-${routineExercise.repsMax} reps'
-                                '${routineExercise.restSeconds > 0 ? ' • ${routineExercise.restSeconds}s rest' : ''}',
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: isDark
-                                          ? AppColors.textSecondaryDark
-                                          : AppColors.textSecondaryLight,
-                                    ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Muscle group badge + set progress
-                        if (completedSets > 0)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: Text(
-                              '$completedSets/${routineExercise.sets}',
-                              style: Theme.of(context).textTheme.bodySmall
+              // Exercise header
+              Row(
+                children: [
+                  // Order number / completion indicator
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: isExerciseComplete
+                          ? AppColors.success.withValues(alpha: 0.2)
+                          : isDark
+                          ? AppColors.primaryDark.withValues(alpha: 0.2)
+                          : AppColors.primaryLight.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: isExerciseComplete
+                          ? Icon(
+                              Icons.check,
+                              size: 18,
+                              color: AppColors.success,
+                            )
+                          : Text(
+                              '${index + 1}',
+                              style: Theme.of(context).textTheme.titleSmall
                                   ?.copyWith(
-                                    color: isExerciseComplete
-                                        ? AppColors.success
-                                        : isDark
-                                        ? AppColors.textSecondaryDark
-                                        : AppColors.textSecondaryLight,
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? AppColors.primaryDark
+                                        : AppColors.primaryLight,
                                   ),
                             ),
-                          ),
-                        if (exercise != null)
-                          AppBadge(
-                            label: exercise.primaryMuscleGroup.displayName,
-                            variant: AppBadgeVariant.outline,
-                          ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Exercise name and details
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          exerciseName,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${routineExercise.sets} sets x '
+                          '${routineExercise.repsMin}-${routineExercise.repsMax} reps'
+                          '${routineExercise.restSeconds > 0 ? ' • ${routineExercise.restSeconds}s rest' : ''}',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : AppColors.textSecondaryLight,
+                              ),
+                        ),
                       ],
                     ),
-
-                    // Notes
-                    if (routineExercise.notes != null &&
-                        routineExercise.notes!.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        routineExercise.notes!,
+                  ),
+                  // Muscle group badge + set progress
+                  if (completedSets > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Text(
+                        '$completedSets/${routineExercise.sets}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: isDark
+                          color: isExerciseComplete
+                              ? AppColors.success
+                              : isDark
                               ? AppColors.textSecondaryDark
                               : AppColors.textSecondaryLight,
-                          fontStyle: FontStyle.italic,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ],
-
-                    // Analyze Form action
-                    const SizedBox(height: 8),
-                    const Divider(height: 1),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton.icon(
-                          onPressed: () => context.push(
-                            AppRoutes.clientViewForm.replaceFirst(
-                              ':id',
-                              routineExercise.exerciseId,
-                            ),
-                          ),
-                          icon: const Icon(Icons.analytics_outlined, size: 16),
-                          label: const Text('Analyze Form'),
-                          style: TextButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
+                  if (exercise != null)
+                    AppBadge(
+                      label: exercise.primaryMuscleGroup.displayName,
+                      variant: AppBadgeVariant.outline,
+                    ),
+                ],
+              ),
+
+              // Notes
+              if (routineExercise.notes != null &&
+                  routineExercise.notes!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  routineExercise.notes!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+
+              // Analyze Form action
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => context.push(
+                      AppRoutes.clientViewForm.replaceFirst(
+                        ':id',
+                        routineExercise.exerciseId,
+                      ),
+                    ),
+                    icon: const Icon(Icons.analytics_outlined, size: 16),
+                    label: const Text('Analyze Form'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
