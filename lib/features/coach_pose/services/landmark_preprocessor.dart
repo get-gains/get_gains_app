@@ -100,34 +100,36 @@ class LandmarkPreprocessor {
     return averaged;
   }
 
-  /// Normalize landmark positions using centroid alignment.
+  /// Normalize landmark positions using 3D centroid alignment.
   ///
-  /// Centers all landmarks around (0, 0) and scales to a unit bounding box.
-  /// This allows comparison between different body sizes and camera distances.
+  /// Centers all landmarks around (0, 0, 0) and scales to a unit sphere.
+  /// This allows comparison between different body sizes and camera distances
+  /// while preserving depth (z-axis) information for accurate 3D analysis.
   LandmarkFrame normalize(LandmarkFrame frame) {
     if (frame.landmarks.isEmpty) return frame;
 
     final points = frame.landmarks.values.toList();
 
-    // Compute centroid
+    // Compute 3D centroid
     final cx = points.map((p) => p.x).reduce((a, b) => a + b) / points.length;
     final cy = points.map((p) => p.y).reduce((a, b) => a + b) / points.length;
+    final cz = points.map((p) => p.z).reduce((a, b) => a + b) / points.length;
 
-    // Center all points
+    // Center all points in 3D
     final centered = <String, LandmarkPoint>{};
     for (final entry in frame.landmarks.entries) {
       centered[entry.key] = LandmarkPoint(
         x: entry.value.x - cx,
         y: entry.value.y - cy,
-        z: entry.value.z,
+        z: entry.value.z - cz,
         confidence: entry.value.confidence,
       );
     }
 
-    // Compute scale factor (max distance from center)
+    // Compute 3D scale factor (max distance from center)
     double maxDist = 0;
     for (final p in centered.values) {
-      final dist = math.sqrt(p.x * p.x + p.y * p.y);
+      final dist = math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
       maxDist = math.max(maxDist, dist);
     }
 
@@ -135,7 +137,7 @@ class LandmarkPreprocessor {
       return LandmarkFrame(timestampMs: frame.timestampMs, landmarks: centered);
     }
 
-    // Scale to unit circle
+    // Scale to unit sphere
     final normalized = <String, LandmarkPoint>{};
     for (final entry in centered.entries) {
       normalized[entry.key] = LandmarkPoint(

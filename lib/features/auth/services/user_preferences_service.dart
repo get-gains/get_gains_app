@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path/path.dart' as p;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/utils/logger.dart';
@@ -91,9 +93,23 @@ class UserPreferencesService {
 
   /// Initialize Hive and open the user preferences box
   /// Call this in main() before runApp()
-  static Future<Box<dynamic>> init() async {
-    await Hive.initFlutter();
+  static Future<Box<dynamic>> init({String? fallbackPath}) async {
+    if (fallbackPath != null && fallbackPath.isNotEmpty) {
+      final dir = Directory(fallbackPath);
+      if (!dir.existsSync()) {
+        dir.createSync(recursive: true);
+      }
+      Hive.init(dir.path);
+    } else {
+      await Hive.initFlutter();
+    }
     return Hive.openBox(_userPrefsBoxName);
+  }
+
+  /// Build a platform-channel-free fallback path for Hive initialization.
+  /// Useful when `path_provider` is not yet ready during app startup.
+  static String buildFallbackHivePath() {
+    return p.join(Directory.systemTemp.path, 'get_gains_app', 'hive');
   }
 
   // ============== User Caching ==============

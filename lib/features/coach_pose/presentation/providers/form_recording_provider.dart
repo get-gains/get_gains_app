@@ -33,6 +33,10 @@ const kMaxRecordingDurationSeconds = 7;
 /// countdown starts automatically.
 const kAutoStartDelaySeconds = 3;
 
+/// Minimum acceptable frame rate (FPS) for a reference form recording.
+/// Recordings below this threshold are rejected to ensure DTW accuracy.
+const kMinFrameRate = 30;
+
 /// Full state for the form recording flow.
 class FormRecordingState {
   const FormRecordingState({
@@ -48,6 +52,7 @@ class FormRecordingState {
     this.frameCount = 0,
     this.processingProgress = 0.0,
     this.countdownSeconds = 0,
+    this.relevantAngles = const [],
     this.errorMessage,
     this.uploadedForm,
   });
@@ -64,6 +69,7 @@ class FormRecordingState {
   final int frameCount;
   final double processingProgress; // 0.0 to 1.0
   final int countdownSeconds;
+  final List<String> relevantAngles;
   final String? errorMessage;
   final ExerciseFormModel? uploadedForm;
 
@@ -87,6 +93,7 @@ class FormRecordingState {
     int? frameCount,
     double? processingProgress,
     int? countdownSeconds,
+    List<String>? relevantAngles,
     String? errorMessage,
     bool clearError = false,
     ExerciseFormModel? uploadedForm,
@@ -104,6 +111,7 @@ class FormRecordingState {
       frameCount: frameCount ?? this.frameCount,
       processingProgress: processingProgress ?? this.processingProgress,
       countdownSeconds: countdownSeconds ?? this.countdownSeconds,
+      relevantAngles: relevantAngles ?? this.relevantAngles,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       uploadedForm: uploadedForm ?? this.uploadedForm,
     );
@@ -332,12 +340,18 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
       // Step 2: Extract features (joint angles) from smoothed frames
       final features = _featureExtractor.extractBatch(smoothed);
 
+      // Step 2b: Auto-detect which angles are relevant (ROM >= 15°)
+      final relevantAngles = FeatureExtractor.detectRelevantAngles(features);
+
       state = state.copyWith(featureFrames: features, processingProgress: 0.5);
 
       // Step 3: Normalize (Procrustes) for the normalizedFrames payload
       final normalized = smoothed.map(_preprocessor.normalize).toList();
 
-      state = state.copyWith(processingProgress: 0.8);
+      state = state.copyWith(
+        processingProgress: 0.8,
+        relevantAngles: relevantAngles,
+      );
 
       // Step 4: Move to upload phase
       state = state.copyWith(
@@ -348,7 +362,8 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
       AppLogger.info(
         'Processing complete: ${smoothed.length} frames, '
         '${features.length} feature frames, '
-        '${normalized.length} normalized frames',
+        '${normalized.length} normalized frames, '
+        '${relevantAngles.length} relevant angles: $relevantAngles',
         tag: 'FormRecording',
       );
 
@@ -370,6 +385,22 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
       final frameRate = state.recordingDurationMs > 0
           ? (state.rawFrames.length * 1000 / state.recordingDurationMs).round()
           : 30;
+
+      if (frameRate < kMinFrameRate) {
+        AppLogger.warning(
+          'Recording frame rate ($frameRate FPS) below minimum '
+          '($kMinFrameRate FPS) — rejecting upload',
+          tag: 'FormRecording',
+        );
+        state = state.copyWith(
+          phase: RecordingPhase.error,
+          errorMessage:
+              'Recording quality too low ($frameRate FPS). '
+              'Minimum $kMinFrameRate FPS required. '
+              'Please ensure good lighting and try again.',
+        );
+        return;
+      }
 
       // Compute average confidence
       double avgConfidence = 0;
@@ -396,6 +427,9 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
         landmarkFrames: state.processedFrames.map((f) => f.toJson()).toList(),
         featureFrames: state.featureFrames.map((f) => f.toJson()).toList(),
         normalizedFrames: normalizedFrames?.map((f) => f.toJson()).toList(),
+        relevantAngles: state.relevantAngles.isNotEmpty
+            ? state.relevantAngles
+            : null,
         avgLandmarkConfidence: avgConfidence,
         recordingQuality: _assessQuality(avgConfidence),
       );
