@@ -76,7 +76,7 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Workout Complete! 🎉'),
+        title: const Text('Workout Complete!'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -357,14 +357,34 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
   ) {
     if (widget.readOnly) {
       final canStartNextSet = widget.nextSetNavigation != null;
+      final canFinishWorkout = state.isAllExercisesCompleted;
+
+      final label = canStartNextSet
+          ? 'Start Next Set'
+          : canFinishWorkout
+          ? 'Finish Workout'
+          : 'Continue Workout';
+
+      final icon = canStartNextSet
+          ? Icons.videocam
+          : canFinishWorkout
+          ? Icons.check
+          : Icons.play_arrow;
+
+      final onPressed = canStartNextSet
+          ? _startNextSet
+          : canFinishWorkout
+          ? _completeWorkout
+          : _continueWorkout;
+
       return SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: AppButton.primary(
-            label: canStartNextSet ? 'Start Next Set' : 'Finish Workout',
-            icon: canStartNextSet ? Icons.videocam : Icons.check,
+            label: label,
+            icon: icon,
             isFullWidth: true,
-            onPressed: canStartNextSet ? _startNextSet : _completeWorkout,
+            onPressed: onPressed,
           ),
         ),
       );
@@ -453,7 +473,20 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     );
   }
 
+  void _continueWorkout() {
+    context.go(AppRoutes.workoutSession);
+  }
+
   Future<void> _completeWorkout() async {
+    final state = ref.read(workoutSessionProvider);
+    if (state is WorkoutSessionActive && !state.isAllExercisesCompleted) {
+      AppToast.error(
+        context,
+        'Complete all exercise sets before finishing your workout.',
+      );
+      return;
+    }
+
     final notes = await _showNotesDialog();
     await ref
         .read(workoutSessionProvider.notifier)

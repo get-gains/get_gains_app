@@ -189,12 +189,11 @@ class _ExerciseLogCardState extends ConsumerState<ExerciseLogCard> {
       return [
         Row(
           children: [
-            Icon(Icons.check_circle, color: AppColors.success),
             const SizedBox(width: 8),
             Text(
-              'All sets completed!',
+              'No sets logged', 
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: AppColors.success,
+                color: AppColors.warning, 
                 fontWeight: FontWeight.bold,
               ),
             ),
