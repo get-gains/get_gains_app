@@ -84,6 +84,7 @@ class _ClientUnityRecordingScreenState
   // ── Workout mode: set logger ─────────────────────────────────────────────────────
   bool get _isWorkoutMode => widget.workoutSessionId != null;
   final TextEditingController _weightController = TextEditingController();
+  final TextEditingController _repsController = TextEditingController();
   bool _isLoggingSet = false;
   late int _workoutSetNumber;
 
@@ -407,6 +408,8 @@ class _ClientUnityRecordingScreenState
 
   void _onTryAgain() {
     _cancelAutoStartCountdown();
+    _repsController.clear();
+    _weightController.clear();
     ref
         .read(clientRecordingProvider(widget.exerciseId).notifier)
         .resetForNewAttempt();
@@ -493,6 +496,7 @@ class _ClientUnityRecordingScreenState
     _stopImageStream();
     _cameraController?.dispose();
     _weightController.dispose();
+    _repsController.dispose();
     super.dispose();
   }
 
@@ -503,10 +507,14 @@ class _ClientUnityRecordingScreenState
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final state = ref.watch(clientRecordingProvider(widget.exerciseId));
 
-    // When form loads into Ready state, push reference frames to Unity
+    // When form loads into Ready state, push reference frames to Unity.
+    // When recording auto-stops (Active → Processing), stop the camera stream.
     ref.listen(clientRecordingProvider(widget.exerciseId), (prev, next) {
       if (next is ClientRecordingReady && _isUnityLoaded) {
         _sendReferenceFramesToUnity();
+      }
+      if (prev is ClientRecordingActive && next is ClientRecordingProcessing) {
+        _stopImageStream();
       }
     });
 
@@ -1252,9 +1260,11 @@ class _ClientUnityRecordingScreenState
               ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            ...state.result.segmentScores.entries.map(
-              (e) => _buildSegmentRow(context, e.key, e.value, isDark),
-            ),
+            ...state.result.segmentScores.entries
+                .where((e) => e.value > 0)
+                .map(
+                  (e) => _buildSegmentRow(context, e.key, e.value, isDark),
+                ),
           ],
 
           // Corrections
@@ -1383,8 +1393,7 @@ class _ClientUnityRecordingScreenState
             ),
             const SizedBox(height: 4),
             Text(
-              'Reps are auto-detected from your recording. '
-              'Enter the weight you used.',
+              'Enter the reps and weight you used.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: isDark
                     ? AppColors.textSecondaryDark
@@ -1394,7 +1403,7 @@ class _ClientUnityRecordingScreenState
             const SizedBox(height: 12),
             Row(
               children: [
-                // Reps (read-only, auto-detected)
+                // Reps (manual input)
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1404,32 +1413,25 @@ class _ClientUnityRecordingScreenState
                         style: Theme.of(context).textTheme.labelSmall,
                       ),
                       const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 14,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? AppColors.surfaceDark
-                              : AppColors.surfaceLight,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: isDark
-                                ? AppColors.borderDark
-                                : AppColors.borderLight,
+                      TextField(
+                        controller: _repsController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        decoration: InputDecoration(
+                          hintText: '0',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.repeat, size: 18),
-                            const SizedBox(width: 8),
-                            Text(
-                              '—',
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                          ],
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 14,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.repeat,
+                            size: 18,
+                          ),
                         ),
                       ),
                     ],
@@ -1519,6 +1521,7 @@ class _ClientUnityRecordingScreenState
     setState(() => _isLoggingSet = true);
 
     final weight = double.tryParse(_weightController.text);
+    final reps = int.tryParse(_repsController.text) ?? 0;
     final exercises = widget.routineExercises;
     final currentRoutineExercise =
         exercises != null && widget.currentExerciseIndex < exercises.length
@@ -1558,7 +1561,7 @@ class _ClientUnityRecordingScreenState
           .read(workoutSessionProvider.notifier)
           .logSet(
             setNumber: setNumber,
-            reps: state.repCount,
+            reps: reps,
             weight: weight,
             routineExerciseIdOverride: routineExerciseIdForLookup,
           );

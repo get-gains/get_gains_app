@@ -171,7 +171,7 @@ Future<bool> hasSubscribedCoach(Ref ref) async {
   final result = await coachRepo.getSubscribedCoaches(limit: 1, offset: 0);
   return result.when(
     success: (response) => response.coaches.isNotEmpty,
-    failure: (_) => false,
+    failure: (error) => throw error,
   );
 }
 

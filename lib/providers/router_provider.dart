@@ -558,9 +558,15 @@ GoRouter router(Ref ref) {
       ),
 
       // Coach Discovery Routes (Client-Facing)
+      // IMPORTANT: Literal routes must come before parametric `:id` route
+      // to prevent GoRouter from matching e.g. `/coaches/subscribed` as `:id`.
       GoRoute(
         path: AppRoutes.discoverCoaches,
         builder: (context, state) => const CoachDiscoveryScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.subscribedCoaches,
+        builder: (context, state) => const SubscribedCoachesScreen(),
       ),
       GoRoute(
         path: AppRoutes.coachProfile,
@@ -568,10 +574,6 @@ GoRouter router(Ref ref) {
           final id = state.pathParameters['id']!;
           return CoachProfileScreen(coachId: id);
         },
-      ),
-      GoRoute(
-        path: AppRoutes.subscribedCoaches,
-        builder: (context, state) => const SubscribedCoachesScreen(),
       ),
 
       // Standalone Workout Routes
