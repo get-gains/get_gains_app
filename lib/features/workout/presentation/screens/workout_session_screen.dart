@@ -38,6 +38,42 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
   final PageController _pageController = PageController();
 
   @override
+  void initState() {
+    super.initState();
+
+    if (widget.readOnly) {
+      final preferredIndex =
+          widget.nextSetNavigation?['currentExerciseIndex'] as int?;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref
+            .read(workoutSessionProvider.notifier)
+            .refreshActiveSession(preferredExerciseIndex: preferredIndex);
+      });
+    }
+  }
+
+  void _syncPageToCurrentExercise(int index, {required bool animate}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_pageController.hasClients) return;
+
+      final currentPage = (_pageController.page ?? 0).round();
+      if (currentPage == index) return;
+
+      if (animate) {
+        _pageController.animateToPage(
+          index,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      } else {
+        _pageController.jumpToPage(index);
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _pageController.dispose();
     super.dispose();
@@ -59,11 +95,7 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
       if (newIndex != oldIndex &&
           newIndex < (next.routine?.exercises.length ?? 0) &&
           _pageController.hasClients) {
-        _pageController.animateToPage(
-          newIndex,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
+        _syncPageToCurrentExercise(newIndex, animate: true);
       }
     }
   }
@@ -76,7 +108,7 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Workout Complete! 🎉'),
+        title: const Text('Workout Complete!'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -202,6 +234,15 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     ref.listen(workoutSessionProvider, _handleSessionStateChange);
 
     final sessionState = ref.watch(workoutSessionProvider);
+
+    if (sessionState is WorkoutSessionActive &&
+        sessionState.currentExerciseIndex <
+            (sessionState.routine?.exercises.length ?? 0)) {
+      _syncPageToCurrentExercise(
+        sessionState.currentExerciseIndex,
+        animate: false,
+      );
+    }
 
     return PopScope(
       canPop: false,
@@ -333,8 +374,14 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
             itemBuilder: (context, index) {
               final exercise = state.routine!.exercises[index];
               final completedSets = state.session.setsForExercise(exercise.id);
+              final latestSetId = completedSets.isNotEmpty
+                  ? completedSets.last.id
+                  : 'none';
 
               return ExerciseLogCard(
+                key: ValueKey(
+                  '${exercise.id}-${completedSets.length}-$latestSetId',
+                ),
                 routineExercise: exercise,
                 completedSets: completedSets,
                 onSetCompleted: _onSetCompleted,
@@ -357,14 +404,34 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
   ) {
     if (widget.readOnly) {
       final canStartNextSet = widget.nextSetNavigation != null;
+      final canFinishWorkout = state.isAllExercisesCompleted;
+
+      final label = canStartNextSet
+          ? 'Start Next Set'
+          : canFinishWorkout
+          ? 'Finish Workout'
+          : 'Continue Workout';
+
+      final icon = canStartNextSet
+          ? Icons.videocam
+          : canFinishWorkout
+          ? Icons.check
+          : Icons.play_arrow;
+
+      final onPressed = canStartNextSet
+          ? _startNextSet
+          : canFinishWorkout
+          ? _completeWorkout
+          : _continueWorkout;
+
       return SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: AppButton.primary(
-            label: canStartNextSet ? 'Start Next Set' : 'Finish Workout',
-            icon: canStartNextSet ? Icons.videocam : Icons.check,
+            label: label,
+            icon: icon,
             isFullWidth: true,
-            onPressed: canStartNextSet ? _startNextSet : _completeWorkout,
+            onPressed: onPressed,
           ),
         ),
       );
@@ -453,7 +520,20 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     );
   }
 
+  void _continueWorkout() {
+    context.go(AppRoutes.workoutSession);
+  }
+
   Future<void> _completeWorkout() async {
+    final state = ref.read(workoutSessionProvider);
+    if (state is WorkoutSessionActive && !state.isAllExercisesCompleted) {
+      AppToast.error(
+        context,
+        'Complete all exercise sets before finishing your workout.',
+      );
+      return;
+    }
+
     final notes = await _showNotesDialog();
     await ref
         .read(workoutSessionProvider.notifier)

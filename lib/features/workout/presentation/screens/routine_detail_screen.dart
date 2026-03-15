@@ -47,7 +47,7 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
         .then((result) => result.valueOrNull);
   }
 
-  Future<void> _startWorkout(RoutineModel routine) async {
+  Future<void> _startWorkout(RoutineModel routine, {int startIndex = 0}) async {
     await ref
         .read(workoutSessionProvider.notifier)
         .startSession(routineModelId: routine.id);
@@ -56,19 +56,22 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
 
     final sessionState = ref.read(workoutSessionProvider);
     if (sessionState is WorkoutSessionActive && routine.exercises.isNotEmpty) {
+      final safeStartIndex =
+          startIndex.clamp(0, routine.exercises.length - 1) as int;
+
       // Pre-cache reference forms for all exercises so they're available
       // offline if connectivity drops during the workout.
       final exerciseIds = routine.exercises.map((e) => e.exerciseId).toList();
       ref.read(clientPoseRepositoryProvider).preCacheExerciseForms(exerciseIds);
 
-      final firstExercise = routine.exercises.first;
+      final firstExercise = routine.exercises[safeStartIndex];
       context.go(
         '/client/exercise/${firstExercise.exerciseId}/unity-record',
         extra: {
           'workoutSessionId': sessionState.session.id,
           'routineExerciseId': firstExercise.id,
           'routineExercises': routine.exercises,
-          'currentExerciseIndex': 0,
+          'currentExerciseIndex': safeStartIndex,
           'currentSetNumber': 1,
         },
       );
@@ -76,6 +79,89 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
       // Fallback if no exercises or session failed
       context.go(AppRoutes.workoutSession);
     }
+  }
+
+  Future<void> _pickStartExerciseAndWorkout(RoutineModel routine) async {
+    if (routine.exercises.isEmpty) {
+      await _startWorkout(routine);
+      return;
+    }
+
+    if (routine.exercises.length == 1) {
+      await _startWorkout(routine, startIndex: 0);
+      return;
+    }
+
+    final selectedIndex = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return SafeArea(
+          child: FractionallySizedBox(
+            heightFactor: 0.75,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: Text(
+                    'Start From Exercise',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: routine.exercises.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final routineExercise = routine.exercises[index];
+                      final exerciseName =
+                          routineExercise.exercise?.name ??
+                          'Exercise ${index + 1}';
+
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 6,
+                        ),
+                        leading: CircleAvatar(
+                          radius: 16,
+                          backgroundColor: isDark
+                              ? AppColors.primaryDark.withValues(alpha: 0.2)
+                              : AppColors.primaryLight.withValues(alpha: 0.12),
+                          child: Text(
+                            '${index + 1}',
+                            style: TextStyle(
+                              color: isDark
+                                  ? AppColors.primaryDark
+                                  : AppColors.primaryLight,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        title: Text(exerciseName),
+                        subtitle: Text(
+                          '${routineExercise.sets} sets x ${routineExercise.repsMin}-${routineExercise.repsMax} reps',
+                        ),
+                        onTap: () => Navigator.of(context).pop(index),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted || selectedIndex == null) return;
+    await _startWorkout(routine, startIndex: selectedIndex);
   }
 
   @override
@@ -117,7 +203,7 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               child: _StartWorkoutButton(
                 routine: routine,
-                onStart: () => _startWorkout(routine),
+                onStart: () => _pickStartExerciseAndWorkout(routine),
               ),
             ),
           ),
@@ -236,7 +322,11 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
               else
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: _ExerciseListSliver(routine: routine),
+                  sliver: _ExerciseListSliver(
+                    routine: routine,
+                    onExerciseTap: (index) =>
+                        _startWorkout(routine, startIndex: index),
+                  ),
                 ),
 
               // Bottom spacing to account for persistent bottom bar
@@ -251,9 +341,10 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
 
 /// Extracted sliver that watches both active session and today's history.
 class _ExerciseListSliver extends ConsumerWidget {
-  const _ExerciseListSliver({required this.routine});
+  const _ExerciseListSliver({required this.routine, this.onExerciseTap});
 
   final RoutineModel routine;
+  final void Function(int index)? onExerciseTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -289,6 +380,7 @@ class _ExerciseListSliver extends ConsumerWidget {
           routineExercise: exercise,
           index: index,
           completedSets: completedSets,
+          onTap: onExerciseTap,
         );
       }, childCount: routine.exercises.length),
     );
@@ -401,11 +493,13 @@ class _ExerciseCard extends StatelessWidget {
     required this.routineExercise,
     required this.index,
     this.completedSets = 0,
+    this.onTap,
   });
 
   final RoutineExerciseModel routineExercise;
   final int index;
   final int completedSets;
+  final void Function(int index)? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -417,6 +511,7 @@ class _ExerciseCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: AppCard.elevated(
+        onTap: onTap == null ? null : () => onTap!(index),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
