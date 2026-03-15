@@ -24,6 +24,7 @@ import '../../../unity/data/unity_cosmetics_loader.dart';
 import '../../../unity/data/unity_message_contract.dart';
 import '../../../workout/data/models/models.dart';
 import '../../../workout/presentation/providers/workout_session_provider.dart';
+import '../../../workout/presentation/utils/workout_navigation.dart';
 import '../../data/client_pose_repository.dart';
 import '../providers/client_recording_provider.dart';
 import '../widgets/pose_view_widget.dart';
@@ -127,14 +128,25 @@ class _ClientUnityRecordingScreenState
     return exercises[safeIndex].sets;
   }
 
-  void _handleCloseTap() {
-    final router = GoRouter.of(context);
-    if (router.canPop()) {
-      context.pop();
-      return;
+  Future<void> _handleCloseTap() async {
+    // Check if we have unlogged recording results
+    final recordingState = ref.read(clientRecordingProvider(widget.exerciseId));
+    final hasUnloggedRecording = recordingState is ClientRecordingComplete;
+
+    if (hasUnloggedRecording) {
+      final shouldDiscard = await showAppConfirmDialog(
+        context: context,
+        title: 'Discard Recording?',
+        message: 'Your set has not been logged yet. Discard this recording?',
+        confirmLabel: 'Discard',
+        cancelLabel: 'Keep Recording',
+        isDestructive: true,
+      );
+
+      if (shouldDiscard != true || !mounted) return;
     }
-    // Always go home — never to the manual workout logger
-    context.go(AppRoutes.home);
+
+    navigateToWorkoutParentOrHome(context, ref);
   }
 
   Future<void> _init() async {
@@ -537,51 +549,58 @@ class _ClientUnityRecordingScreenState
       }
     });
 
-    return Scaffold(
-      backgroundColor: isDark
-          ? AppColors.backgroundDark
-          : AppColors.backgroundLight,
-      appBar: AppBar(
-        title: Text(_getTitle(state)),
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: _handleCloseTap,
-        ),
-        actions: [
-          // Flip camera (only during setup/ready phase)
-          if (_canFlipCamera && state is ClientRecordingReady)
-            IconButton(
-              icon: const Icon(Icons.flip_camera_ios),
-              tooltip: 'Flip camera',
-              onPressed: _isFlipping ? null : _flipCamera,
-            ),
-          // Toggle Unity ↔ 2D skeleton
-          IconButton(
-            icon: Icon(_showUnity ? Icons.view_in_ar : Icons.grain),
-            tooltip: _showUnity
-                ? 'Switch to 2D skeleton'
-                : 'Switch to 3D Unity',
-            onPressed: () => setState(() => _showUnity = !_showUnity),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleCloseTap();
+      },
+      child: Scaffold(
+        backgroundColor: isDark
+            ? AppColors.backgroundDark
+            : AppColors.backgroundLight,
+        appBar: AppBar(
+          title: Text(_getTitle(state)),
+          centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: _handleCloseTap,
           ),
-        ],
-      ),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          _buildBody(context, state, isDark),
-          // Pre-warm Unity: keep a 1×1 invisible EmbedUnity in the tree so
-          // Unity finishes loading during setup / countdown, before recording
-          // begins. Removed once scene_loaded fires (_isUnityLoaded = true).
-          if (!_isUnityLoaded)
-            Positioned(
-              left: 0,
-              top: 0,
-              width: 1,
-              height: 1,
-              child: EmbedUnity(onMessageFromUnity: _onMessageFromUnity),
+          actions: [
+            // Flip camera (only during setup/ready phase)
+            if (_canFlipCamera && state is ClientRecordingReady)
+              IconButton(
+                icon: const Icon(Icons.flip_camera_ios),
+                tooltip: 'Flip camera',
+                onPressed: _isFlipping ? null : _flipCamera,
+              ),
+            // Toggle Unity ↔ 2D skeleton
+            IconButton(
+              icon: Icon(_showUnity ? Icons.view_in_ar : Icons.grain),
+              tooltip: _showUnity
+                  ? 'Switch to 2D skeleton'
+                  : 'Switch to 3D Unity',
+              onPressed: () => setState(() => _showUnity = !_showUnity),
             ),
-        ],
+          ],
+        ),
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            _buildBody(context, state, isDark),
+            // Pre-warm Unity: keep a 1×1 invisible EmbedUnity in the tree so
+            // Unity finishes loading during setup / countdown, before recording
+            // begins. Removed once scene_loaded fires (_isUnityLoaded = true).
+            if (!_isUnityLoaded)
+              Positioned(
+                left: 0,
+                top: 0,
+                width: 1,
+                height: 1,
+                child: EmbedUnity(onMessageFromUnity: _onMessageFromUnity),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -652,7 +671,7 @@ class _ClientUnityRecordingScreenState
   /// Skip form recording and go to the workout session logger so the
   /// user can continue logging sets offline.
   void _skipToWorkoutLogger() {
-    context.go(AppRoutes.workoutSession);
+    context.go(AppRoutes.workoutSession, extra: {'readOnly': true});
   }
 
   Widget _buildProcessing(
@@ -1348,7 +1367,14 @@ class _ClientUnityRecordingScreenState
                   child: AppButton.primary(
                     label: 'Done',
                     icon: Icons.check,
-                    onPressed: () => context.pop(),
+                    onPressed: () {
+                      final router = GoRouter.of(context);
+                      if (router.canPop()) {
+                        context.pop();
+                      } else {
+                        context.go(AppRoutes.home);
+                      }
+                    },
                   ),
                 ),
               ],
@@ -1544,6 +1570,7 @@ class _ClientUnityRecordingScreenState
     setState(() => _isLoggingSet = true);
 
     final weight = double.tryParse(_weightController.text);
+    final reps = int.tryParse(_repsController.text) ?? 0;
     final sessionState = ref.read(workoutSessionProvider);
     final exercises =
         widget.routineExercises ??

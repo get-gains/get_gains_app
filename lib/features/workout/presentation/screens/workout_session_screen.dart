@@ -142,24 +142,14 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     final state = ref.read(workoutSessionProvider);
     if (state is! WorkoutSessionActive) return true;
 
-    final shouldLeave = await showDialog<bool>(
+    final shouldLeave = await showAppConfirmDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Leave Workout?'),
-        content: const Text(
+      title: 'Leave Workout?',
+      message:
           'Your progress will be saved. You can continue this workout later.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Leave'),
-          ),
-        ],
-      ),
+      confirmLabel: 'Leave',
+      cancelLabel: 'Cancel',
+      isDestructive: true,
     );
 
     return shouldLeave ?? false;

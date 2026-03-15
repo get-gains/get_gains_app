@@ -358,6 +358,10 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
 
   /// Refresh active session from local repository.
   ///
+  /// Rehydrates session + all performed sets from Drift DB. Called when
+  /// returning to session screen with readOnly: true, or after process
+  /// recreation to restore full state from the local database.
+  ///
   /// When [preferredExerciseIndex] is provided, it is used (if valid) so
   /// external flows can restore focus to the expected exercise page.
   Future<void> refreshActiveSession({int? preferredExerciseIndex}) async {
