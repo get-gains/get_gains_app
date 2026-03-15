@@ -370,11 +370,7 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
               else
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: _ExerciseListSliver(
-                    routine: routine,
-                    onExerciseTap: (index) =>
-                        _startWorkout(routine, startIndex: index),
-                  ),
+                  sliver: _ExerciseListSliver(routine: routine),
                 ),
 
               // Bottom spacing to account for persistent bottom bar
@@ -389,10 +385,9 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
 
 /// Extracted sliver that watches both active session and today's history.
 class _ExerciseListSliver extends ConsumerWidget {
-  const _ExerciseListSliver({required this.routine, this.onExerciseTap});
+  const _ExerciseListSliver({required this.routine});
 
   final RoutineModel routine;
-  final void Function(int index)? onExerciseTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -428,7 +423,6 @@ class _ExerciseListSliver extends ConsumerWidget {
           routineExercise: exercise,
           index: index,
           completedSets: completedSets,
-          onTap: onExerciseTap,
         );
       }, childCount: routine.exercises.length),
     );
