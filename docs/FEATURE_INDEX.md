@@ -61,6 +61,15 @@
 | Persistent Start Workout  | `routine_detail_screen.dart`                        | Start Workout button moved to `Scaffold.bottomNavigationBar`                               |
 | Nullable assign-program   | `program_request_models.dart`                       | `endDate`/`notes` omitted from JSON when null via `@JsonKey(includeIfNull: false)`         |
 
+### Recent Changes (form comparison & post-processing loading)
+
+| Change | Files Affected | Description |
+| --- | --- | --- |
+| Post-processing loading (client) | `client_recording_provider.dart`, `client_recording_screen.dart`, `client_unity_recording_screen.dart` | `ClientRecordingProcessing` now has `progress` (0–1) and `message`; UI shows full-screen overlay with percentage and step message (e.g. "Detecting pose...", "Comparing to reference...") |
+| Post-processing loading (coach) | `form_recording_provider.dart`, `form_recording_screen.dart` | `FormRecordingState.processingMessage` added; `_ProcessingOverlay` shows step message and prominent percentage during processing/upload |
+| Comparison improvements | `landmark_preprocessor.dart`, `client_recording_provider.dart`, `form_comparison_service.dart` | Torso alignment (`normalizeForComparison`), best-offset temporal alignment, reference pipeline consistency (`processBatch` with `skipSmooth`), scoring curve 60° |
+| Client recording pipeline | `client_recording_provider.dart`, client screens | Capture-only during recording (no live MLKit/rep counter); REC elapsed timer; rep badge removed; results show "Form analyzed" |
+
 ### Recent Changes (offline-first-recording)
 
 | Change | Files Affected | Description |
@@ -154,7 +163,9 @@
 | View Reference Form   | Animated 2D skeleton playback of coach's form                        | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
 | Unity 3D Recording    | Record + compare with 3D Unity avatar skeleton                       | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
 | 2D Recording (legacy) | Camera + 2D skeleton recording + compare                             | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
-| DTW Comparison        | On-device similarity scoring                                         | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Capture-only recording | Raw frame capture during recording; no live MLKit or rep counter   | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Post-processing loading | Full-screen overlay with percentage and step message (client)     | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| DTW Comparison        | On-device similarity scoring; torso alignment, temporal best-offset  | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
 | Score + Corrections   | Result display with segment breakdown                                | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
 | Offline Form Cache    | Forms cached in Drift; proactively pre-cached on workout start       | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
 | Offline Result Queue  | Results queued in SyncQueue when offline; synced on reconnect        | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
@@ -549,4 +560,4 @@ lib/
 
 ---
 
-_Last updated: March 1, 2026_
+_Last updated: March 13, 2026_

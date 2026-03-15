@@ -1,7 +1,7 @@
 # Client Pose Feature Documentation
 
 > **Created**: February 18, 2026
-> **Updated**: March 12, 2026
+> **Updated**: March 13, 2026
 > **Status**: Implemented
 
 ---
@@ -16,12 +16,14 @@ The feature now integrates directly into the **workout session flow**: pressing 
 
 1. Fetch the coach's active reference form + pose config from the server
 2. Show the reference form as an animated skeleton (3D Unity or 2D fallback)
-3. Capture the user via device camera + MLKit pose detection
-4. DTW-compare the client's normalised landmark sequence against the reference (client frames are trimmed to reference length before comparison)
+3. **During recording:** capture raw camera frames only (no live MLKit or rep counter); REC timer shows elapsed time
+4. **After stop:** post-processing — batch MLKit on captured frames, normalize + torso alignment, extract features; temporal best-offset search to align client to reference phase; DTW comparison
 5. Aggregate per-angle DTW scores into body-segment keys (`LEFT_LEG`, `TORSO`, `LEFT_ARM`, etc.) matching the server's `BodySegmentEnum`
 6. Display **side-by-side skeleton comparison** (coach cyan vs user green), score + per-segment breakdown + correction messages
 7. (Workout mode) Log reps + weight for the exercise set (shown above fold, before breakdown), then navigate to next exercise
 8. Upload result to server with segment-keyed `segmentScores`
+
+**Post-processing loading:** A full-screen overlay shows progress (0–100%) and a step message (e.g. "Detecting pose...", "Comparing to reference...", "Uploading result...") so the user knows what is happening.
 
 ---
 
@@ -32,7 +34,7 @@ The feature now integrates directly into the **workout session flow**: pressing 
 | View coach's reference form as animated skeleton             | ✅     |
 | View coach's reference form in Unity 3D avatar               | ✅     |
 | Record own form via device camera                            | ✅     |
-| Live rep counter during recording                            | ✅     |
+| Rep count removed for performance (capture-only recording)   | ✅     |
 | On-device DTW comparison after recording                     | ✅     |
 | Score circle + segment breakdown + corrections               | ✅     |
 | **Side-by-side skeleton replay (coach vs user)**             | ✅     |
@@ -111,8 +113,8 @@ The main comparison screen that embeds Unity for 3D avatar visualisation. Suppor
 | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ClientRecordingInitial` / `ClientRecordingLoadingForm` | Spinner                                                                                                                                                               |
 | `ClientRecordingReady`                                  | Unity 3D (looping reference) + camera preview + Start button                                                                                                          |
-| `ClientRecordingActive`                                 | Unity 3D (live client pose) + PiP camera + REC badge + rep counter                                                                                                    |
-| `ClientRecordingProcessing`                             | Spinner + "Analyzing your form…"                                                                                                                                      |
+| `ClientRecordingActive`                                 | Unity 3D (reference loop) + PiP camera + REC badge (elapsed timer); no live client pose or rep counter during recording                                               |
+| `ClientRecordingProcessing`                             | Full-screen overlay with progress percentage and step message (e.g. "Detecting pose...", "Comparing to reference...", "Uploading result...")                          |
 | `ClientRecordingComplete`                               | **Side-by-side skeleton comparison** (coach cyan + user green) + Score circle + segment breakdown + corrections + set logger (workout) or Try Again/Done (standalone) |
 | `ClientRecordingError`                                  | `AppEmptyState` with error message                                                                                                                                    |
 
@@ -134,7 +136,7 @@ The main comparison screen that embeds Unity for 3D avatar visualisation. Suppor
 | Similarity score circle (e.g. 76%) | `ClientRecordingComplete.result.overallScore`     | DTW comparison of coach vs user `FeatureFrame` sequences via `FormComparisonService.compare()`                                             |
 | Segment breakdown bars             | `ClientRecordingComplete.result.segmentScores`    | Per-angle DTW scores (torso lean, hip flexion, elbow flexion, etc.)                                                                        |
 | Correction messages                | `ClientRecordingComplete.result.corrections`      | Generated by `FormComparisonService` from angles that scored below threshold                                                               |
-| Reps completed                     | `ClientRecordingComplete.repCount`                | `RepCounter.countRep()` incremented on each detected rep cycle during recording                                                            |
+| Reps completed                     | `ClientRecordingComplete.repCount`                | Displayed as "Form analyzed" (rep count not computed; display shows — in workout logger)                                                 |
 
 **Navigation in workout mode:**
 
@@ -145,7 +147,7 @@ The main comparison screen that embeds Unity for 3D avatar visualisation. Suppor
 **Unity integration:**
 
 - On `scene_loaded` event from Unity → sends reference frames via `LoadPoseFrames` JSON message → sets camera angle + cyan skeleton colour
-- During recording → streams each detected `LandmarkFrame` to Unity in real time (green skeleton colour)
+- During recording → no live pose stream to Unity (capture-only for performance); reference skeleton keeps looping
 - Toggle button in AppBar switches between Unity 3D ↔ 2D skeleton (`PosePlaybackWidget`)
 
 **Key methods:**
@@ -153,7 +155,7 @@ The main comparison screen that embeds Unity for 3D avatar visualisation. Suppor
 | Method                          | Description                                                             |
 | ------------------------------- | ----------------------------------------------------------------------- |
 | `_sendReferenceFramesToUnity()` | Encodes reference frames as JSON and sends `LoadPoseFrames` to Unity    |
-| `_sendLiveFrameToUnity(frame)`  | Streams one live landmark frame to Unity per MLKit detection            |
+| *(live frame stream removed)*   | No live pose sent to Unity during recording (capture-only)             |
 | `_onStartRecording()`           | Starts provider recording + image stream + sets Unity skeleton to green |
 | `_onStopRecording()`            | Stops image stream + triggers DTW comparison                            |
 | `_onTryAgain()`                 | Resets provider + reloads reference skeleton in Unity                   |
@@ -181,9 +183,9 @@ ClientRecordingLoadingForm  ← 15s timeout → ClientRecordingError
   ↓ success
 ClientRecordingReady
   ↓ startRecording()
-ClientRecordingActive  ← processFrame() on each MLKit frame
+ClientRecordingActive  ← addCapturedFrame() only (no live MLKit)
   ↓ stopRecordingAndCompare()
-ClientRecordingProcessing
+ClientRecordingProcessing  ← progress + message updated during batch MLKit, compare, upload
   ↓ DTW compare + upload
 ClientRecordingComplete
   ↓ resetForNewAttempt()
@@ -199,8 +201,8 @@ ClientRecordingReady
 | `ClientRecordingInitial`     | —                                                                                                                                |
 | `ClientRecordingLoadingForm` | —                                                                                                                                |
 | `ClientRecordingReady`       | `exerciseName`, `referenceFrames`, `referenceFeatureFrames`, `poseConfig`, `formId`, `cameraAngle`, `coachName?`                 |
-| `ClientRecordingActive`      | All of Ready + `clientLandmarkFrames`, `clientFeatureFrames`, `repCount`, `recordingDurationMs`                                  |
-| `ClientRecordingProcessing`  | —                                                                                                                                |
+| `ClientRecordingActive`      | All of Ready + `clientLandmarkFrames`, `clientFeatureFrames`, `repCount` (0), `recordingDurationMs` (elapsed timer)             |
+| `ClientRecordingProcessing`  | `progress` (0.0–1.0), `message` (e.g. "Detecting pose...", "Comparing to reference...")                                         |
 | `ClientRecordingComplete`    | `result: ComparisonResultModel`, `repCount`, `uploadSuccess`, `referenceLandmarkFrames`, `clientLandmarkFrames`, `exerciseName?` |
 | `ClientRecordingError`       | `message: String`                                                                                                                |
 
@@ -283,4 +285,13 @@ The skeleton animation in `ViewFormScreen` and `ClientUnityRecordingScreen` is t
 
 ---
 
-_Last updated: February 19, 2026_
+## Form comparison improvements (March 2026)
+
+- **Torso alignment:** `LandmarkPreprocessor.normalizeForComparison()` aligns shoulder–hip axis to vertical so global orientation differences do not dominate the score.
+- **Temporal alignment:** Best-offset search tries several client start offsets (0–30 frames) and keeps the comparison with the highest score so the same phase of the movement is compared.
+- **Reference consistency:** Reference landmarks use the same pipeline as client (`processBatch(..., skipSmooth: true)`) before feature extraction.
+- **Scoring:** Per-angle score uses a 60° denominator (softer curve) after alignment fixes.
+
+---
+
+_Last updated: March 13, 2026_

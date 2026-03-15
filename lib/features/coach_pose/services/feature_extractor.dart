@@ -61,6 +61,30 @@ class FeatureExtractor {
     return FeatureFrame(timestampMs: frame.timestampMs, angles: angles);
   }
 
+  /// Extract a lightweight [FeatureFrame] containing only the single
+  /// [angleName] specified. Used during live recording to minimise CPU load
+  /// while still feeding the rep counter.
+  FeatureFrame extractSingleAngle(LandmarkFrame frame, String angleName) {
+    final triplet = defaultAngleDefinitions[angleName];
+    if (triplet == null || triplet.length != 3) {
+      return FeatureFrame(timestampMs: frame.timestampMs, angles: const {});
+    }
+
+    final a = frame.landmarks[triplet[0]];
+    final b = frame.landmarks[triplet[1]];
+    final c = frame.landmarks[triplet[2]];
+
+    if (a == null || b == null || c == null) {
+      return FeatureFrame(timestampMs: frame.timestampMs, angles: const {});
+    }
+
+    final angle = _calculateAngle(a, b, c);
+    return FeatureFrame(
+      timestampMs: frame.timestampMs,
+      angles: (angle.isNaN || angle.isInfinite) ? const {} : {angleName: angle},
+    );
+  }
+
   /// Extract features from a batch of landmark frames.
   List<FeatureFrame> extractBatch(
     List<LandmarkFrame> frames, {
@@ -76,27 +100,88 @@ class FeatureExtractor {
         .toList();
   }
 
-  /// Calculate the angle (in degrees) at vertex B, formed by points A-B-C.
+  /// Analyse the range of motion for each angle across [frames] and return
+  /// the names of angles whose ROM exceeds [minRomDegrees].
   ///
-  /// Uses the dot product formula:
+  /// This is the core of the hybrid vertex-dilution fix: angles that barely
+  /// move during the coach's reference recording are considered irrelevant
+  /// and excluded from DTW comparison.
+  static List<String> detectRelevantAngles(
+    List<FeatureFrame> frames, {
+    double minRomDegrees = 15.0,
+  }) {
+    if (frames.isEmpty) return defaultAngleDefinitions.keys.toList();
+
+    final mins = <String, double>{};
+    final maxs = <String, double>{};
+
+    for (final frame in frames) {
+      for (final entry in frame.angles.entries) {
+        final name = entry.key;
+        final value = entry.value;
+        mins[name] = mins.containsKey(name)
+            ? math.min(mins[name]!, value)
+            : value;
+        maxs[name] = maxs.containsKey(name)
+            ? math.max(maxs[name]!, value)
+            : value;
+      }
+    }
+
+    final relevant = <String>[];
+    for (final name in mins.keys) {
+      final rom = maxs[name]! - mins[name]!;
+      if (rom >= minRomDegrees) {
+        relevant.add(name);
+      }
+    }
+
+    AppLogger.debug(
+      'Relevant angles (ROM >= ${minRomDegrees}°): $relevant '
+      '(${relevant.length}/${mins.length} total)',
+      tag: 'FeatureExtractor',
+    );
+
+    // Fallback: if nothing met the threshold, return all to avoid empty DTW
+    if (relevant.isEmpty) return mins.keys.toList();
+
+    return relevant;
+  }
+
+  /// Returns a filtered copy of [defaultAngleDefinitions] containing only
+  /// the entries whose keys appear in [relevantAngles].
+  static Map<String, List<String>> filteredDefinitions(
+    List<String> relevantAngles,
+  ) {
+    return Map.fromEntries(
+      defaultAngleDefinitions.entries
+          .where((e) => relevantAngles.contains(e.key)),
+    );
+  }
+
+  /// Calculate the 3D angle (in degrees) at vertex B, formed by points A-B-C.
+  ///
+  /// Uses the dot product formula in 3D space:
   ///   angle = acos( (BA · BC) / (|BA| × |BC|) )
   double _calculateAngle(
     LandmarkPoint a,
     LandmarkPoint b, // Vertex
     LandmarkPoint c,
   ) {
-    // Vectors from B to A and B to C
+    // 3D vectors from B to A and B to C
     final baX = a.x - b.x;
     final baY = a.y - b.y;
+    final baZ = a.z - b.z;
     final bcX = c.x - b.x;
     final bcY = c.y - b.y;
+    final bcZ = c.z - b.z;
 
-    // Dot product
-    final dotProduct = baX * bcX + baY * bcY;
+    // 3D dot product
+    final dotProduct = baX * bcX + baY * bcY + baZ * bcZ;
 
-    // Magnitudes
-    final magnitudeBA = math.sqrt(baX * baX + baY * baY);
-    final magnitudeBC = math.sqrt(bcX * bcX + bcY * bcY);
+    // 3D magnitudes
+    final magnitudeBA = math.sqrt(baX * baX + baY * baY + baZ * baZ);
+    final magnitudeBC = math.sqrt(bcX * bcX + bcY * bcY + bcZ * bcZ);
 
     if (magnitudeBA == 0 || magnitudeBC == 0) return double.nan;
 

@@ -16,6 +16,7 @@ import '../../../../providers/router_provider.dart';
 import '../../../../services/database/app_database.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../coach_pose/data/models/landmark_models.dart';
+import '../../../coach_pose/data/models/models.dart';
 import '../../../coach_pose/services/pose_detection_service.dart';
 import '../../../coach_pose/services/setup_validation_service.dart';
 import '../../../coach_pose/presentation/widgets/setup_checklist.dart';
@@ -35,9 +36,8 @@ import '../widgets/pose_view_widget.dart';
 /// Pipeline:
 /// 1. Load coach's reference form from server
 /// 2. Send reference landmark frames to Unity for 3D looping playback
-/// 3. Initialise device camera + MLKit pose detector
-/// 4. Stream live client landmarks to Unity in real time during recording
-/// 5. On stop: run DTW comparison and show results
+/// 3. Initialise device camera; capture raw frames only during recording (no live MLKit)
+/// 4. On stop: post-process (pose analysis) then DTW comparison and show results
 class ClientUnityRecordingScreen extends ConsumerStatefulWidget {
   const ClientUnityRecordingScreen({
     super.key,
@@ -71,10 +71,8 @@ class _ClientUnityRecordingScreenState
   List<CameraDescription> _cameras = [];
   bool _isCameraInitialized = false;
   bool _isCameraError = false;
-  bool _isProcessingFrame = false;
   bool _isFlipping = false;
-  int _frameSkipCount = 0;
-  static const _processEveryNFrames = 3;
+  int _frameSkipCount = 0; // for setup validation stream throttle
 
   // ── Unity ───────────────────────────────────────────────────────────────
   bool _isUnityLoaded = false;
@@ -162,7 +160,7 @@ class _ClientUnityRecordingScreenState
 
       _cameraController = CameraController(
         camera,
-        ResolutionPreset.medium,
+        ResolutionPreset.low,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.nv21,
       );
@@ -347,21 +345,6 @@ class _ClientUnityRecordingScreenState
     );
   }
 
-  /// Streams one live client landmark frame to Unity during recording.
-  void _sendLiveFrameToUnity(LandmarkFrame frame) {
-    if (!_isUnityLoaded) return;
-    final payload = jsonEncode({
-      'frames': [frame.toJson()],
-      'fps': 30,
-      'loop': false,
-    });
-    sendToUnity(
-      UnityMessageContract.gameObjectName,
-      UnityMessageContract.methodLoadPoseFrames,
-      payload,
-    );
-  }
-
   // ── Camera stream ────────────────────────────────────────────────────────
 
   void _startImageStream() {
@@ -369,13 +352,18 @@ class _ClientUnityRecordingScreenState
       return;
     }
     _cameraController!.startImageStream((CameraImage image) {
-      _frameSkipCount++;
-      if (_frameSkipCount % _processEveryNFrames != 0) return;
-      if (_isProcessingFrame) return;
-
-      _isProcessingFrame = true;
-      _processImage(image).whenComplete(() => _isProcessingFrame = false);
+      final rotationDegrees = _getCameraRotationDegrees();
+      final captured = CapturedFrame.fromCameraImage(image, rotationDegrees);
+      ref
+          .read(clientRecordingProvider(widget.exerciseId).notifier)
+          .addCapturedFrame(captured);
     });
+  }
+
+  int _getCameraRotationDegrees() {
+    if (_cameraController == null) return 0;
+    final o = _cameraController!.description.sensorOrientation;
+    return o == 90 || o == 180 || o == 270 ? o : 0;
   }
 
   void _stopImageStream() {
@@ -385,32 +373,6 @@ class _ClientUnityRecordingScreenState
     }
   }
 
-  Future<void> _processImage(CameraImage image) async {
-    try {
-      final poseService = ref.read(poseDetectionServiceProvider);
-      final rotation = _cameraController!.description.sensorOrientation;
-      final inputRotation = InputImageRotation.values.firstWhere(
-        (r) => r.rawValue == rotation,
-        orElse: () => InputImageRotation.rotation0deg,
-      );
-      final ts = DateTime.now().millisecondsSinceEpoch;
-
-      final landmarkFrame = await poseService.processFrame(
-        image,
-        inputRotation,
-        ts,
-      );
-
-      if (landmarkFrame != null) {
-        // 1. Feed to comparison pipeline
-        ref
-            .read(clientRecordingProvider(widget.exerciseId).notifier)
-            .processFrame(landmarkFrame);
-        // 2. Stream to Unity for live 3D avatar
-        _sendLiveFrameToUnity(landmarkFrame);
-      }
-    } catch (_) {}
-  }
 
   // ── Recording actions ────────────────────────────────────────────────────
 
@@ -498,7 +460,7 @@ class _ClientUnityRecordingScreenState
 
       final controller = CameraController(
         targetCamera,
-        ResolutionPreset.medium,
+        ResolutionPreset.low,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.nv21,
       );
@@ -625,7 +587,8 @@ class _ClientUnityRecordingScreenState
       ClientRecordingError(message: final msg) => _buildError(context, msg),
       ClientRecordingReady() => _buildReady(context, state, isDark),
       ClientRecordingActive() => _buildRecording(context, state, isDark),
-      ClientRecordingProcessing() => _buildProcessing(context),
+      ClientRecordingProcessing(:final progress, :final message) =>
+          _buildProcessing(context, progress: progress, message: message),
       ClientRecordingComplete() => _buildResults(context, state, isDark),
     };
   }
@@ -655,20 +618,59 @@ class _ClientUnityRecordingScreenState
     context.go(AppRoutes.workoutSession);
   }
 
-  Widget _buildProcessing(BuildContext context) {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Analyzing your form...'),
-          SizedBox(height: 8),
-          Text(
-            'Comparing against coach\'s reference',
-            style: TextStyle(color: Colors.grey),
-          ),
-        ],
+  Widget _buildProcessing(
+    BuildContext context, {
+    required double progress,
+    required String message,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final percent = (progress * 100).toStringAsFixed(0);
+    return Container(
+      color: isDark ? Colors.black87 : Colors.white.withValues(alpha: 0.95),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 72,
+              height: 72,
+              child: CircularProgressIndicator(
+                value: progress > 0 ? progress : null,
+                strokeWidth: 4,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              message,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '$percent%',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white70 : Colors.black87,
+                fontFamily: 'JetBrains Mono',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                'This may take a moment.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.grey,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -752,13 +754,6 @@ class _ClientUnityRecordingScreenState
 
               // REC badge
               Positioned(top: 16, left: 16, child: _buildRecBadge(durationSec)),
-
-              // Rep counter
-              Positioned(
-                top: 16,
-                right: 16,
-                child: _buildRepBadge(state.repCount, isDark),
-              ),
 
               // Frame count
               Positioned(
@@ -1063,32 +1058,6 @@ class _ClientUnityRecordingScreenState
     );
   }
 
-  Widget _buildRepBadge(int repCount, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: (isDark ? AppColors.primaryDark : AppColors.primaryLight)
-            .withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.repeat, color: Colors.white, size: 20),
-          const SizedBox(width: 6),
-          Text(
-            '$repCount reps',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildFrameCount(int count) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -1263,7 +1232,7 @@ class _ClientUnityRecordingScreenState
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    '${state.repCount} reps completed',
+                    'Form analyzed',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -1456,7 +1425,7 @@ class _ClientUnityRecordingScreenState
                             const Icon(Icons.repeat, size: 18),
                             const SizedBox(width: 8),
                             Text(
-                              '${state.repCount}',
+                              '—',
                               style: Theme.of(context).textTheme.titleMedium
                                   ?.copyWith(fontWeight: FontWeight.bold),
                             ),
