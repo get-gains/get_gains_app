@@ -158,11 +158,11 @@ class ClientRecording extends _$ClientRecording {
       final repo = ref.read(clientPoseRepositoryProvider);
       final resultFuture = repo.downloadExerciseForm(exerciseId);
 
-      // Apply a 15-second timeout so the screen never hangs indefinitely
+      // Form downloads contain heavy landmark payloads — allow generous timeout
       final result = await resultFuture.timeout(
-        const Duration(seconds: 15),
+        const Duration(seconds: 120),
         onTimeout: () => throw TimeoutException(
-          'Server did not respond within 15 seconds. Check your connection.',
+          'Server did not respond within 120 seconds. Check your connection.',
         ),
       );
 
@@ -290,7 +290,8 @@ class ClientRecording extends _$ClientRecording {
     _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (state is! ClientRecordingActive) return;
       final active = state as ClientRecordingActive;
-      final elapsedMs = DateTime.now().millisecondsSinceEpoch - _recordingStartMs;
+      final elapsedMs =
+          DateTime.now().millisecondsSinceEpoch - _recordingStartMs;
       state = ClientRecordingActive(
         exerciseName: active.exerciseName,
         formId: active.formId,
@@ -359,8 +360,10 @@ class ClientRecording extends _$ClientRecording {
       );
 
       var clientLandmarksForPipeline = rawLandmarks;
-      var poseFps = recordingDurationMs > 0 && clientLandmarksForPipeline.isNotEmpty
-          ? (clientLandmarksForPipeline.length * 1000 / recordingDurationMs).round()
+      var poseFps =
+          recordingDurationMs > 0 && clientLandmarksForPipeline.isNotEmpty
+          ? (clientLandmarksForPipeline.length * 1000 / recordingDurationMs)
+                .round()
           : 0;
 
       // Post-processing: if below 30 FPS but we have enough data, upsample to 30 FPS
@@ -378,7 +381,9 @@ class ClientRecording extends _$ClientRecording {
           recordingDurationMs,
           kMinClientFrameRate,
         );
-        poseFps = (clientLandmarksForPipeline.length * 1000 / recordingDurationMs).round();
+        poseFps =
+            (clientLandmarksForPipeline.length * 1000 / recordingDurationMs)
+                .round();
       }
 
       if (poseFps < kMinClientFrameRate) {
@@ -440,15 +445,19 @@ class ClientRecording extends _$ClientRecording {
         cameraAngle: activeState.cameraAngle,
         avgLandmarkConfidence: null,
       );
-      List<LandmarkFrame> bestTrimmedLandmarks =
-          clientLandmarksForPipeline.sublist(0, trimLen);
+      List<LandmarkFrame> bestTrimmedLandmarks = clientLandmarksForPipeline
+          .sublist(0, trimLen);
 
       final maxOffset = trimLen == refLen
           ? math.min(maxOffsetFrames, clientLen - refLen)
           : -1;
       if (maxOffset > 0) {
         int tries = 0;
-        for (int o = 0; o <= maxOffset && tries < maxTries; o += offsetStep, tries++) {
+        for (
+          int o = 0;
+          o <= maxOffset && tries < maxTries;
+          o += offsetStep, tries++
+        ) {
           if (o + refLen > clientLen) break;
           final trimmed = clientLandmarksForPipeline.sublist(o, o + refLen);
           final normalizedLandmarks = _preprocessor.processBatch(trimmed);
@@ -553,5 +562,4 @@ class ClientRecording extends _$ClientRecording {
       state = const ClientRecordingInitial();
     }
   }
-
 }
