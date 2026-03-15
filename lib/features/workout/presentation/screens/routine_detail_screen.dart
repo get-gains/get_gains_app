@@ -194,6 +194,15 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
           );
         }
 
+        final sessionState = ref.watch(workoutSessionProvider);
+        final todaySession = ref.watch(
+          todayCompletedSessionProvider(routine.id),
+        );
+        final bool isCompletedToday =
+            (sessionState is WorkoutSessionCompleted &&
+                sessionState.routine?.id == routine.id) ||
+            (todaySession.value?.isCompleted ?? false);
+
         return Scaffold(
           backgroundColor: isDark
               ? AppColors.backgroundDark
@@ -201,9 +210,48 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
           bottomNavigationBar: SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: _StartWorkoutButton(
-                routine: routine,
-                onStart: () => _pickStartExerciseAndWorkout(routine),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isCompletedToday) ...[
+                    Container(
+                      width: double.infinity,
+                      height: 44,
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppColors.success.withValues(alpha: 0.45),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.check_circle,
+                            size: 18,
+                            color: AppColors.success,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Workout Complete',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: AppColors.success,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  _StartWorkoutButton(
+                    routine: routine,
+                    onStart: () => _pickStartExerciseAndWorkout(routine),
+                  ),
+                ],
               ),
             ),
           ),
@@ -387,7 +435,7 @@ class _ExerciseListSliver extends ConsumerWidget {
   }
 }
 
-/// Button that shows "Workout Done Today" or "Start Workout" based on history.
+/// Primary routine action button based on today's completion state.
 class _StartWorkoutButton extends ConsumerWidget {
   const _StartWorkoutButton({required this.routine, required this.onStart});
 
@@ -405,38 +453,11 @@ class _StartWorkoutButton extends ConsumerWidget {
         (todaySession.value?.isCompleted ?? false);
 
     if (isCompletedToday) {
-      return Column(
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: AppColors.success.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.check_circle, color: AppColors.success, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Workout Done Today',
-                  style: TextStyle(
-                    color: AppColors.success,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          AppButton.outline(
-            label: 'Do Again',
-            icon: Icons.replay,
-            isFullWidth: true,
-            onPressed: onStart,
-          ),
-        ],
+      return AppButton.outline(
+        label: 'Start Again',
+        icon: Icons.replay,
+        isFullWidth: true,
+        onPressed: onStart,
       );
     }
 
