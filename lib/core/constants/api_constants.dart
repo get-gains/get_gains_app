@@ -14,9 +14,10 @@ class ApiConstants {
       dotenv.env['API_BASE_URL'] ?? 'http://localhost:3000/api';
 
   // Timeouts
+  // Pose form uploads contain large landmark payloads; allow generous timeouts.
   static const Duration connectTimeout = Duration(seconds: 30);
-  static const Duration receiveTimeout = Duration(seconds: 30);
-  static const Duration sendTimeout = Duration(seconds: 30);
+  static const Duration receiveTimeout = Duration(seconds: 120);
+  static const Duration sendTimeout = Duration(seconds: 120);
 
   // Auth Endpoints
   static const String login = '/auth/login';
