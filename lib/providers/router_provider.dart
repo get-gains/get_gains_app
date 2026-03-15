@@ -32,6 +32,8 @@ import 'deep_link_provider.dart';
 
 part 'router_provider.g.dart';
 
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
 /// Route Paths
 class AppRoutes {
   AppRoutes._();
@@ -161,6 +163,7 @@ GoRouter router(Ref ref) {
   final refreshNotifier = _GoRouterRefreshStream(ref);
 
   final routerInstance = GoRouter(
+    navigatorKey: appNavigatorKey,
     initialLocation: AppRoutes.splash,
     debugLogDiagnostics: true,
     refreshListenable: refreshNotifier,
@@ -655,6 +658,9 @@ GoRouter router(Ref ref) {
             sessionDurationMin: (extra['sessionDurationMin'] as int?) ?? 0,
             avgAccuracy: (extra['avgAccuracy'] as double?) ?? 1.0,
             streakDays: (extra['streakDays'] as int?) ?? 0,
+            showWorkoutSummaryAfterContinue:
+                (extra['showWorkoutSummaryAfterCoins'] as bool?) ?? false,
+            workoutSummary: extra['workoutSummary'] as Map<String, dynamic>?,
           );
         },
       ),

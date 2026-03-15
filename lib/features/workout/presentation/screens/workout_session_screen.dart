@@ -36,6 +36,7 @@ class WorkoutSessionScreen extends ConsumerStatefulWidget {
 
 class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
   final PageController _pageController = PageController();
+  bool _isAutoRoutingToRecording = false;
 
   @override
   void initState() {
@@ -84,7 +85,7 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     WorkoutSessionState next,
   ) {
     if (next is WorkoutSessionCompleted) {
-      _showCompletionDialog(next.session, next.routine);
+      _goToCoinReward(next.session, next.routine);
     } else if (next is WorkoutSessionError) {
       AppToast.error(context, next.error.message);
     } else if (next is WorkoutSessionActive &&
@@ -100,78 +101,33 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     }
   }
 
-  void _showCompletionDialog(
-    WorkoutSessionModel session,
-    RoutineModel? routine,
-  ) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Workout Complete!'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Duration: ${_formatDuration(session.duration)}'),
-            Text('Sets completed: ${session.completedSetsCount}'),
-            Text('Total volume: ${session.totalVolume.toStringAsFixed(1)} kg'),
-            if (routine != null) ...[
-              const SizedBox(height: 12),
-              const Divider(),
-              const SizedBox(height: 8),
-              ...routine.exercises.map((exercise) {
-                final sets = session.setsForExercise(exercise.id);
-                final done = sets.length >= exercise.sets;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Row(
-                    children: [
-                      Icon(
-                        done
-                            ? Icons.check_circle
-                            : Icons.radio_button_unchecked,
-                        color: done ? AppColors.success : Colors.grey,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          exercise.exercise?.name ?? 'Exercise',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ),
-                      Text(
-                        '${sets.length}/${exercise.sets}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: done ? AppColors.success : Colors.grey,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              ref.invalidate(activeTodayProvider);
-              context.go(
-                AppRoutes.coinReward,
-                extra: <String, dynamic>{
-                  'setsCompleted': session.completedSetsCount,
-                  'sessionDurationMin': session.duration?.inMinutes ?? 0,
-                },
-              );
-            },
-            child: const Text('Done'),
-          ),
-        ],
-      ),
+  void _goToCoinReward(WorkoutSessionModel session, RoutineModel? routine) {
+    ref.invalidate(activeTodayProvider);
+
+    final exerciseStatuses =
+        routine?.exercises.map((exercise) {
+          final sets = session.setsForExercise(exercise.id);
+          return <String, dynamic>{
+            'name': exercise.exercise?.name ?? 'Exercise',
+            'completed': sets.length,
+            'target': exercise.sets,
+          };
+        }).toList() ??
+        const <Map<String, dynamic>>[];
+
+    context.go(
+      AppRoutes.coinReward,
+      extra: <String, dynamic>{
+        'setsCompleted': session.completedSetsCount,
+        'sessionDurationMin': session.duration?.inMinutes ?? 0,
+        'showWorkoutSummaryAfterCoins': true,
+        'workoutSummary': <String, dynamic>{
+          'durationText': _formatDuration(session.duration),
+          'setsCompleted': session.completedSetsCount,
+          'totalVolumeKg': session.totalVolume,
+          'exerciseStatuses': exerciseStatuses,
+        },
+      },
     );
   }
 
@@ -224,6 +180,69 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
             existingSets: completedSets,
           );
     }
+  }
+
+  bool _autoResumeRecordingIfNeeded(WorkoutSessionActive state) {
+    if (widget.readOnly || _isAutoRoutingToRecording) return false;
+    final routine = state.routine;
+    if (routine == null || routine.exercises.isEmpty) return false;
+    if (state.isAllExercisesCompleted) return false;
+
+    int targetIndex = state.currentExerciseIndex.clamp(
+      0,
+      routine.exercises.length - 1,
+    );
+
+    bool isIncompleteAt(int index) {
+      final exercise = routine.exercises[index];
+      final completed = state.session.setsForExercise(exercise.id).length;
+      return completed < exercise.sets;
+    }
+
+    if (!isIncompleteAt(targetIndex)) {
+      final nextIncompleteFromCurrent = routine.exercises.indexWhere(
+        (exercise) =>
+            state.session.setsForExercise(exercise.id).length < exercise.sets,
+        targetIndex + 1,
+      );
+
+      targetIndex = nextIncompleteFromCurrent >= 0
+          ? nextIncompleteFromCurrent
+          : routine.exercises.indexWhere(
+              (exercise) =>
+                  state.session.setsForExercise(exercise.id).length <
+                  exercise.sets,
+            );
+
+      if (targetIndex < 0) return false;
+    }
+
+    final targetExercise = routine.exercises[targetIndex];
+    final exerciseId = targetExercise.exercise?.id ?? targetExercise.exerciseId;
+    if (exerciseId.isEmpty) return false;
+
+    final completedSets = state.session
+        .setsForExercise(targetExercise.id)
+        .length;
+    final nextSetNumber = completedSets + 1;
+    if (nextSetNumber > targetExercise.sets) return false;
+
+    _isAutoRoutingToRecording = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.go(
+        '/client/exercise/$exerciseId/unity-record',
+        extra: {
+          'workoutSessionId': state.session.id,
+          'routineExerciseId': targetExercise.id,
+          'routineExercises': routine.exercises,
+          'currentExerciseIndex': targetIndex,
+          'currentSetNumber': nextSetNumber,
+        },
+      );
+    });
+
+    return true;
   }
 
   @override
@@ -355,6 +374,10 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
       );
     }
 
+    if (_autoResumeRecordingIfNeeded(state)) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return Column(
       children: [
         // Exercise tabs/indicators
@@ -476,7 +499,30 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
                       label: 'Next',
                       icon: Icons.arrow_forward,
                       iconPosition: IconPosition.trailing,
-                      onPressed: () {
+                      onPressed: () async {
+                        final routine = state.routine;
+                        if (routine != null &&
+                            state.currentExerciseIndex <
+                                routine.exercises.length) {
+                          final currentExercise =
+                              routine.exercises[state.currentExerciseIndex];
+                          final currentCompletedSets = state.session
+                              .setsForExercise(currentExercise.id)
+                              .length;
+                          final isCurrentExerciseCompleted =
+                              currentCompletedSets >= currentExercise.sets;
+
+                          final nextIndex = state.currentExerciseIndex + 1;
+                          if (isCurrentExerciseCompleted &&
+                              nextIndex < routine.exercises.length) {
+                            await _goToRecordingForExercise(
+                              state: state,
+                              exerciseIndex: nextIndex,
+                            );
+                            return;
+                          }
+                        }
+
                         ref
                             .read(workoutSessionProvider.notifier)
                             .nextExercise();
@@ -496,6 +542,43 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
   void _onSetCompleted() {
     // Refresh UI after set completion
     setState(() {});
+  }
+
+  Future<void> _goToRecordingForExercise({
+    required WorkoutSessionActive state,
+    required int exerciseIndex,
+  }) async {
+    final routine = state.routine;
+    if (routine == null) return;
+    if (exerciseIndex < 0 || exerciseIndex >= routine.exercises.length) return;
+
+    final targetExercise = routine.exercises[exerciseIndex];
+    final exerciseId = targetExercise.exercise?.id ?? targetExercise.exerciseId;
+    if (exerciseId.isEmpty) {
+      AppToast.error(context, 'Unable to start recording for this exercise.');
+      return;
+    }
+
+    final completedSets = state.session.setsForExercise(targetExercise.id);
+    final nextSetNumber = completedSets.length + 1;
+    if (nextSetNumber > targetExercise.sets) {
+      AppToast.error(
+        context,
+        'All sets are already completed for this exercise.',
+      );
+      return;
+    }
+
+    context.go(
+      '/client/exercise/$exerciseId/unity-record',
+      extra: {
+        'workoutSessionId': state.session.id,
+        'routineExerciseId': targetExercise.id,
+        'routineExercises': routine.exercises,
+        'currentExerciseIndex': exerciseIndex,
+        'currentSetNumber': nextSetNumber,
+      },
+    );
   }
 
   void _startNextSet() {

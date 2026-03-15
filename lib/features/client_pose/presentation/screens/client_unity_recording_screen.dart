@@ -86,6 +86,7 @@ class _ClientUnityRecordingScreenState
   final TextEditingController _weightController = TextEditingController();
   final TextEditingController _repsController = TextEditingController();
   bool _isLoggingSet = false;
+  bool _isNavigatingAfterLog = false;
   late int _workoutSetNumber;
 
   // ── Setup validation ──────────────────────────────────────────────────────
@@ -105,8 +106,25 @@ class _ClientUnityRecordingScreenState
   void initState() {
     super.initState();
     _workoutSetNumber = widget.currentSetNumber;
+    final prescribedSets = _currentExercisePrescribedSets;
+    if (prescribedSets != null && prescribedSets > 0) {
+      _workoutSetNumber = _workoutSetNumber.clamp(1, prescribedSets);
+    }
     WakelockPlus.enable();
     _init();
+  }
+
+  int? get _safeCurrentExerciseIndex {
+    final exercises = widget.routineExercises;
+    if (exercises == null || exercises.isEmpty) return null;
+    return widget.currentExerciseIndex.clamp(0, exercises.length - 1);
+  }
+
+  int? get _currentExercisePrescribedSets {
+    final exercises = widget.routineExercises;
+    final safeIndex = _safeCurrentExerciseIndex;
+    if (exercises == null || safeIndex == null) return null;
+    return exercises[safeIndex].sets;
   }
 
   void _handleCloseTap() {
@@ -377,6 +395,7 @@ class _ClientUnityRecordingScreenState
   // ── Recording actions ────────────────────────────────────────────────────
 
   void _onStartRecording() {
+    _isNavigatingAfterLog = false;
     // Stop the setup validation stream before starting the recording stream
     _stopSetupStream();
     ref
@@ -406,6 +425,7 @@ class _ClientUnityRecordingScreenState
   }
 
   void _onTryAgain() {
+    _isNavigatingAfterLog = false;
     _cancelAutoStartCountdown();
     _repsController.clear();
     _weightController.clear();
@@ -567,11 +587,21 @@ class _ClientUnityRecordingScreenState
   }
 
   String _getTitle(ClientRecordingState state) {
+    final safeExerciseIndex = _safeCurrentExerciseIndex;
+    final exercisePosition = safeExerciseIndex != null
+        ? safeExerciseIndex + 1
+        : widget.currentExerciseIndex + 1;
+    final totalExercises = widget.routineExercises?.length ?? '?';
+    final prescribedSets = _currentExercisePrescribedSets;
+    final displaySetNumber = prescribedSets != null
+        ? _workoutSetNumber.clamp(1, prescribedSets)
+        : _workoutSetNumber;
+
     final exercisePrefix = _isWorkoutMode
-        ? 'Ex ${widget.currentExerciseIndex + 1}/${widget.routineExercises?.length ?? '?'}: '
+        ? 'Ex $exercisePosition/$totalExercises: '
         : '';
     final setInfo = _isWorkoutMode
-        ? ' (Set $_workoutSetNumber/${widget.routineExercises?[widget.currentExerciseIndex].sets ?? '?'})'
+        ? ' (Set $displaySetNumber/${prescribedSets ?? '?'})'
         : '';
     if (state is ClientRecordingActive)
       return '$exercisePrefix${state.exerciseName}$setInfo';
@@ -1509,27 +1539,47 @@ class _ClientUnityRecordingScreenState
   }
 
   Future<void> _logSetAndContinue(ClientRecordingComplete state) async {
+    if (_isLoggingSet || _isNavigatingAfterLog) return;
+
     setState(() => _isLoggingSet = true);
 
     final weight = double.tryParse(_weightController.text);
-    final reps = int.tryParse(_repsController.text) ?? 0;
-    final exercises = widget.routineExercises;
+    final sessionState = ref.read(workoutSessionProvider);
+    final exercises =
+        widget.routineExercises ??
+        (sessionState is WorkoutSessionActive
+            ? sessionState.routine?.exercises
+            : null);
+
+    int resolvedCurrentExerciseIndex = widget.currentExerciseIndex;
+    if (exercises != null && exercises.isNotEmpty) {
+      final matchedIndex = exercises.indexWhere(
+        (exercise) => exercise.id == widget.routineExerciseId,
+      );
+      if (matchedIndex >= 0) {
+        resolvedCurrentExerciseIndex = matchedIndex;
+      } else if (resolvedCurrentExerciseIndex >= exercises.length) {
+        resolvedCurrentExerciseIndex = exercises.length - 1;
+      }
+    }
+
     final currentRoutineExercise =
-        exercises != null && widget.currentExerciseIndex < exercises.length
-        ? exercises[widget.currentExerciseIndex]
+        exercises != null && resolvedCurrentExerciseIndex < exercises.length
+        ? exercises[resolvedCurrentExerciseIndex]
         : null;
     final routineExerciseIdForLookup =
         widget.routineExerciseId ?? currentRoutineExercise?.id;
 
     // Determine set number and navigation target BEFORE the async log call,
     // so we don't rely on state being flushed by the time we read it back.
-    final sessionState = ref.read(workoutSessionProvider);
     int setNumber = 1;
+    int existingSetCount = 0;
     if (sessionState is WorkoutSessionActive &&
         routineExerciseIdForLookup != null) {
       final existing = sessionState.session.setsForExercise(
         routineExerciseIdForLookup,
       );
+      existingSetCount = existing.length;
       setNumber = existing.length + 1;
     }
 
@@ -1538,12 +1588,23 @@ class _ClientUnityRecordingScreenState
     }
 
     final prescribedSets = exercises != null && exercises.isNotEmpty
-        ? exercises[widget.currentExerciseIndex].sets
+        ? exercises[resolvedCurrentExerciseIndex].sets
         : 1;
-    final isLastSetForExercise = setNumber >= prescribedSets;
-    final isLastExercise =
-        exercises == null ||
-        widget.currentExerciseIndex >= exercises.length - 1;
+
+    // Guard against stale route extras that can request an impossible set
+    // (e.g. Set 4/3). Skip logging and continue to the next target.
+    if (existingSetCount >= prescribedSets) {
+      if (!mounted) return;
+      setState(() => _isLoggingSet = false);
+      _isNavigatingAfterLog = true;
+      _workoutSetNumber = prescribedSets;
+      _navigateAfterLog();
+      return;
+    }
+
+    if (setNumber > prescribedSets) {
+      setNumber = prescribedSets;
+    }
 
     bool didLogSuccessfully = false;
     // Log via workout session provider
@@ -1568,54 +1629,97 @@ class _ClientUnityRecordingScreenState
 
     if (!didLogSuccessfully) return;
 
+    _isNavigatingAfterLog = true;
     _workoutSetNumber = setNumber + 1;
 
-    _navigateAfterLog(
-      isLastSetForExercise: isLastSetForExercise,
-      isLastExercise: isLastExercise,
-      routineExerciseIdForCurrentExercise: routineExerciseIdForLookup,
-    );
+    // Ensure a fresh recording attempt is required for the next set.
+    ref
+        .read(clientRecordingProvider(widget.exerciseId).notifier)
+        .resetForNewAttempt();
+
+    _navigateAfterLog();
   }
 
-  void _navigateAfterLog({
-    required bool isLastSetForExercise,
-    required bool isLastExercise,
-    required String? routineExerciseIdForCurrentExercise,
-  }) {
-    final exercises = widget.routineExercises;
-    Map<String, dynamic>? nextSetNavigation;
+  void _navigateAfterLog() {
+    final sessionState = ref.read(workoutSessionProvider);
 
-    if (!isLastSetForExercise) {
-      // Same exercise, next set.
-      nextSetNavigation = {
-        'workoutSessionId': widget.workoutSessionId,
-        'routineExerciseId': routineExerciseIdForCurrentExercise,
-        'routineExercises': exercises,
-        'currentExerciseIndex': widget.currentExerciseIndex,
-        'currentSetNumber': _workoutSetNumber,
-        'exerciseId': widget.exerciseId,
-      };
-    } else if (!isLastExercise && exercises != null) {
-      // Next exercise, set 1.
-      final nextIndex = widget.currentExerciseIndex + 1;
-      final nextExercise = exercises[nextIndex];
-      final nextExerciseId =
-          nextExercise.exercise?.id ?? nextExercise.exerciseId;
+    if (sessionState is WorkoutSessionActive && sessionState.routine != null) {
+      if (sessionState.isAllExercisesCompleted) {
+        context.go(
+          AppRoutes.workoutSession,
+          extra: {'readOnly': true, 'nextSetNavigation': null},
+        );
+        return;
+      }
 
-      nextSetNavigation = {
-        'workoutSessionId': widget.workoutSessionId,
-        'routineExerciseId': nextExercise.id,
-        'routineExercises': exercises,
-        'currentExerciseIndex': nextIndex,
-        'currentSetNumber': 1,
-        'exerciseId': nextExerciseId,
-      };
+      final routine = sessionState.routine!;
+      final targetIndex = sessionState.currentExerciseIndex;
+
+      if (targetIndex >= 0 && targetIndex < routine.exercises.length) {
+        final targetExercise = routine.exercises[targetIndex];
+        final targetExerciseId =
+            targetExercise.exercise?.id ?? targetExercise.exerciseId;
+        final completedSetCount = sessionState.session
+            .setsForExercise(targetExercise.id)
+            .length;
+        final nextSetNumber = completedSetCount + 1;
+
+        if (targetExerciseId.isNotEmpty &&
+            nextSetNumber <= targetExercise.sets) {
+          context.go(
+            AppRoutes.workoutSession,
+            extra: {
+              'readOnly': true,
+              'nextSetNavigation': {
+                'workoutSessionId': sessionState.session.id,
+                'routineExerciseId': targetExercise.id,
+                'routineExercises': routine.exercises,
+                'currentExerciseIndex': targetIndex,
+                'currentSetNumber': nextSetNumber,
+                'exerciseId': targetExerciseId,
+              },
+            },
+          );
+          return;
+        }
+
+        final nextIncompleteIndex = routine.exercises.indexWhere(
+          (exercise) =>
+              sessionState.session.setsForExercise(exercise.id).length <
+              exercise.sets,
+        );
+
+        if (nextIncompleteIndex >= 0) {
+          final nextExercise = routine.exercises[nextIncompleteIndex];
+          final nextExerciseId =
+              nextExercise.exercise?.id ?? nextExercise.exerciseId;
+          final nextSetNumber =
+              sessionState.session.setsForExercise(nextExercise.id).length + 1;
+
+          if (nextExerciseId.isNotEmpty && nextSetNumber <= nextExercise.sets) {
+            context.go(
+              AppRoutes.workoutSession,
+              extra: {
+                'readOnly': true,
+                'nextSetNavigation': {
+                  'workoutSessionId': sessionState.session.id,
+                  'routineExerciseId': nextExercise.id,
+                  'routineExercises': routine.exercises,
+                  'currentExerciseIndex': nextIncompleteIndex,
+                  'currentSetNumber': nextSetNumber,
+                  'exerciseId': nextExerciseId,
+                },
+              },
+            );
+            return;
+          }
+        }
+      }
     }
 
-    // Always go to workout logger after logging a set.
     context.go(
       AppRoutes.workoutSession,
-      extra: {'readOnly': true, 'nextSetNavigation': nextSetNavigation},
+      extra: {'readOnly': true, 'nextSetNavigation': null},
     );
   }
 
