@@ -53,11 +53,34 @@ extension WorkoutSessionModelX on WorkoutSessionModel {
   /// Number of completed sets
   int get completedSetsCount => performedSets.length;
 
-  /// Total volume (weight × reps) for the session
-  double get totalVolume => performedSets.fold(
-    0.0,
-    (sum, set) => sum + ((set.weightKg ?? 0) * set.repsCompleted),
-  );
+  /// Total volume for the session as accumulated load per set.
+  ///
+  /// Product behavior expects this to be the sum of set weights, e.g.
+  /// 6 sets at 5kg => 30kg.
+  /// If a set's weight is missing, reuse the previous known weight for that
+  /// same exercise.
+  double get totalVolume {
+    final byExercise = <String, List<PerformedSetModel>>{};
+    for (final set in performedSets) {
+      byExercise.putIfAbsent(set.routineExerciseId, () => []).add(set);
+    }
+
+    double total = 0;
+    for (final sets in byExercise.values) {
+      sets.sort((a, b) => a.setNumber.compareTo(b.setNumber));
+
+      double? lastKnownWeight;
+      for (final set in sets) {
+        final weight = set.weightKg ?? lastKnownWeight ?? 0;
+        if (set.weightKg != null && set.weightKg! > 0) {
+          lastKnownWeight = set.weightKg;
+        }
+        total += weight;
+      }
+    }
+
+    return total;
+  }
 
   /// Get sets for a specific routine exercise
   List<PerformedSetModel> setsForExercise(String routineExerciseId) =>
