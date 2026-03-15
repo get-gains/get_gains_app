@@ -71,6 +71,9 @@ class AppRoutes {
   static const String createExercise = '/coach/exercises/create';
   static const String exerciseDetail = '/coach/exercises/:id';
   static const String recordForm = '/coach/exercises/:id/record';
+  static const String coachViewForm = '/coach/exercises/:id/forms/:formId/view';
+  static const String coachForm3DPreview =
+      '/coach/exercises/:id/forms/:formId/3d-preview';
 
   // Client Pose routes
   static const String clientViewForm = '/client/exercise/:id/view-form';
@@ -377,6 +380,26 @@ GoRouter router(Ref ref) {
         builder: (context, state) {
           final id = state.pathParameters['id']!;
           return FormRecordingScreen(exerciseId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.coachViewForm,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          final formId = state.pathParameters['formId']!;
+          return CoachViewFormScreen(exerciseId: id, formId: formId);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.coachForm3DPreview,
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final frames = extra?['landmarkFrames'] as List<LandmarkFrame>? ?? [];
+          final angle = extra?['cameraAngle'] as String? ?? 'FRONT';
+          return Form3DPreviewScreen(
+            landmarkFrames: frames,
+            cameraAngle: angle,
+          );
         },
       ),
 

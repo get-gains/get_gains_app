@@ -281,6 +281,13 @@ class _FormsTab extends ConsumerWidget {
           final form = state.forms[index];
           return FormCard(
             form: form,
+            onTap: () {
+              context.push(
+                AppRoutes.coachViewForm
+                    .replaceFirst(':id', exerciseId)
+                    .replaceFirst(':formId', form.id),
+              );
+            },
             onActivate: () {
               ref
                   .read(exerciseDetailProvider(exerciseId).notifier)
