@@ -374,7 +374,6 @@ class _ClientUnityRecordingScreenState
     }
   }
 
-
   // ── Recording actions ────────────────────────────────────────────────────
 
   void _onStartRecording() {
@@ -596,7 +595,7 @@ class _ClientUnityRecordingScreenState
       ClientRecordingReady() => _buildReady(context, state, isDark),
       ClientRecordingActive() => _buildRecording(context, state, isDark),
       ClientRecordingProcessing(:final progress, :final message) =>
-          _buildProcessing(context, progress: progress, message: message),
+        _buildProcessing(context, progress: progress, message: message),
       ClientRecordingComplete() => _buildResults(context, state, isDark),
     };
   }
@@ -650,10 +649,7 @@ class _ClientUnityRecordingScreenState
             const SizedBox(height: 24),
             Text(
               message,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
             Text(
@@ -671,10 +667,7 @@ class _ClientUnityRecordingScreenState
               child: Text(
                 'This may take a moment.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.grey,
-                  height: 1.4,
-                ),
+                style: TextStyle(color: Colors.grey, height: 1.4),
               ),
             ),
           ],
@@ -903,6 +896,7 @@ class _ClientUnityRecordingScreenState
       mode: PoseViewMode.raw2D,
       color: Colors.cyanAccent,
       backgroundColor: const Color(0xFF0F0F1A),
+      mirrorX: true,
     );
   }
 
@@ -1130,6 +1124,7 @@ class _ClientUnityRecordingScreenState
                                   backgroundColor: const Color(0xFF0F0F1A),
                                   showControls: false,
                                   borderRadius: BorderRadius.circular(12),
+                                  mirrorX: true,
                                 )
                               : Container(
                                   decoration: BoxDecoration(
@@ -1167,6 +1162,7 @@ class _ClientUnityRecordingScreenState
                                   backgroundColor: const Color(0xFF0F0F1A),
                                   showControls: false,
                                   borderRadius: BorderRadius.circular(12),
+                                  mirrorX: true,
                                 )
                               : Container(
                                   decoration: BoxDecoration(
@@ -1262,9 +1258,7 @@ class _ClientUnityRecordingScreenState
             const SizedBox(height: 8),
             ...state.result.segmentScores.entries
                 .where((e) => e.value > 0)
-                .map(
-                  (e) => _buildSegmentRow(context, e.key, e.value, isDark),
-                ),
+                .map((e) => _buildSegmentRow(context, e.key, e.value, isDark)),
           ],
 
           // Corrections
@@ -1428,10 +1422,7 @@ class _ClientUnityRecordingScreenState
                             horizontal: 12,
                             vertical: 14,
                           ),
-                          prefixIcon: const Icon(
-                            Icons.repeat,
-                            size: 18,
-                          ),
+                          prefixIcon: const Icon(Icons.repeat, size: 18),
                         ),
                       ),
                     ],

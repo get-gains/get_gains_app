@@ -243,7 +243,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
       ClientRecordingReady() => _buildReadyState(context, state, isDark),
       ClientRecordingActive() => _buildRecordingState(context, state, isDark),
       ClientRecordingProcessing(:final progress, :final message) =>
-          _buildProcessing(context, progress: progress, message: message),
+        _buildProcessing(context, progress: progress, message: message),
       ClientRecordingComplete() => _buildResults(context, state, isDark),
     };
   }
@@ -299,6 +299,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
                             mode: PoseViewMode.raw2D,
                             color: Colors.cyanAccent,
                             backgroundColor: const Color(0xFF0F0F1A),
+                            mirrorX: true,
                           ),
                         ),
                       ],
@@ -496,6 +497,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
                             color: Colors.cyanAccent,
                             backgroundColor: const Color(0xDD0F0F1A),
                             showControls: false,
+                            mirrorX: true,
                           ),
                         ),
                         Positioned(
@@ -586,10 +588,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
             const SizedBox(height: 24),
             Text(
               message,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
             Text(
@@ -607,10 +606,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
               child: Text(
                 'This may take a moment.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.grey,
-                  height: 1.4,
-                ),
+                style: TextStyle(color: Colors.grey, height: 1.4),
               ),
             ),
           ],
