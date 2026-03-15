@@ -85,7 +85,7 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     WorkoutSessionState next,
   ) {
     if (next is WorkoutSessionCompleted) {
-      _showCompletionDialog(next.session, next.routine);
+      _goToCoinReward(next.session, next.routine);
     } else if (next is WorkoutSessionError) {
       AppToast.error(context, next.error.message);
     } else if (next is WorkoutSessionActive &&
@@ -101,78 +101,33 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     }
   }
 
-  void _showCompletionDialog(
-    WorkoutSessionModel session,
-    RoutineModel? routine,
-  ) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Workout Complete!'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Duration: ${_formatDuration(session.duration)}'),
-            Text('Sets completed: ${session.completedSetsCount}'),
-            Text('Total volume: ${session.totalVolume.toStringAsFixed(1)} kg'),
-            if (routine != null) ...[
-              const SizedBox(height: 12),
-              const Divider(),
-              const SizedBox(height: 8),
-              ...routine.exercises.map((exercise) {
-                final sets = session.setsForExercise(exercise.id);
-                final done = sets.length >= exercise.sets;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Row(
-                    children: [
-                      Icon(
-                        done
-                            ? Icons.check_circle
-                            : Icons.radio_button_unchecked,
-                        color: done ? AppColors.success : Colors.grey,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          exercise.exercise?.name ?? 'Exercise',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ),
-                      Text(
-                        '${sets.length}/${exercise.sets}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: done ? AppColors.success : Colors.grey,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              ref.invalidate(activeTodayProvider);
-              context.go(
-                AppRoutes.coinReward,
-                extra: <String, dynamic>{
-                  'setsCompleted': session.completedSetsCount,
-                  'sessionDurationMin': session.duration?.inMinutes ?? 0,
-                },
-              );
-            },
-            child: const Text('Done'),
-          ),
-        ],
-      ),
+  void _goToCoinReward(WorkoutSessionModel session, RoutineModel? routine) {
+    ref.invalidate(activeTodayProvider);
+
+    final exerciseStatuses =
+        routine?.exercises.map((exercise) {
+          final sets = session.setsForExercise(exercise.id);
+          return <String, dynamic>{
+            'name': exercise.exercise?.name ?? 'Exercise',
+            'completed': sets.length,
+            'target': exercise.sets,
+          };
+        }).toList() ??
+        const <Map<String, dynamic>>[];
+
+    context.go(
+      AppRoutes.coinReward,
+      extra: <String, dynamic>{
+        'setsCompleted': session.completedSetsCount,
+        'sessionDurationMin': session.duration?.inMinutes ?? 0,
+        'showWorkoutSummaryAfterCoins': true,
+        'workoutSummary': <String, dynamic>{
+          'durationText': _formatDuration(session.duration),
+          'setsCompleted': session.completedSetsCount,
+          'totalVolumeKg': session.totalVolume,
+          'exerciseStatuses': exerciseStatuses,
+        },
+      },
     );
   }
 
