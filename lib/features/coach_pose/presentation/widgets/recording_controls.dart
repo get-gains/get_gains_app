@@ -64,7 +64,9 @@ class RecordingControls extends StatelessWidget {
                   ),
                   const SizedBox(width: 16),
                   Text(
-                    '${state.frameCount} frames',
+                    state.phase == RecordingPhase.recording
+                        ? 'Recording… (analyzed when you stop)'
+                        : '${state.frameCount} frames',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: isDark
                           ? AppColors.mutedForegroundDark

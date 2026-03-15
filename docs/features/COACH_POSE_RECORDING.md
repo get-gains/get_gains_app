@@ -2,7 +2,7 @@
 
 > **Status**: 🚧 In Progress  
 > **Branch**: `subtask/GG-41-coach-pose-recording-flow`  
-> **Last Updated**: February 6, 2026  
+> **Last Updated**: March 13, 2026  
 > **Covers**: Coach exercise list, create exercise, record reference form, view exercise info  
 > **Depends On**: [CONTEXT.md](../CONTEXT.md), [POSE_DETECTION.md](POSE_DETECTION.md), [Server POSE_DETECTION.md](../../get-gains-server/docs/features/POSE_DETECTION.md)
 
@@ -214,11 +214,13 @@ class CoachPoseRepository {
 **States:**
 - `idle` — Initial, no recording in progress
 - `setupGuidance` — Camera preview active, validating environment
-- `recording` — Actively recording video + sparse MLKit checks
-- `processing` — Post-recording: MLKit batch → preprocess → extract features
-- `uploading` — Sending processed data to server
+- `recording` — Actively recording (raw frame capture only; no MLKit during recording)
+- `processing` — Post-recording: MLKit batch → preprocess → extract features; **full-screen overlay with progress percentage (0–100%) and step message** (e.g. "Detecting pose...", "Analyzing form...", "Extracting angles...")
+- `uploading` — Sending processed data to server; overlay shows "Uploading form..." and percentage
 - `complete` — Form uploaded successfully
 - `error` — Something went wrong (with retry option)
+
+**Post-processing loading:** `FormRecordingState` includes `processingProgress` (0.0–1.0) and `processingMessage` (e.g. "Detecting pose...", "Analyzing form...", "Uploading form..."). The form recording screen shows a full-screen dark overlay with a circular progress indicator, the current step message, and the percentage so the coach knows what is happening.
 
 ---
 

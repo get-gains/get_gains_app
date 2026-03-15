@@ -4,12 +4,12 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../coach_pose/data/models/models.dart';
 import '../../../coach_pose/services/pose_detection_service.dart';
 import '../providers/client_recording_provider.dart';
 import '../widgets/pose_view_widget.dart';
@@ -17,9 +17,8 @@ import '../widgets/pose_view_widget.dart';
 /// Client Recording Screen
 ///
 /// Allows clients to record themselves performing an exercise while:
-/// - Detecting pose via MLKit
-/// - Counting reps in real-time
-/// - After stopping, running DTW comparison against coach's reference form
+/// - Capturing frames during recording (no live MLKit for performance)
+/// - After stopping, post-processing: pose analysis & DTW comparison
 /// - Displaying similarity score and corrections
 ///
 /// Each recording session counts as one set.
@@ -38,10 +37,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
   List<CameraDescription> _cameras = [];
   bool _isCameraInitialized = false;
   bool _isCameraError = false;
-  bool _isProcessingFrame = false;
   bool _isFlipping = false;
-  int _frameSkipCount = 0;
-  static const _processEveryNFrames = 3; // Process every 3rd frame
 
   @override
   void initState() {
@@ -72,7 +68,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
 
       _cameraController = CameraController(
         camera,
-        ResolutionPreset.medium,
+        ResolutionPreset.low,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.nv21,
       );
@@ -95,49 +91,25 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
       return;
     }
-
     _cameraController!.startImageStream((CameraImage image) {
-      _frameSkipCount++;
-      if (_frameSkipCount % _processEveryNFrames != 0) return;
-      if (_isProcessingFrame) return;
-
-      _isProcessingFrame = true;
-      _processImage(image).whenComplete(() {
-        _isProcessingFrame = false;
-      });
+      final rotationDegrees = _getCameraRotationDegrees();
+      final captured = CapturedFrame.fromCameraImage(image, rotationDegrees);
+      ref
+          .read(clientRecordingProvider(widget.exerciseId).notifier)
+          .addCapturedFrame(captured);
     });
+  }
+
+  int _getCameraRotationDegrees() {
+    if (_cameraController == null) return 0;
+    final o = _cameraController!.description.sensorOrientation;
+    return o == 90 || o == 180 || o == 270 ? o : 0;
   }
 
   void _stopImageStream() {
     if (_cameraController != null &&
         _cameraController!.value.isStreamingImages) {
       _cameraController!.stopImageStream();
-    }
-  }
-
-  Future<void> _processImage(CameraImage image) async {
-    try {
-      final poseService = ref.read(poseDetectionServiceProvider);
-      final rotation = _cameraController!.description.sensorOrientation;
-      final inputRotation = InputImageRotation.values.firstWhere(
-        (r) => r.rawValue == rotation,
-        orElse: () => InputImageRotation.rotation0deg,
-      );
-      final timestampMs = DateTime.now().millisecondsSinceEpoch;
-
-      final landmarkFrame = await poseService.processFrame(
-        image,
-        inputRotation,
-        timestampMs,
-      );
-
-      if (landmarkFrame != null) {
-        ref
-            .read(clientRecordingProvider(widget.exerciseId).notifier)
-            .processFrame(landmarkFrame);
-      }
-    } catch (e) {
-      // Silently skip failed frames
     }
   }
 
@@ -199,7 +171,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
 
       final controller = CameraController(
         targetCamera,
-        ResolutionPreset.medium,
+        ResolutionPreset.low,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.nv21,
       );
@@ -270,7 +242,8 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
       ClientRecordingError(message: final msg) => _buildError(context, msg),
       ClientRecordingReady() => _buildReadyState(context, state, isDark),
       ClientRecordingActive() => _buildRecordingState(context, state, isDark),
-      ClientRecordingProcessing() => _buildProcessing(context),
+      ClientRecordingProcessing(:final progress, :final message) =>
+          _buildProcessing(context, progress: progress, message: message),
       ClientRecordingComplete() => _buildResults(context, state, isDark),
     };
   }
@@ -498,41 +471,6 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
                 ),
               ),
 
-              // Rep counter overlay
-              Positioned(
-                top: 16,
-                right: 16,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color:
-                        (isDark
-                                ? AppColors.primaryDark
-                                : AppColors.primaryLight)
-                            .withValues(alpha: 0.9),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.repeat, color: Colors.white, size: 20),
-                      const SizedBox(width: 6),
-                      Text(
-                        '${state.repCount} reps',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
               // Coach's reference skeleton (PiP overlay)
               if (state.referenceLandmarkFrames.isNotEmpty)
                 Positioned(
@@ -624,20 +562,59 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
     );
   }
 
-  Widget _buildProcessing(BuildContext context) {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Analyzing your form...'),
-          SizedBox(height: 8),
-          Text(
-            'Comparing against coach\'s reference',
-            style: TextStyle(color: Colors.grey),
-          ),
-        ],
+  Widget _buildProcessing(
+    BuildContext context, {
+    required double progress,
+    required String message,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final percent = (progress * 100).toStringAsFixed(0);
+    return Container(
+      color: isDark ? Colors.black87 : Colors.white.withValues(alpha: 0.95),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 72,
+              height: 72,
+              child: CircularProgressIndicator(
+                value: progress > 0 ? progress : null,
+                strokeWidth: 4,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              message,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '$percent%',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white70 : Colors.black87,
+                fontFamily: 'JetBrains Mono',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                'This may take a moment.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.grey,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -699,7 +676,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    '${state.repCount} reps completed',
+                    'Form analyzed',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),

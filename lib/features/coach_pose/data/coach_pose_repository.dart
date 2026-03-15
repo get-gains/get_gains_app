@@ -169,6 +169,7 @@ class CoachPoseRepository {
     required List<Map<String, dynamic>> landmarkFrames,
     required List<Map<String, dynamic>> featureFrames,
     List<Map<String, dynamic>>? normalizedFrames,
+    List<String>? relevantAngles,
     double? avgLandmarkConfidence,
     String? recordingQuality,
   }) async {
@@ -183,6 +184,7 @@ class CoachPoseRepository {
         'landmarkFrames': landmarkFrames,
         'featureFrames': featureFrames,
         if (normalizedFrames != null) 'normalizedFrames': normalizedFrames,
+        if (relevantAngles != null) 'relevantAngles': relevantAngles,
         if (avgLandmarkConfidence != null)
           'avgLandmarkConfidence': avgLandmarkConfidence,
         if (recordingQuality != null) 'recordingQuality': recordingQuality,
