@@ -56,23 +56,42 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
 
     final sessionState = ref.read(workoutSessionProvider);
     if (sessionState is WorkoutSessionActive && routine.exercises.isNotEmpty) {
-      final safeStartIndex =
-          startIndex.clamp(0, routine.exercises.length - 1) as int;
+      // When resuming, use the provider's calculated exercise index
+      // (which accounts for already-completed exercises).
+      final isResuming = sessionState.session.performedSets.isNotEmpty;
+      final resolvedStartIndex = isResuming
+          ? sessionState.currentExerciseIndex.clamp(
+              0,
+              routine.exercises.length - 1,
+            )
+          : startIndex.clamp(0, routine.exercises.length - 1);
 
       // Pre-cache reference forms for all exercises so they're available
       // offline if connectivity drops during the workout.
       final exerciseIds = routine.exercises.map((e) => e.exerciseId).toList();
       ref.read(clientPoseRepositoryProvider).preCacheExerciseForms(exerciseIds);
 
-      final firstExercise = routine.exercises[safeStartIndex];
+      final targetExercise = routine.exercises[resolvedStartIndex];
+      final completedSets = sessionState.session
+          .setsForExercise(targetExercise.id)
+          .length;
+      final nextSetNumber = completedSets + 1;
+
+      // If all exercises are completed, go to the session screen instead
+      // of back to recording.
+      if (sessionState.isAllExercisesCompleted) {
+        context.go(AppRoutes.workoutSession, extra: {'readOnly': true});
+        return;
+      }
+
       context.go(
-        '/client/exercise/${firstExercise.exerciseId}/unity-record',
+        '/client/exercise/${targetExercise.exerciseId}/unity-record',
         extra: {
           'workoutSessionId': sessionState.session.id,
-          'routineExerciseId': firstExercise.id,
+          'routineExerciseId': targetExercise.id,
           'routineExercises': routine.exercises,
-          'currentExerciseIndex': safeStartIndex,
-          'currentSetNumber': 1,
+          'currentExerciseIndex': resolvedStartIndex,
+          'currentSetNumber': nextSetNumber,
         },
       );
     } else {
@@ -441,10 +460,26 @@ class _StartWorkoutButton extends ConsumerWidget {
     final sessionState = ref.watch(workoutSessionProvider);
     final todaySession = ref.watch(todayCompletedSessionProvider(routine.id));
 
+    // Check if there's an active (in-progress) session for this routine
+    final bool hasActiveSession =
+        sessionState is WorkoutSessionActive &&
+        sessionState.routine?.id == routine.id;
+
     final bool isCompletedToday =
         (sessionState is WorkoutSessionCompleted &&
             sessionState.routine?.id == routine.id) ||
         (todaySession.value?.isCompleted ?? false);
+
+    if (hasActiveSession) {
+      final setsLogged =
+          (sessionState as WorkoutSessionActive).session.performedSets.length;
+      return AppButton.primary(
+        label: 'Resume Workout ($setsLogged sets logged)',
+        icon: Icons.play_arrow,
+        isFullWidth: true,
+        onPressed: onStart,
+      );
+    }
 
     if (isCompletedToday) {
       return AppButton.outline(

@@ -156,7 +156,8 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
     );
   }
 
-  /// Start a new workout session
+  /// Start a new workout session, or resume an existing active session
+  /// for the same routine.
   Future<void> startSession({
     required String routineModelId,
     String? assignedProgramId,
@@ -169,6 +170,32 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
     }
 
     state = const WorkoutSessionLoading();
+
+    // Check for an existing active session for the same routine first.
+    // This prevents creating orphan sessions when the user leaves and
+    // returns to the same workout.
+    final activeResult = await _repository.getActiveSession(_userId!);
+    if (!ref.mounted) return;
+    final activeSession = activeResult.valueOrNull;
+    if (activeSession != null && activeSession.routineId == routineModelId) {
+      // Resume the existing session — all logged sets are already in the
+      // model's performedSets (loaded from Drift by getActiveSession).
+      final routineResult = await _repository.getRoutineByModelId(
+        routineModelId,
+      );
+      if (!ref.mounted) return;
+      final routine = routineResult.valueOrNull;
+
+      state = WorkoutSessionActive(
+        session: activeSession,
+        routine: routine,
+        currentExerciseIndex: _calculateCurrentExerciseIndex(
+          activeSession,
+          routine,
+        ),
+      );
+      return;
+    }
 
     // Get routine first
     final routineResult = await _repository.getRoutineByModelId(routineModelId);
