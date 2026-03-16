@@ -332,6 +332,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
 
                       const SizedBox(height: 12),
+                    // ── Home Status CTA (M-CL1 / M-CL7) ────────
+                    // First gated section = prominent (compact: false),
+                    // all subsequent coach sections use compact mode.
+                    homeStatusAsync.when(
+                      data: (status) {
+                        switch (status) {
+                          case HomeStatus.noCoach:
+                            if (isCoach) return const SizedBox.shrink();
+                            return _FindCoachCta(isDark: isDark);
+                          case HomeStatus.noSubscription:
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 24),
+                              child: SubscriptionGatedWidget(
+                                requiredTier: SubscriptionTiers.basic,
+                                feature: SubscriptionFeature.coachWorkout,
+                                compact:
+                                    false, // Prominent: first gated section
+                                child: const SizedBox.shrink(),
+                              ),
+                            );
+                          case HomeStatus.waitingForProgram:
+                            return _WaitingForProgramCard(isDark: isDark);
+                          case HomeStatus.restDay:
+                          case HomeStatus.hasRoutine:
+                            return const SizedBox.shrink();
+                        }
+                      },
+                      loading: () => _buildStatusSkeleton(isDark),
+                      error: (_, __) => const SizedBox.shrink(),
+                    ),
 
                       // Progress quick action
                       Row(
