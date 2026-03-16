@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../client_pose/data/client_pose_repository.dart';
+import '../../../guidance/guidance.dart';
 import '../../data/models/models.dart';
 import '../../data/workout_repository.dart';
 import '../providers/workout_session_provider.dart';
@@ -29,6 +30,17 @@ class RoutineDetailScreen extends ConsumerStatefulWidget {
 
 class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
   late Future<RoutineModel?> _routineFuture;
+
+  // Guidance tour GlobalKeys
+  final _exerciseCardKey = GlobalKey(
+    debugLabel: 'routine_detail_exercise_card',
+  );
+  final _analyzeFormKey = GlobalKey(debugLabel: 'routine_detail_analyze_form');
+  final _prescriptionKey = GlobalKey(debugLabel: 'routine_detail_prescription');
+  final _startWorkoutKey = GlobalKey(
+    debugLabel: 'routine_detail_start_workout',
+  );
+  bool _tourTriggered = false;
 
   @override
   void initState() {
@@ -213,6 +225,23 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
           );
         }
 
+        // Trigger guidance tour on first visit with exercises
+        if (!_tourTriggered && routine.exercises.isNotEmpty) {
+          _tourTriggered = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            final repo = ref.read(guidanceRepositoryProvider);
+            if (!repo.isCompleted(GuidanceRepository.kRoutineDetail)) {
+              ref
+                  .read(tourProvider.notifier)
+                  .startTour(
+                    GuidanceRepository.kRoutineDetail,
+                    kRoutineDetailTourSteps,
+                  );
+            }
+          });
+        }
+
         final sessionState = ref.watch(workoutSessionProvider);
         final todaySession = ref.watch(
           todayCompletedSessionProvider(routine.id),
@@ -267,6 +296,7 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
                     ),
                   ],
                   _StartWorkoutButton(
+                    key: _startWorkoutKey,
                     routine: routine,
                     onStart: () => _pickStartExerciseAndWorkout(routine),
                   ),
@@ -280,6 +310,19 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
               SliverAppBar(
                 expandedHeight: 140,
                 pinned: true,
+                actions: [
+                  InfoIconButton(
+                    content: kRoutineDetailHelp,
+                    onTapOverride: () {
+                      ref
+                          .read(tourProvider.notifier)
+                          .startTour(
+                            GuidanceRepository.kRoutineDetail,
+                            kRoutineDetailTourSteps,
+                          );
+                    },
+                  ),
+                ],
                 flexibleSpace: FlexibleSpaceBar(
                   title: Text(
                     routine.name,
@@ -389,7 +432,12 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
               else
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: _ExerciseListSliver(routine: routine),
+                  sliver: _ExerciseListSliver(
+                    routine: routine,
+                    exerciseCardKey: _exerciseCardKey,
+                    analyzeFormKey: _analyzeFormKey,
+                    prescriptionKey: _prescriptionKey,
+                  ),
                 ),
 
               // Bottom spacing to account for persistent bottom bar
@@ -404,9 +452,17 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
 
 /// Extracted sliver that watches both active session and today's history.
 class _ExerciseListSliver extends ConsumerWidget {
-  const _ExerciseListSliver({required this.routine});
+  const _ExerciseListSliver({
+    required this.routine,
+    this.exerciseCardKey,
+    this.analyzeFormKey,
+    this.prescriptionKey,
+  });
 
   final RoutineModel routine;
+  final GlobalKey? exerciseCardKey;
+  final GlobalKey? analyzeFormKey;
+  final GlobalKey? prescriptionKey;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -442,6 +498,9 @@ class _ExerciseListSliver extends ConsumerWidget {
           routineExercise: exercise,
           index: index,
           completedSets: completedSets,
+          exerciseCardKey: index == 0 ? exerciseCardKey : null,
+          analyzeFormKey: index == 0 ? analyzeFormKey : null,
+          prescriptionKey: index == 0 ? prescriptionKey : null,
         );
       }, childCount: routine.exercises.length),
     );
@@ -450,7 +509,11 @@ class _ExerciseListSliver extends ConsumerWidget {
 
 /// Primary routine action button based on today's completion state.
 class _StartWorkoutButton extends ConsumerWidget {
-  const _StartWorkoutButton({required this.routine, required this.onStart});
+  const _StartWorkoutButton({
+    super.key,
+    required this.routine,
+    required this.onStart,
+  });
 
   final RoutineModel routine;
   final VoidCallback onStart;
@@ -544,12 +607,18 @@ class _ExerciseCard extends StatelessWidget {
     required this.index,
     this.completedSets = 0,
     this.onTap,
+    this.exerciseCardKey,
+    this.analyzeFormKey,
+    this.prescriptionKey,
   });
 
   final RoutineExerciseModel routineExercise;
   final int index;
   final int completedSets;
   final void Function(int index)? onTap;
+  final GlobalKey? exerciseCardKey;
+  final GlobalKey? analyzeFormKey;
+  final GlobalKey? prescriptionKey;
 
   @override
   Widget build(BuildContext context) {
@@ -559,6 +628,7 @@ class _ExerciseCard extends StatelessWidget {
     final isExerciseComplete = completedSets >= routineExercise.sets;
 
     return Padding(
+      key: exerciseCardKey,
       padding: const EdgeInsets.only(bottom: 12),
       child: AppCard.elevated(
         onTap: onTap == null ? null : () => onTap!(index),
@@ -614,6 +684,7 @@ class _ExerciseCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
+                          key: prescriptionKey,
                           '${routineExercise.sets} sets x '
                           '${routineExercise.repsMin}-${routineExercise.repsMax} reps'
                           '${routineExercise.restSeconds > 0 ? ' • ${routineExercise.restSeconds}s rest' : ''}',
@@ -674,6 +745,7 @@ class _ExerciseCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton.icon(
+                    key: analyzeFormKey,
                     onPressed: () => context.push(
                       AppRoutes.clientViewForm.replaceFirst(
                         ':id',

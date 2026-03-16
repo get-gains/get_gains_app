@@ -20,6 +20,7 @@ import '../../../coach_pose/data/models/models.dart';
 import '../../../coach_pose/services/pose_detection_service.dart';
 import '../../../coach_pose/services/setup_validation_service.dart';
 import '../../../coach_pose/presentation/widgets/setup_checklist.dart';
+import '../../../guidance/guidance.dart';
 import '../../../unity/data/unity_cosmetics_loader.dart';
 import '../../../unity/data/unity_message_contract.dart';
 import '../../../workout/data/models/models.dart';
@@ -89,6 +90,11 @@ class _ClientUnityRecordingScreenState
   bool _isLoggingSet = false;
   bool _isNavigatingAfterLog = false;
   late int _workoutSetNumber;
+
+  // ── Guidance state ───────────────────────────────────────────────────
+  bool _preBriefDismissed = false;
+  bool _tipDismissed = false;
+  bool _resultsFirstTimeShown = false;
 
   // ── Setup validation ──────────────────────────────────────────────────────
   final SetupValidationService _setupValidator = SetupValidationService();
@@ -582,6 +588,8 @@ class _ClientUnityRecordingScreenState
                   : 'Switch to 3D Unity',
               onPressed: () => setState(() => _showUnity = !_showUnity),
             ),
+            // Help / guidance info
+            InfoIconButton(content: kRecordingHelp),
           ],
         ),
         body: Stack(
@@ -730,53 +738,140 @@ class _ClientUnityRecordingScreenState
     ClientRecordingReady state,
     bool isDark,
   ) {
-    return Column(
+    final showPreBrief =
+        !_preBriefDismissed &&
+        !ref
+            .read(guidanceRepositoryProvider)
+            .isCompleted(GuidanceRepository.kRecording);
+
+    return Stack(
+      fit: StackFit.expand,
       children: [
-        // Camera preview with setup checklist overlay
-        Expanded(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Full-screen camera preview
-              _buildCameraPreview(isDark),
+        Column(
+          children: [
+            // Camera preview with setup checklist overlay
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Full-screen camera preview
+                  _buildCameraPreview(isDark),
 
-              // Setup checklist overlay (top)
-              if (_setupValidation != null)
-                Positioned(
-                  top: 16,
-                  left: 16,
-                  right: 16,
-                  child: SetupChecklist(validation: _setupValidation),
-                ),
+                  // Setup checklist overlay (top)
+                  if (_setupValidation != null)
+                    Positioned(
+                      top: 16,
+                      left: 16,
+                      right: 16,
+                      child: SetupChecklist(validation: _setupValidation),
+                    ),
 
-              // Camera angle badge (bottom-left)
-              Positioned(
-                bottom: 16,
-                left: 16,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _formatAngle(state.cameraAngle),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+                  // Camera angle badge (bottom-left)
+                  Positioned(
+                    bottom: 16,
+                    left: 16,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _formatAngle(state.cameraAngle),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
+            _buildReadyControls(context, state, isDark),
+          ],
+        ),
+
+        // Pre-brief instructional overlay (first-time only)
+        if (showPreBrief) _buildPreBriefOverlay(context, isDark),
+      ],
+    );
+  }
+
+  Widget _buildPreBriefOverlay(BuildContext context, bool isDark) {
+    final theme = Theme.of(context);
+    return Container(
+      color: Colors.black87,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.videocam_outlined,
+                    size: 48,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Before You Record',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ...kRecordingHelp.sections.map(
+                    (section) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.check_circle_outline,
+                            size: 20,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              section.body,
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () {
+                        setState(() => _preBriefDismissed = true);
+                        ref
+                            .read(guidanceRepositoryProvider)
+                            .markCompleted(GuidanceRepository.kRecording);
+                      },
+                      child: const Text('Got it'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
-        _buildReadyControls(context, state, isDark),
-      ],
+      ),
     );
   }
 
@@ -811,6 +906,51 @@ class _ClientUnityRecordingScreenState
                 left: 16,
                 child: _buildFrameCount(state.clientFeatureFrames.length),
               ),
+
+              // Dismissible recording tip badge
+              if (!_tipDismissed)
+                Positioned(
+                  top: 16,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: AnimatedSlide(
+                      duration: const Duration(milliseconds: 300),
+                      offset: Offset.zero,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Follow the form on screen',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: () => setState(() => _tipDismissed = true),
+                              child: const Icon(
+                                Icons.close,
+                                size: 14,
+                                color: Colors.white54,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -1262,6 +1402,10 @@ class _ClientUnityRecordingScreenState
               ],
             ),
           ),
+          const SizedBox(height: 8),
+
+          // Score grading scale (first-time inline, then info icon)
+          _buildScoreExplainer(context, score, isDark),
           const SizedBox(height: 16),
 
           // ── Workout mode: set logger (above fold) ───────────────────
@@ -1269,32 +1413,6 @@ class _ClientUnityRecordingScreenState
             _buildSetLogger(context, state, isDark),
             const SizedBox(height: 16),
           ],
-
-          // Rep count
-          AppCard.elevated(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.repeat,
-                    color: isDark
-                        ? AppColors.primaryDark
-                        : AppColors.primaryLight,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Form analyzed',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
 
           // Segment scores
           if (state.result.segmentScores.isNotEmpty) ...[
@@ -1307,17 +1425,47 @@ class _ClientUnityRecordingScreenState
             const SizedBox(height: 8),
             ...state.result.segmentScores.entries
                 .where((e) => e.value > 0)
-                .map((e) => _buildSegmentRow(context, e.key, e.value, isDark)),
+                .map(
+                  (e) =>
+                      _buildSegmentRowWithInfo(context, e.key, e.value, isDark),
+                ),
           ],
 
           // Corrections
           if (state.result.corrections.isNotEmpty) ...[
             const SizedBox(height: 16),
-            Text(
-              'Form Corrections',
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+            // AI Form Suggestions header
+            Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'AI Form Suggestions',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.info_outline, size: 18),
+                  tooltip: 'About AI suggestions',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      showDragHandle: true,
+                      builder: (_) =>
+                          const ContextualHelpSheet(content: kResultsHelp),
+                    );
+                  },
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             ...state.result.corrections.map(
@@ -1806,6 +1954,131 @@ class _ClientUnityRecordingScreenState
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Segment row with an info icon that opens segment explanation.
+  Widget _buildSegmentRowWithInfo(
+    BuildContext context,
+    String name,
+    double score,
+    bool isDark,
+  ) {
+    return Row(
+      children: [
+        Expanded(child: _buildSegmentRow(context, name, score, isDark)),
+        SizedBox(
+          width: 28,
+          child: IconButton(
+            icon: const Icon(Icons.info_outline, size: 16),
+            tooltip: 'About this segment',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            onPressed: () {
+              final explanation = kSegmentExplanations[name];
+              if (explanation == null) return;
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                showDragHandle: true,
+                builder: (_) => ContextualHelpSheet(
+                  content: HelpContentModel(
+                    id: 'segment_$name',
+                    title: explanation.displayName,
+                    sections: [
+                      HelpSection(
+                        heading: 'What it Measures',
+                        body: explanation.description,
+                        iconName: 'analytics',
+                      ),
+                      HelpSection(
+                        heading: 'Improvement Tip',
+                        body: explanation.improvementTip,
+                        iconName: 'lightbulb',
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Score explainer — inline grading scale for first-time users, info icon otherwise.
+  Widget _buildScoreExplainer(BuildContext context, double score, bool isDark) {
+    final isFirstTime =
+        !_resultsFirstTimeShown &&
+        !ref
+            .read(guidanceRepositoryProvider)
+            .isCompleted(GuidanceRepository.kResults);
+
+    if (isFirstTime && !_resultsFirstTimeShown) {
+      // Mark shown so we don't re-trigger during this session
+      _resultsFirstTimeShown = true;
+      Future.microtask(() {
+        ref
+            .read(guidanceRepositoryProvider)
+            .markCompleted(GuidanceRepository.kResults);
+      });
+    }
+
+    if (isFirstTime) {
+      // First-time: show inline grading scale
+      return Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Score Guide',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            alignment: WrapAlignment.center,
+            children: kScoreGrades.map((grade) {
+              final (min, max, label) = grade;
+              return Text(
+                '$min-$max%: $label',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      );
+    }
+
+    // Returning user: small info icon
+    return Center(
+      child: TextButton.icon(
+        onPressed: () {
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            showDragHandle: true,
+            builder: (_) => const ContextualHelpSheet(content: kResultsHelp),
+          );
+        },
+        icon: const Icon(Icons.info_outline, size: 16),
+        label: Text(
+          scoreGradeLabel(score),
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
       ),
     );
   }
