@@ -42,6 +42,8 @@ class _TourOrchestratorState extends ConsumerState<TourOrchestrator>
   OverlayEntry? _overlayEntry;
   late AnimationController _animController;
   late Animation<double> _fadeAnimation;
+  // Cached notifier so overlay callbacks don't access `ref` after unmount.
+  late TourNotifier _tourNotifier;
 
   @override
   void initState() {
@@ -67,6 +69,7 @@ class _TourOrchestratorState extends ConsumerState<TourOrchestrator>
 
   @override
   Widget build(BuildContext context) {
+    _tourNotifier = ref.read(tourProvider.notifier);
     ref.listen<TourState>(tourProvider, (previous, next) {
       _onTourStateChanged(next);
     });
@@ -80,6 +83,15 @@ class _TourOrchestratorState extends ConsumerState<TourOrchestrator>
 
   void _onTourStateChanged(TourState next) {
     if (next is TourActive) {
+      // Only handle this tour if at least one of its steps targets a key
+      // registered on this orchestrator. This prevents an orchestrator on a
+      // background route (e.g. home screen still on the back-stack) from
+      // consuming a tour intended for the foreground screen and prematurely
+      // skipping it.
+      final hasRelevantKey = next.steps.any(
+        (step) => widget.tourKeys.containsKey(step.targetKey),
+      );
+      if (!hasRelevantKey) return;
       _showStep(next);
     } else {
       _removeOverlay();
@@ -102,9 +114,10 @@ class _TourOrchestratorState extends ConsumerState<TourOrchestrator>
         'GlobalKey — skipping',
         tag: 'TourOrchestrator',
       );
+      // Batch-skip: scan ahead to find the next step that has a registered key.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        ref.read(tourProvider.notifier).advance();
+        _skipToNextAvailableStep(state);
       });
       return;
     }
@@ -128,7 +141,8 @@ class _TourOrchestratorState extends ConsumerState<TourOrchestrator>
           'skipping',
           tag: 'TourOrchestrator',
         );
-        ref.read(tourProvider.notifier).advance();
+        if (!mounted) return;
+        _skipToNextAvailableStep(state);
         return;
       }
 
@@ -138,6 +152,34 @@ class _TourOrchestratorState extends ConsumerState<TourOrchestrator>
       Overlay.of(context).insert(_overlayEntry!);
       _animController.forward(from: 0);
     });
+  }
+
+  /// Scan forward from the current step to find the next step whose target key
+  /// is registered in [widget.tourKeys]. If found, jump directly to it via
+  /// [TourNotifier.goToStep]. Otherwise, complete the tour.
+  ///
+  /// This prevents the cascading one-by-one `advance()` callbacks that cause
+  /// rapid-fire overlay insertions and `ref.read()` after unmount.
+  void _skipToNextAvailableStep(TourActive state) {
+    if (!mounted) return;
+    int nextIndex = state.currentStepIndex + 1;
+    while (nextIndex < state.steps.length) {
+      final nextTargetKey = widget.tourKeys[state.steps[nextIndex].targetKey];
+      if (nextTargetKey != null) break;
+      AppLogger.warning(
+        'Tour step target "${state.steps[nextIndex].targetKey}" has no '
+        'registered GlobalKey — skipping',
+        tag: 'TourOrchestrator',
+      );
+      nextIndex++;
+    }
+    if (nextIndex >= state.steps.length) {
+      // All remaining steps are missing — complete the tour
+      _tourNotifier.skip();
+    } else {
+      // Jump directly to the next available step
+      _tourNotifier.goToStep(nextIndex);
+    }
   }
 
   void _removeOverlay() {
@@ -203,7 +245,7 @@ class _TourOrchestratorState extends ConsumerState<TourOrchestrator>
             // Dimmed backdrop with cutout (covers full screen)
             Positioned.fill(
               child: GestureDetector(
-                onTap: () => ref.read(tourProvider.notifier).skip(),
+                onTap: () => _tourNotifier.skip(),
                 child: CustomPaint(
                   size: screen,
                   painter: _SpotlightPainter(
@@ -225,8 +267,8 @@ class _TourOrchestratorState extends ConsumerState<TourOrchestrator>
                   step: state.currentStep,
                   stepIndex: state.currentStepIndex,
                   totalSteps: state.steps.length,
-                  onNext: () => ref.read(tourProvider.notifier).advance(),
-                  onSkip: () => ref.read(tourProvider.notifier).skip(),
+                  onNext: () => _tourNotifier.advance(),
+                  onSkip: () => _tourNotifier.skip(),
                 ),
               ),
             ),

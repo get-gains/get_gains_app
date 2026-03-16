@@ -97,6 +97,24 @@ class TourNotifier extends _$TourNotifier {
     }
   }
 
+  /// Jump directly to a specific step index, skipping intermediate steps.
+  ///
+  /// Used by [TourOrchestrator] to batch-skip steps whose target widgets
+  /// are not mounted, avoiding cascading one-by-one advance callbacks.
+  void goToStep(int index) {
+    final current = state;
+    if (current is! TourActive) return;
+    if (index < 0 || index >= current.steps.length) {
+      _complete(current.tourId);
+      return;
+    }
+    state = TourActive(
+      tourId: current.tourId,
+      steps: current.steps,
+      currentStepIndex: index,
+    );
+  }
+
   /// Skip the remaining tour and mark complete.
   void skip() {
     final current = state;

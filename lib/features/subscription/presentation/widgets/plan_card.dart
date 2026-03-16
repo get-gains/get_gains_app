@@ -45,10 +45,13 @@ class PlanCard extends StatelessWidget {
                 // Plan name
                 Row(
                   children: [
-                    Text(
-                      _formatPlanName(plan.name),
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
+                    Flexible(
+                      child: Text(
+                        _formatPlanName(plan.name),
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                     if (isCurrentPlan) ...[
