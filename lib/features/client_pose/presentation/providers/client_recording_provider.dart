@@ -66,6 +66,7 @@ class ClientRecordingActive extends ClientRecordingState {
     required this.clientFeatureFrames,
     required this.repCount,
     required this.recordingDurationMs,
+    required this.referenceDurationMs,
     this.poseConfig,
     this.coachName,
   });
@@ -79,6 +80,7 @@ class ClientRecordingActive extends ClientRecordingState {
   final List<FeatureFrame> clientFeatureFrames;
   final int repCount;
   final int recordingDurationMs;
+  final int referenceDurationMs;
   final PoseConfigModel? poseConfig;
   final String? coachName;
 }
@@ -140,6 +142,7 @@ class ClientRecording extends _$ClientRecording {
   String? _coachName;
   PoseConfigModel? _poseConfig;
   int _recordingStartMs = 0;
+  int _referenceDurationMs = 0;
   Timer? _elapsedTimer;
 
   @override
@@ -158,11 +161,11 @@ class ClientRecording extends _$ClientRecording {
       final repo = ref.read(clientPoseRepositoryProvider);
       final resultFuture = repo.downloadExerciseForm(exerciseId);
 
-      // Apply a 15-second timeout so the screen never hangs indefinitely
+      // Form downloads contain heavy landmark payloads — allow generous timeout
       final result = await resultFuture.timeout(
-        const Duration(seconds: 15),
+        const Duration(seconds: 120),
         onTimeout: () => throw TimeoutException(
-          'Server did not respond within 15 seconds. Check your connection.',
+          'Server did not respond within 120 seconds. Check your connection.',
         ),
       );
 
@@ -237,6 +240,21 @@ class ClientRecording extends _$ClientRecording {
             }
           }
 
+          // Compute reference duration for auto-stop
+          final formDurationMs = form['durationMs'] as int?;
+          if (formDurationMs != null && formDurationMs > 0) {
+            _referenceDurationMs = formDurationMs + 500; // 500ms buffer
+          } else if (referenceFrames.isNotEmpty) {
+            // Fallback: derive from frame count at 30 FPS
+            _referenceDurationMs =
+                ((referenceFrames.length / 30) * 1000).round() + 500;
+          }
+          AppLogger.info(
+            'Reference form duration: ${_referenceDurationMs}ms '
+            '(${referenceFrames.length} frames)',
+            tag: 'ClientRecording',
+          );
+
           state = ClientRecordingReady(
             exerciseName: _exerciseName ?? 'Exercise',
             referenceFrames: referenceFrames,
@@ -282,15 +300,30 @@ class ClientRecording extends _$ClientRecording {
       clientFeatureFrames: const [],
       repCount: 0,
       recordingDurationMs: 0,
+      referenceDurationMs: _referenceDurationMs,
       poseConfig: _poseConfig,
       coachName: _coachName,
     );
 
-    // Update elapsed time every second so REC badge counts up
+    // Update elapsed time every second so REC badge counts up.
+    // Auto-stop recording when elapsed >= reference duration.
     _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (state is! ClientRecordingActive) return;
       final active = state as ClientRecordingActive;
-      final elapsedMs = DateTime.now().millisecondsSinceEpoch - _recordingStartMs;
+      final elapsedMs =
+          DateTime.now().millisecondsSinceEpoch - _recordingStartMs;
+
+      // Auto-stop: elapsed reached the coach reference form duration
+      if (_referenceDurationMs > 0 && elapsedMs >= _referenceDurationMs) {
+        AppLogger.info(
+          'Auto-stopping recording: elapsed ${elapsedMs}ms >= '
+          'reference ${_referenceDurationMs}ms',
+          tag: 'ClientRecording',
+        );
+        stopRecordingAndCompare();
+        return;
+      }
+
       state = ClientRecordingActive(
         exerciseName: active.exerciseName,
         formId: active.formId,
@@ -301,6 +334,7 @@ class ClientRecording extends _$ClientRecording {
         clientFeatureFrames: active.clientFeatureFrames,
         repCount: active.repCount,
         recordingDurationMs: elapsedMs,
+        referenceDurationMs: _referenceDurationMs,
         poseConfig: active.poseConfig,
         coachName: active.coachName,
       );
@@ -359,8 +393,10 @@ class ClientRecording extends _$ClientRecording {
       );
 
       var clientLandmarksForPipeline = rawLandmarks;
-      var poseFps = recordingDurationMs > 0 && clientLandmarksForPipeline.isNotEmpty
-          ? (clientLandmarksForPipeline.length * 1000 / recordingDurationMs).round()
+      var poseFps =
+          recordingDurationMs > 0 && clientLandmarksForPipeline.isNotEmpty
+          ? (clientLandmarksForPipeline.length * 1000 / recordingDurationMs)
+                .round()
           : 0;
 
       // Post-processing: if below 30 FPS but we have enough data, upsample to 30 FPS
@@ -378,7 +414,9 @@ class ClientRecording extends _$ClientRecording {
           recordingDurationMs,
           kMinClientFrameRate,
         );
-        poseFps = (clientLandmarksForPipeline.length * 1000 / recordingDurationMs).round();
+        poseFps =
+            (clientLandmarksForPipeline.length * 1000 / recordingDurationMs)
+                .round();
       }
 
       if (poseFps < kMinClientFrameRate) {
@@ -440,15 +478,19 @@ class ClientRecording extends _$ClientRecording {
         cameraAngle: activeState.cameraAngle,
         avgLandmarkConfidence: null,
       );
-      List<LandmarkFrame> bestTrimmedLandmarks =
-          clientLandmarksForPipeline.sublist(0, trimLen);
+      List<LandmarkFrame> bestTrimmedLandmarks = clientLandmarksForPipeline
+          .sublist(0, trimLen);
 
       final maxOffset = trimLen == refLen
           ? math.min(maxOffsetFrames, clientLen - refLen)
           : -1;
       if (maxOffset > 0) {
         int tries = 0;
-        for (int o = 0; o <= maxOffset && tries < maxTries; o += offsetStep, tries++) {
+        for (
+          int o = 0;
+          o <= maxOffset && tries < maxTries;
+          o += offsetStep, tries++
+        ) {
           if (o + refLen > clientLen) break;
           final trimmed = clientLandmarksForPipeline.sublist(o, o + refLen);
           final normalizedLandmarks = _preprocessor.processBatch(trimmed);
@@ -553,5 +595,4 @@ class ClientRecording extends _$ClientRecording {
       state = const ClientRecordingInitial();
     }
   }
-
 }

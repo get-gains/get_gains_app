@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../guidance/guidance.dart';
 import '../../../home/presentation/providers/home_providers.dart';
 import '../../data/models/models.dart';
 import '../providers/exercise_log_provider.dart';
@@ -37,6 +38,15 @@ class WorkoutSessionScreen extends ConsumerStatefulWidget {
 class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
   final PageController _pageController = PageController();
   bool _isAutoRoutingToRecording = false;
+  bool _tourTriggered = false;
+
+  // Guidance GlobalKeys
+  final _exerciseTabsKey = GlobalKey(
+    debugLabel: 'workout_session_exercise_tabs',
+  );
+  final _setInputKey = GlobalKey(debugLabel: 'workout_session_set_input');
+  final _progressKey = GlobalKey(debugLabel: 'workout_session_progress');
+  final _finishButtonKey = GlobalKey(debugLabel: 'workout_session_finish');
 
   @override
   void initState() {
@@ -142,24 +152,14 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     final state = ref.read(workoutSessionProvider);
     if (state is! WorkoutSessionActive) return true;
 
-    final shouldLeave = await showDialog<bool>(
+    final shouldLeave = await showAppConfirmDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Leave Workout?'),
-        content: const Text(
+      title: 'Leave Workout?',
+      message:
           'Your progress will be saved. You can continue this workout later.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Leave'),
-          ),
-        ],
-      ),
+      confirmLabel: 'Leave',
+      cancelLabel: 'Cancel',
+      isDestructive: true,
     );
 
     return shouldLeave ?? false;
@@ -272,12 +272,20 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
           context.go(AppRoutes.home);
         }
       },
-      child: Scaffold(
-        backgroundColor: isDark
-            ? AppColors.backgroundDark
-            : AppColors.backgroundLight,
-        appBar: _buildAppBar(context, sessionState, isDark),
-        body: _buildBody(context, sessionState, isDark),
+      child: TourOrchestrator(
+        tourKeys: {
+          'workout_session_exercise_tabs': _exerciseTabsKey,
+          'workout_session_set_input': _setInputKey,
+          'workout_session_progress': _progressKey,
+          'workout_session_finish': _finishButtonKey,
+        },
+        child: Scaffold(
+          backgroundColor: isDark
+              ? AppColors.backgroundDark
+              : AppColors.backgroundLight,
+          appBar: _buildAppBar(context, sessionState, isDark),
+          body: _buildBody(context, sessionState, isDark),
+        ),
       ),
     );
   }
@@ -320,19 +328,47 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
         ],
       ),
       centerTitle: true,
+      actions: [
+        InfoIconButton(
+          content: kWorkoutSessionHelp,
+          onTapOverride: () {
+            ref
+                .read(tourProvider.notifier)
+                .startTour('workout_session', kWorkoutSessionTourSteps);
+          },
+        ),
+      ],
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(4),
-        child: LinearProgressIndicator(
-          value: state.progress,
-          backgroundColor: isDark
-              ? AppColors.surfaceDark
-              : AppColors.surfaceLight,
-          valueColor: AlwaysStoppedAnimation<Color>(
-            isDark ? AppColors.primaryDark : AppColors.primaryLight,
+        child: KeyedSubtree(
+          key: _progressKey,
+          child: LinearProgressIndicator(
+            value: state.progress,
+            backgroundColor: isDark
+                ? AppColors.surfaceDark
+                : AppColors.surfaceLight,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              isDark ? AppColors.primaryDark : AppColors.primaryLight,
+            ),
           ),
         ),
       ),
     );
+  }
+
+  void _maybeStartTour(WorkoutSessionActive state) {
+    if (_tourTriggered || widget.readOnly) return;
+    _tourTriggered = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final repo = ref.read(guidanceRepositoryProvider);
+      if (!repo.isCompleted(GuidanceRepository.kWorkoutSession)) {
+        ref
+            .read(tourProvider.notifier)
+            .startTour('workout_session', kWorkoutSessionTourSteps);
+      }
+    });
   }
 
   Widget _buildBody(
@@ -378,14 +414,19 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
+    _maybeStartTour(state);
+
     return Column(
       children: [
         // Exercise tabs/indicators
-        ExerciseTabBar(
-          exercises: state.routine!.exercises,
-          currentIndex: state.currentExerciseIndex,
-          session: state.session,
-          onTap: _onExerciseChanged,
+        KeyedSubtree(
+          key: _exerciseTabsKey,
+          child: ExerciseTabBar(
+            exercises: state.routine!.exercises,
+            currentIndex: state.currentExerciseIndex,
+            session: state.session,
+            onTap: _onExerciseChanged,
+          ),
         ),
 
         // Exercise content
@@ -401,7 +442,7 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
                   ? completedSets.last.id
                   : 'none';
 
-              return ExerciseLogCard(
+              final card = ExerciseLogCard(
                 key: ValueKey(
                   '${exercise.id}-${completedSets.length}-$latestSetId',
                 ),
@@ -410,12 +451,21 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
                 onSetCompleted: _onSetCompleted,
                 readOnly: widget.readOnly,
               );
+
+              // Attach tour key to the first exercise card
+              if (index == 0) {
+                return KeyedSubtree(key: _setInputKey, child: card);
+              }
+              return card;
             },
           ),
         ),
 
         // Bottom actions
-        _buildBottomActions(context, state, isDark),
+        KeyedSubtree(
+          key: _finishButtonKey,
+          child: _buildBottomActions(context, state, isDark),
+        ),
       ],
     );
   }

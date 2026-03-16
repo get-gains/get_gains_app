@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../guidance/guidance.dart';
 
 /// Set Input Row
 ///
@@ -40,7 +41,9 @@ class SetInputRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = isDark ? AppColors.primaryDark : AppColors.primaryLight;
+    final primaryColor = isDark
+        ? AppColors.primaryDark
+        : AppColors.primaryLight;
 
     Color backgroundColor;
     Color borderColor;
@@ -52,9 +55,7 @@ class SetInputRow extends StatelessWidget {
       backgroundColor = primaryColor.withValues(alpha: 0.1);
       borderColor = primaryColor;
     } else {
-      backgroundColor = isDark
-          ? AppColors.surfaceDark
-          : AppColors.surfaceLight;
+      backgroundColor = isDark ? AppColors.surfaceDark : AppColors.surfaceLight;
       borderColor = isDark ? AppColors.borderDark : AppColors.borderLight;
     }
 
@@ -113,38 +114,52 @@ class SetInputRow extends StatelessWidget {
 
             // Complete button / check
             if (isCompleted)
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.success,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.check,
-                  color: Colors.white,
-                  size: 20,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _RpeInfoIcon(rpe: rpe),
+                  const SizedBox(width: 4),
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.success,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ],
               )
             else if (isActive)
-              GestureDetector(
-                onTap: () {
-                  HapticFeedback.mediumImpact();
-                  onComplete();
-                },
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: primaryColor,
-                    shape: BoxShape.circle,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _RpeInfoIcon(rpe: rpe),
+                  const SizedBox(width: 4),
+                  GestureDetector(
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      onComplete();
+                    },
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: primaryColor,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.check,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
+                ],
               )
             else
               Container(
@@ -173,6 +188,140 @@ class SetInputRow extends StatelessWidget {
   }
 }
 
+/// Compact RPE indicator with info icon that shows RPE scale explanation.
+class _RpeInfoIcon extends StatelessWidget {
+  const _RpeInfoIcon({required this.rpe});
+
+  final int? rpe;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _showRpeSheet(context),
+      child: Tooltip(
+        message: 'RPE Info',
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (rpe != null)
+              Text(
+                '$rpe',
+                style: Theme.of(
+                  context,
+                ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold),
+              ),
+            Icon(
+              Icons.info_outline,
+              size: 16,
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? AppColors.textSecondaryDark
+                  : AppColors.textSecondaryLight,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRpeSheet(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (context, scrollController) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: ListView(
+            controller: scrollController,
+            children: [
+              Text(
+                'RPE Scale (Rate of Perceived Exertion)',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'RPE helps you track workout intensity. Use this scale to gauge how hard each set felt.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                ),
+              ),
+              const Divider(height: 24),
+              ...kRpeScaleEntries.map(
+                (entry) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: _rpeColor(entry.level, isDark),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Center(
+                          child: Text(
+                            '${entry.level}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              entry.label,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                            Text(
+                              entry.description,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: isDark
+                                        ? AppColors.textSecondaryDark
+                                        : AppColors.textSecondaryLight,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _rpeColor(int level, bool isDark) {
+    if (level <= 3) return Colors.green;
+    if (level <= 5) return Colors.lightGreen;
+    if (level <= 7) return Colors.orange;
+    if (level <= 9) return Colors.deepOrange;
+    return Colors.red;
+  }
+}
+
 class _SetIndicator extends StatelessWidget {
   const _SetIndicator({
     required this.number,
@@ -187,7 +336,9 @@ class _SetIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = isDark ? AppColors.primaryDark : AppColors.primaryLight;
+    final primaryColor = isDark
+        ? AppColors.primaryDark
+        : AppColors.primaryLight;
 
     Color backgroundColor;
     Color textColor;
@@ -210,10 +361,7 @@ class _SetIndicator extends StatelessWidget {
     return Container(
       width: 32,
       height: 32,
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        shape: BoxShape.circle,
-      ),
+      decoration: BoxDecoration(color: backgroundColor, shape: BoxShape.circle),
       child: Center(
         child: Text(
           number.toString(),
@@ -248,7 +396,9 @@ class _NumberInput extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = isDark ? AppColors.primaryDark : AppColors.primaryLight;
+    final primaryColor = isDark
+        ? AppColors.primaryDark
+        : AppColors.primaryLight;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,10 +406,10 @@ class _NumberInput extends StatelessWidget {
         Text(
           label,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: isDark
-                    ? AppColors.textSecondaryDark
-                    : AppColors.textSecondaryLight,
-              ),
+            color: isDark
+                ? AppColors.textSecondaryDark
+                : AppColors.textSecondaryLight,
+          ),
         ),
         const SizedBox(height: 4),
         Row(
@@ -283,8 +433,8 @@ class _NumberInput extends StatelessWidget {
                     color: value > 0
                         ? primaryColor
                         : (isDark
-                            ? AppColors.textSecondaryDark
-                            : AppColors.textSecondaryLight),
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight),
                   ),
                 ),
               ),
@@ -296,18 +446,16 @@ class _NumberInput extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Text(
-                    decimals
-                        ? value.toStringAsFixed(0)
-                        : value.toString(),
+                    decimals ? value.toStringAsFixed(0) : value.toString(),
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: enabled
-                              ? null
-                              : (isDark
-                                  ? AppColors.textSecondaryDark
-                                  : AppColors.textSecondaryLight),
-                        ),
+                      fontWeight: FontWeight.bold,
+                      color: enabled
+                          ? null
+                          : (isDark
+                                ? AppColors.textSecondaryDark
+                                : AppColors.textSecondaryLight),
+                    ),
                   ),
                 ),
               ),
@@ -324,11 +472,7 @@ class _NumberInput extends StatelessWidget {
                     color: primaryColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Icon(
-                    Icons.add,
-                    size: 16,
-                    color: primaryColor,
-                  ),
+                  child: Icon(Icons.add, size: 16, color: primaryColor),
                 ),
               ),
           ],
@@ -363,7 +507,8 @@ class _NumberInput extends StatelessWidget {
           ),
           TextButton(
             onPressed: () {
-              final parsed = int.tryParse(controller.text) ??
+              final parsed =
+                  int.tryParse(controller.text) ??
                   double.tryParse(controller.text)?.toInt();
               Navigator.of(context).pop(parsed);
             },

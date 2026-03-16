@@ -68,8 +68,10 @@ class FormRecordingState {
   final List<LandmarkFrame> rawFrames;
   final List<LandmarkFrame> processedFrames;
   final List<FeatureFrame> featureFrames;
+
   /// Raw camera frames captured during recording (no MLKit). Processed in batch after stop.
   final List<CapturedFrame> capturedFrames;
+
   /// Set when recording stops; used for FPS = capturedFrameCount / duration (camera FPS).
   final int capturedFrameCount;
   final int? recordingStartMs;
@@ -477,7 +479,9 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
           : 0;
 
       // Post-processing: if pose data is below 30 FPS but we have enough to interpolate, upsample
-      const minFpsToUpsample = 15;
+      // Threshold matches client_recording_provider (10 FPS) so both pipelines
+      // handle low capture rates (e.g. ~12 FPS with Unity + camera) equally.
+      const minFpsToUpsample = 10;
       if (frameRate < kMinFrameRate &&
           frameRate >= minFpsToUpsample &&
           state.recordingDurationMs > 0) {
@@ -491,7 +495,9 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
           kMinFrameRate,
         );
         featureFrames = _featureExtractor.extractBatch(processedFrames);
-        normalizedForUpload = processedFrames.map(_preprocessor.normalize).toList();
+        normalizedForUpload = processedFrames
+            .map(_preprocessor.normalize)
+            .toList();
         poseFrameCount = processedFrames.length;
         frameRate = kMinFrameRate;
       }

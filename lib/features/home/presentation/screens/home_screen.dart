@@ -10,6 +10,7 @@ import '../../../../providers/router_provider.dart';
 import '../../../../services/api/api_client.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../gains_coins/presentation/widgets/coin_balance_widget.dart';
+import '../../../guidance/guidance.dart';
 import '../../../profile/profile.dart';
 import '../../../subscription/subscription.dart';
 import '../../../workout/data/models/models.dart';
@@ -66,6 +67,16 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _onboardingShown = false;
+  bool _tourTriggered = false;
+
+  // Guidance GlobalKeys
+  final _todaysFocusKey = GlobalKey(debugLabel: 'home_todays_focus');
+  final _weeklyProgressKey = GlobalKey(debugLabel: 'home_weekly_progress');
+  final _quickActionsKey = GlobalKey(debugLabel: 'home_quick_action_start');
+  final _quickActionsHistoryKey = GlobalKey(
+    debugLabel: 'home_quick_action_history',
+  );
+  final _recentActivityKey = GlobalKey(debugLabel: 'home_recent_activity');
 
   @override
   Widget build(BuildContext context) {
@@ -78,6 +89,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           if (mounted) showOnboardingSheet(context);
         });
       }
+      // Trigger tour when onboarding transitions to completed
+      if (previous == true && !needsOnboarding) {
+        _maybeStartTour();
+      }
     });
 
     // Also check on first build (listen only fires on change)
@@ -87,6 +102,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) showOnboardingSheet(context);
       });
+    }
+
+    // Trigger tour on initial load if onboarding is already done
+    if (!needsOnboarding && !_tourTriggered) {
+      _maybeStartTour();
     }
 
     final authState = ref.watch(authStateProvider);
@@ -102,226 +122,199 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final greeting = _getGreeting();
     final isCoach = isCoachAsync.asData?.value ?? false;
 
-    return Scaffold(
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _onRefresh,
-          child: CustomScrollView(
-            slivers: [
-              // App Bar
-              SliverAppBar(
-                floating: true,
-                title: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      greeting,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isDark
-                            ? AppColors.textSecondaryDark
-                            : AppColors.textSecondaryLight,
+    return TourOrchestrator(
+      tourKeys: {
+        'home_todays_focus': _todaysFocusKey,
+        'home_weekly_progress': _weeklyProgressKey,
+        'home_quick_action_start': _quickActionsKey,
+        'home_quick_action_history': _quickActionsHistoryKey,
+        'home_recent_activity': _recentActivityKey,
+      },
+      child: Scaffold(
+        body: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: _onRefresh,
+            child: CustomScrollView(
+              slivers: [
+                // App Bar
+                SliverAppBar(
+                  floating: true,
+                  title: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        greeting,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight,
+                        ),
                       ),
+                      Text(
+                        userName,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    CoinBalanceWidget(
+                      compact: true,
+                      onTap: () => context.push(AppRoutes.coinHistory),
                     ),
-                    Text(
-                      userName,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.notifications_outlined),
+                      onPressed: () {
+                        // TODO: Navigate to notifications
+                      },
+                    ),
+                    InfoIconButton(
+                      content: kHomeHelp,
+                      onTapOverride: () {
+                        ref
+                            .read(tourProvider.notifier)
+                            .startTour('home', kHomeTourSteps);
+                      },
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: GestureDetector(
+                        onTap: () => showProfileSheet(context),
+                        child: AppAvatar(
+                          name: userName,
+                          size: AppAvatarSize.sm,
+                        ),
                       ),
                     ),
                   ],
                 ),
-                actions: [
-                  CoinBalanceWidget(
-                    compact: true,
-                    onTap: () => context.push(AppRoutes.coinHistory),
-                  ),
-                  const SizedBox(width: 4),
-                  IconButton(
-                    icon: const Icon(Icons.notifications_outlined),
-                    onPressed: () {
-                      // TODO: Navigate to notifications
-                    },
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: GestureDetector(
-                      onTap: () => showProfileSheet(context),
-                      child: AppAvatar(name: userName, size: AppAvatarSize.sm),
-                    ),
-                  ),
-                ],
-              ),
 
-              // Content
-              SliverPadding(
-                padding: const EdgeInsets.all(16),
-                sliver: SliverList(
-                  delegate: SliverChildListDelegate([
-                    // ── Quick Actions Section ────────────────────
-                    _SectionHeader(title: 'Quick Actions', isDark: isDark),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: QuickActionCard(
-                            icon: Icons.fitness_center,
-                            title: 'Start Workout',
-                            subtitle: 'Begin your training',
-                            gradient: LinearGradient(
-                              colors: [
-                                isDark
-                                    ? AppColors.primaryDark
-                                    : AppColors.primaryLight,
-                                isDark
-                                    ? AppColors.primaryDark.withValues(
-                                        alpha: 0.7,
-                                      )
-                                    : AppColors.primaryLight.withValues(
-                                        alpha: 0.7,
-                                      ),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
+                // Content
+                SliverPadding(
+                  padding: const EdgeInsets.all(16),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      // ── Quick Actions Section ────────────────────
+                      _SectionHeader(title: 'Quick Actions', isDark: isDark),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: KeyedSubtree(
+                              key: _quickActionsKey,
+                              child: QuickActionCard(
+                                icon: Icons.fitness_center,
+                                title: 'Start Workout',
+                                subtitle: 'Begin your training',
+                                gradient: LinearGradient(
+                                  colors: [
+                                    isDark
+                                        ? AppColors.primaryDark
+                                        : AppColors.primaryLight,
+                                    isDark
+                                        ? AppColors.primaryDark.withValues(
+                                            alpha: 0.7,
+                                          )
+                                        : AppColors.primaryLight.withValues(
+                                            alpha: 0.7,
+                                          ),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                onTap: () => context.push(AppRoutes.routines),
+                              ),
                             ),
-                            onTap: () => context.push(AppRoutes.routines),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: QuickActionCard(
-                            icon: Icons.history,
-                            title: 'History',
-                            subtitle: 'View past workouts',
-                            gradient: LinearGradient(
-                              colors: [
-                                isDark
-                                    ? AppColors.secondaryDark
-                                    : AppColors.secondaryLight,
-                                isDark
-                                    ? AppColors.secondaryDark.withValues(
-                                        alpha: 0.7,
-                                      )
-                                    : AppColors.secondaryLight.withValues(
-                                        alpha: 0.7,
-                                      ),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: KeyedSubtree(
+                              key: _quickActionsHistoryKey,
+                              child: QuickActionCard(
+                                icon: Icons.history,
+                                title: 'History',
+                                subtitle: 'View past workouts',
+                                gradient: LinearGradient(
+                                  colors: [
+                                    isDark
+                                        ? AppColors.secondaryDark
+                                        : AppColors.secondaryLight,
+                                    isDark
+                                        ? AppColors.secondaryDark.withValues(
+                                            alpha: 0.7,
+                                          )
+                                        : AppColors.secondaryLight.withValues(
+                                            alpha: 0.7,
+                                          ),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                onTap: () =>
+                                    context.push(AppRoutes.workoutHistory),
+                              ),
                             ),
-                            onTap: () => context.push(AppRoutes.workoutHistory),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
 
-                    const SizedBox(height: 12),
+                      const SizedBox(height: 12),
 
-                    // Shop & Wardrobe quick actions
-                    Row(
-                      children: [
-                        Expanded(
-                          child: QuickActionCard(
-                            icon: Icons.storefront_rounded,
-                            title: 'Shop',
-                            subtitle: 'Cosmetics & gear',
-                            gradient: LinearGradient(
-                              colors: [
-                                const Color(0xFFFFD700),
-                                const Color(0xFFFFD700).withValues(alpha: 0.7),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            onTap: () => context.push(AppRoutes.shop),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: QuickActionCard(
-                            icon: Icons.checkroom_rounded,
-                            title: 'Wardrobe',
-                            subtitle: 'Equip cosmetics',
-                            gradient: LinearGradient(
-                              colors: [
-                                const Color(0xFF8B5CF6),
-                                const Color(0xFF8B5CF6).withValues(alpha: 0.7),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            onTap: () => context.push(AppRoutes.inventory),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // Leaderboard quick action
-                    Row(
-                      children: [
-                        Expanded(
-                          child: QuickActionCard(
-                            icon: Icons.leaderboard_rounded,
-                            title: 'Leaderboard',
-                            subtitle: 'Class rankings',
-                            gradient: LinearGradient(
-                              colors: [
-                                const Color(0xFF3B82F6),
-                                const Color(0xFF3B82F6).withValues(alpha: 0.7),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            onTap: () => context.push(AppRoutes.leaderboard),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // Progress quick action
-                    Row(
-                      children: [
-                        Expanded(
-                          child: QuickActionCard(
-                            icon: Icons.trending_up_rounded,
-                            title: 'Progress',
-                            subtitle: 'Track your gains',
-                            gradient: LinearGradient(
-                              colors: [
-                                isDark
-                                    ? AppColors.accentDark
-                                    : const Color(0xFF22C55E),
-                                isDark
-                                    ? AppColors.accentDark.withValues(
-                                        alpha: 0.7,
-                                      )
-                                    : const Color(
-                                        0xFF22C55E,
-                                      ).withValues(alpha: 0.7),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            onTap: () => context.push(AppRoutes.progress),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // Coach-only quick action (M-CF1-1)
-                    if (isCoach) ...[
+                      // Shop & Wardrobe quick actions
                       Row(
                         children: [
                           Expanded(
                             child: QuickActionCard(
-                              icon: Icons.sports,
-                              title: 'Coach Tools',
-                              subtitle: 'Programs, exercises & clients',
+                              icon: Icons.storefront_rounded,
+                              title: 'Shop',
+                              subtitle: 'Cosmetics & gear',
+                              gradient: LinearGradient(
+                                colors: [
+                                  const Color(0xFFFFD700),
+                                  const Color(
+                                    0xFFFFD700,
+                                  ).withValues(alpha: 0.7),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              onTap: () => context.push(AppRoutes.shop),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: QuickActionCard(
+                              icon: Icons.checkroom_rounded,
+                              title: 'Wardrobe',
+                              subtitle: 'Equip cosmetics',
+                              gradient: LinearGradient(
+                                colors: [
+                                  const Color(0xFF8B5CF6),
+                                  const Color(
+                                    0xFF8B5CF6,
+                                  ).withValues(alpha: 0.7),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              onTap: () => context.push(AppRoutes.inventory),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Leaderboard quick action
+                      Row(
+                        children: [
+                          Expanded(
+                            child: QuickActionCard(
+                              icon: Icons.leaderboard_rounded,
+                              title: 'Leaderboard',
+                              subtitle: 'Class rankings',
                               gradient: LinearGradient(
                                 colors: [
                                   const Color(0xFF3B82F6),
@@ -332,15 +325,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
-                              onTap: () => context.push(AppRoutes.coachHub),
+                              onTap: () => context.push(AppRoutes.leaderboard),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 24),
-                    ] else
-                      const SizedBox(height: 24),
 
+                      const SizedBox(height: 12),
                     // ── Home Status CTA (M-CL1 / M-CL7) ────────
                     // First gated section = prominent (compact: false),
                     // all subsequent coach sections use compact mode.
@@ -372,152 +363,273 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       error: (_, __) => const SizedBox.shrink(),
                     ),
 
-                    // ── Today's Focus Section (M-CL2) ───────────
-                    _SectionHeader(
-                      title: 'Today\'s Focus',
-                      isDark: isDark,
-                      action: TextButton(
-                        onPressed: () => context.push(AppRoutes.routines),
-                        child: const Text('See All'),
+                      // Progress quick action
+                      Row(
+                        children: [
+                          Expanded(
+                            child: QuickActionCard(
+                              icon: Icons.trending_up_rounded,
+                              title: 'Progress',
+                              subtitle: 'Track your gains',
+                              gradient: LinearGradient(
+                                colors: [
+                                  isDark
+                                      ? AppColors.accentDark
+                                      : const Color(0xFF22C55E),
+                                  isDark
+                                      ? AppColors.accentDark.withValues(
+                                          alpha: 0.7,
+                                        )
+                                      : const Color(
+                                          0xFF22C55E,
+                                        ).withValues(alpha: 0.7),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              onTap: () => context.push(AppRoutes.progress),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    todayAsync.when(
-                      data: (today) {
-                        if (today.isRestDay) {
-                          return WorkoutSummaryCard(
-                            routineName: 'Rest Day 🧘',
-                            description:
-                                'No routine scheduled today. Recovery is part of the process!',
-                            exerciseCount: 0,
-                            estimatedMinutes: 0,
-                            isPlaceholder: true,
-                            onStartPressed: () =>
-                                context.push(AppRoutes.routines),
-                          );
-                        }
-                        if (today.hasRoutine) {
-                          final details = today.today!;
-                          return WorkoutSummaryCard(
-                            routineName: today.displayName,
-                            description:
-                                '${details.programName} · Day ${details.dayNumber}',
-                            exerciseCount: today.exerciseCount,
-                            estimatedMinutes: today.estimatedMinutes,
-                            isPlaceholder: false,
-                            completedToday: today.completedToday,
-                            onStartPressed: today.completedToday
-                                ? null
-                                : () => context.push(AppRoutes.routines),
-                          );
-                        }
-                        // No active programs at all — show Start a Program CTA
-                        return _StartProgramCta(isDark: isDark);
-                      },
-                      loading: () => _buildTodaySkeleton(isDark),
-                      error: (_, __) => _StartProgramCta(isDark: isDark),
-                    ),
 
-                    const SizedBox(height: 24),
+                      const SizedBox(height: 12),
 
-                    // ── Weekly Progress Section (M-CL3) ─────────
-                    _SectionHeader(title: 'This Week', isDark: isDark),
-                    const SizedBox(height: 12),
-                    weeklyAsync.when(
-                      data: (stats) => WeeklyProgressCard(
-                        workoutsCompleted: stats.workoutsCompleted,
-                        workoutsGoal: 4, // TODO: make configurable
-                        totalMinutes: stats.totalMinutes,
-                        streakDays: stats.streakDays,
-                      ),
-                      loading: () => const WeeklyProgressCard(
-                        workoutsCompleted: 0,
-                        workoutsGoal: 4,
-                        totalMinutes: 0,
-                        streakDays: 0,
-                      ),
-                      error: (_, __) => const WeeklyProgressCard(
-                        workoutsCompleted: 0,
-                        workoutsGoal: 4,
-                        totalMinutes: 0,
-                        streakDays: 0,
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // ── Recent Activity Section (M-CL4) ─────────
-                    _SectionHeader(
-                      title: 'Recent Activity',
-                      isDark: isDark,
-                      action: TextButton(
-                        onPressed: () => context.push(AppRoutes.workoutHistory),
-                        child: const Text('See All'),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    recentAsync.when(
-                      data: (sessions) {
-                        if (sessions.isEmpty) {
-                          return AppEmptyState.compact(
-                            icon: Icons.history,
-                            title: 'No Recent Workouts',
-                            description:
-                                'Your completed workouts will appear here.',
-                          );
-                        }
-                        return Column(
-                          children: sessions
-                              .map(
-                                (s) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: RecentActivityCard(session: s),
+                      // Coach-only quick action (M-CF1-1)
+                      if (isCoach) ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: QuickActionCard(
+                                icon: Icons.sports,
+                                title: 'Coach Tools',
+                                subtitle: 'Programs, exercises & clients',
+                                gradient: LinearGradient(
+                                  colors: [
+                                    const Color(0xFF3B82F6),
+                                    const Color(
+                                      0xFF3B82F6,
+                                    ).withValues(alpha: 0.7),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
                                 ),
-                              )
-                              .toList(),
-                        );
-                      },
-                      loading: () => AppEmptyState.compact(
-                        icon: Icons.history,
-                        title: 'No Recent Workouts',
-                        description:
-                            'Your completed workouts will appear here.',
-                      ),
-                      error: (_, __) => AppEmptyState.compact(
-                        icon: Icons.history,
-                        title: 'No Recent Workouts',
-                        description:
-                            'Your completed workouts will appear here.',
-                      ),
-                    ),
+                                onTap: () => context.push(AppRoutes.coachHub),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                      ] else
+                        const SizedBox(height: 24),
 
-                    const SizedBox(height: 32),
-                  ]),
+                      // ── Home Status CTA (M-CL1 / M-CL7) ────────
+                      // First gated section = prominent (compact: false),
+                      // all subsequent coach sections use compact mode.
+                      homeStatusAsync.when(
+                        data: (status) {
+                          switch (status) {
+                            case HomeStatus.noCoach:
+                              return _FindCoachCta(isDark: isDark);
+                            case HomeStatus.noSubscription:
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 24),
+                                child: SubscriptionGatedWidget(
+                                  requiredTier: SubscriptionTiers.basic,
+                                  feature: SubscriptionFeature.coachWorkout,
+                                  compact:
+                                      false, // Prominent: first gated section
+                                  child: const SizedBox.shrink(),
+                                ),
+                              );
+                            case HomeStatus.waitingForProgram:
+                              return _WaitingForProgramCard(isDark: isDark);
+                            case HomeStatus.restDay:
+                            case HomeStatus.hasRoutine:
+                              return const SizedBox.shrink();
+                          }
+                        },
+                        loading: () => _buildStatusSkeleton(isDark),
+                        error: (_, __) => const SizedBox.shrink(),
+                      ),
+
+                      // ── Today's Focus Section (M-CL2) ───────────
+                      KeyedSubtree(
+                        key: _todaysFocusKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _SectionHeader(
+                              title: 'Today\'s Focus',
+                              isDark: isDark,
+                              action: TextButton(
+                                onPressed: () =>
+                                    context.push(AppRoutes.routines),
+                                child: const Text('See All'),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            todayAsync.when(
+                              data: (today) {
+                                if (today.isRestDay) {
+                                  return WorkoutSummaryCard(
+                                    routineName: 'Rest Day 🧘',
+                                    description:
+                                        'No routine scheduled today. Recovery is part of the process!',
+                                    exerciseCount: 0,
+                                    estimatedMinutes: 0,
+                                    isPlaceholder: true,
+                                    onStartPressed: () =>
+                                        context.push(AppRoutes.routines),
+                                  );
+                                }
+                                if (today.hasRoutine) {
+                                  final details = today.today!;
+                                  return WorkoutSummaryCard(
+                                    routineName: today.displayName,
+                                    description:
+                                        '${details.programName} · Day ${details.dayNumber}',
+                                    exerciseCount: today.exerciseCount,
+                                    estimatedMinutes: today.estimatedMinutes,
+                                    isPlaceholder: false,
+                                    completedToday: today.completedToday,
+                                    onStartPressed: today.completedToday
+                                        ? null
+                                        : () =>
+                                              context.push(AppRoutes.routines),
+                                  );
+                                }
+                                // No active programs at all — show Start a Program CTA
+                                return _StartProgramCta(isDark: isDark);
+                              },
+                              loading: () => _buildTodaySkeleton(isDark),
+                              error: (_, __) =>
+                                  _StartProgramCta(isDark: isDark),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // ── Weekly Progress Section (M-CL3) ─────────
+                      KeyedSubtree(
+                        key: _weeklyProgressKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _SectionHeader(title: 'This Week', isDark: isDark),
+                            const SizedBox(height: 12),
+                            weeklyAsync.when(
+                              data: (stats) => WeeklyProgressCard(
+                                workoutsCompleted: stats.workoutsCompleted,
+                                workoutsGoal: 4, // TODO: make configurable
+                                totalMinutes: stats.totalMinutes,
+                                streakDays: stats.streakDays,
+                              ),
+                              loading: () => const WeeklyProgressCard(
+                                workoutsCompleted: 0,
+                                workoutsGoal: 4,
+                                totalMinutes: 0,
+                                streakDays: 0,
+                              ),
+                              error: (_, __) => const WeeklyProgressCard(
+                                workoutsCompleted: 0,
+                                workoutsGoal: 4,
+                                totalMinutes: 0,
+                                streakDays: 0,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // ── Recent Activity Section (M-CL4) ─────────
+                      KeyedSubtree(
+                        key: _recentActivityKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _SectionHeader(
+                              title: 'Recent Activity',
+                              isDark: isDark,
+                              action: TextButton(
+                                onPressed: () =>
+                                    context.push(AppRoutes.workoutHistory),
+                                child: const Text('See All'),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            recentAsync.when(
+                              data: (sessions) {
+                                if (sessions.isEmpty) {
+                                  return AppEmptyState.compact(
+                                    icon: Icons.history,
+                                    title: 'No Recent Workouts',
+                                    description:
+                                        'Your completed workouts will appear here.',
+                                  );
+                                }
+                                return Column(
+                                  children: sessions
+                                      .map(
+                                        (s) => Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 8,
+                                          ),
+                                          child: RecentActivityCard(session: s),
+                                        ),
+                                      )
+                                      .toList(),
+                                );
+                              },
+                              loading: () => AppEmptyState.compact(
+                                icon: Icons.history,
+                                title: 'No Recent Workouts',
+                                description:
+                                    'Your completed workouts will appear here.',
+                              ),
+                              error: (_, __) => AppEmptyState.compact(
+                                icon: Icons.history,
+                                title: 'No Recent Workouts',
+                                description:
+                                    'Your completed workouts will appear here.',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 32),
+                    ]),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-      // Bottom Navigation
-      bottomNavigationBar: _BottomNavBar(
-        currentIndex: 0,
-        onTap: (index) {
-          switch (index) {
-            case 0:
-              // Already on home
-              break;
-            case 1:
-              context.push(AppRoutes.routines);
-              break;
-            case 2:
-              context.push(AppRoutes.progress);
-              break;
-            case 3:
-              context.push(AppRoutes.profile);
-              break;
-          }
-        },
+        // Bottom Navigation
+        bottomNavigationBar: _BottomNavBar(
+          currentIndex: 0,
+          onTap: (index) {
+            switch (index) {
+              case 0:
+                // Already on home
+                break;
+              case 1:
+                context.push(AppRoutes.routines);
+                break;
+              case 2:
+                context.push(AppRoutes.progress);
+                break;
+              case 3:
+                context.push(AppRoutes.profile);
+                break;
+            }
+          },
+        ),
       ),
     );
   }
@@ -531,6 +643,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     } else {
       return 'Good Evening';
     }
+  }
+
+  void _maybeStartTour() {
+    if (_tourTriggered) return;
+    _tourTriggered = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final repo = ref.read(guidanceRepositoryProvider);
+      if (!repo.isCompleted(GuidanceRepository.kHome)) {
+        ref.read(tourProvider.notifier).startTour('home', kHomeTourSteps);
+      }
+    });
   }
 
   Future<void> _onRefresh() async {

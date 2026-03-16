@@ -12,6 +12,7 @@ import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../auth/data/models/user_model.dart';
 import '../../../gains_coins/presentation/widgets/coin_balance_widget.dart';
+import '../../../guidance/guidance.dart';
 import '../../../home/presentation/screens/home_screen.dart'
     show isCoachProvider;
 import '../../data/models/user_profile_model.dart';
@@ -305,6 +306,23 @@ class _ProfileContent extends StatelessWidget {
                         onTap: () => context.push(AppRoutes.coachRoster),
                       ),
                     ],
+                    _divider(isDark),
+                    _NavLinkTile(
+                      icon: Icons.help_outline,
+                      title: 'Help & Tours',
+                      isDark: isDark,
+                      onTap: () {
+                        final container = ProviderScope.containerOf(context);
+                        container
+                            .read(guidanceRepositoryProvider)
+                            .resetAllTours();
+                        AppToast.success(
+                          context,
+                          'All tours reset. They will replay on each screen.',
+                        );
+                        context.go(AppRoutes.home);
+                      },
+                    ),
                   ],
                 ),
               ),
