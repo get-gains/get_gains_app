@@ -194,10 +194,9 @@ const kRecordingHelp = HelpContentModel(
       iconName: 'do_not_disturb_on',
     ),
     HelpSection(
-      heading: 'Stop When Done',
+      heading: 'Automatic Stop',
       body:
-          "Stop recording when your set is complete. The app will automatically "
-          'analyze and score your form.',
+          "The recording will automatically stop after the coach's reference completes. ",
       iconName: 'stop',
     ),
   ],

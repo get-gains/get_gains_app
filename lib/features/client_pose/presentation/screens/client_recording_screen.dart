@@ -433,13 +433,42 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
         ),
 
         // Pre-brief instructional overlay (first-time only)
-        if (showPreBrief) _buildPreBriefOverlay(context, isDark),
+        if (showPreBrief)
+          _buildPreBriefOverlay(
+            context,
+            isDark,
+            hasReferenceForm: state.referenceFrames.isNotEmpty,
+          ),
       ],
     );
   }
 
-  Widget _buildPreBriefOverlay(BuildContext context, bool isDark) {
+  Widget _buildPreBriefOverlay(
+    BuildContext context,
+    bool isDark, {
+    bool hasReferenceForm = true,
+  }) {
     final theme = Theme.of(context);
+
+    final sections = hasReferenceForm
+        ? kRecordingHelp.sections
+        : [
+            const HelpSection(
+              heading: 'No Reference Form',
+              body:
+                  'There is no reference form available for this exercise. '
+                  'Focus on performing the exercise with your best technique.',
+              iconName: 'info',
+            ),
+            const HelpSection(
+              heading: 'Record Your Form',
+              body:
+                  'The app will still record and analyze your movement. '
+                  'Do your best and review the results after.',
+              iconName: 'videocam',
+            ),
+          ];
+
     return Container(
       color: Colors.black87,
       child: Center(
@@ -467,7 +496,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  ...kRecordingHelp.sections.map(
+                  ...sections.map(
                     (section) => Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: Row(

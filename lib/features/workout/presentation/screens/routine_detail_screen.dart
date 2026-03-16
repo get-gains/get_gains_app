@@ -251,198 +251,206 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
                 sessionState.routine?.id == routine.id) ||
             (todaySession.value?.isCompleted ?? false);
 
-        return Scaffold(
-          backgroundColor: isDark
-              ? AppColors.backgroundDark
-              : AppColors.backgroundLight,
-          bottomNavigationBar: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (isCompletedToday) ...[
-                    Container(
-                      width: double.infinity,
-                      height: 44,
-                      margin: const EdgeInsets.only(bottom: 8),
-                      decoration: BoxDecoration(
-                        color: AppColors.success.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: AppColors.success.withValues(alpha: 0.45),
+        return TourOrchestrator(
+          tourKeys: {
+            'routine_detail_exercise_card': _exerciseCardKey,
+            'routine_detail_analyze_form': _analyzeFormKey,
+            'routine_detail_prescription': _prescriptionKey,
+            'routine_detail_start_workout': _startWorkoutKey,
+          },
+          child: Scaffold(
+            backgroundColor: isDark
+                ? AppColors.backgroundDark
+                : AppColors.backgroundLight,
+            bottomNavigationBar: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isCompletedToday) ...[
+                      Container(
+                        width: double.infinity,
+                        height: 44,
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: AppColors.success.withValues(alpha: 0.45),
+                          ),
                         ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.check_circle,
-                            size: 18,
-                            color: AppColors.success,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Workout Complete',
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  color: AppColors.success,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  _StartWorkoutButton(
-                    key: _startWorkoutKey,
-                    routine: routine,
-                    onStart: () => _pickStartExerciseAndWorkout(routine),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          body: CustomScrollView(
-            slivers: [
-              // App Bar
-              SliverAppBar(
-                expandedHeight: 140,
-                pinned: true,
-                actions: [
-                  InfoIconButton(
-                    content: kRoutineDetailHelp,
-                    onTapOverride: () {
-                      ref
-                          .read(tourProvider.notifier)
-                          .startTour(
-                            GuidanceRepository.kRoutineDetail,
-                            kRoutineDetailTourSteps,
-                          );
-                    },
-                  ),
-                ],
-                flexibleSpace: FlexibleSpaceBar(
-                  title: Text(
-                    routine.name,
-                    style: const TextStyle(fontSize: 18),
-                  ),
-                  background: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          isDark
-                              ? AppColors.primaryDark
-                              : AppColors.primaryLight,
-                          isDark
-                              ? AppColors.primaryDark.withValues(alpha: 0.7)
-                              : AppColors.primaryLight.withValues(alpha: 0.7),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              // Routine Info
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Description
-                      if (routine.description.isNotEmpty) ...[
-                        Text(
-                          routine.description,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: isDark
-                                    ? AppColors.textSecondaryDark
-                                    : AppColors.textSecondaryLight,
-                              ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.check_circle,
+                              size: 18,
+                              color: AppColors.success,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Workout Complete',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    color: AppColors.success,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                      ],
-
-                      // Stats row
-                      Row(
-                        children: [
-                          _StatChip(
-                            icon: Icons.fitness_center,
-                            label: '${routine.totalExercises} exercises',
-                            isDark: isDark,
-                          ),
-                          const SizedBox(width: 12),
-                          _StatChip(
-                            icon: Icons.repeat,
-                            label: '${routine.totalSets} sets',
-                            isDark: isDark,
-                          ),
-                          const SizedBox(width: 12),
-                          _StatChip(
-                            icon: Icons.timer_outlined,
-                            label: '${routine.estimatedDurationMinutes} min',
-                            isDark: isDark,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Muscle groups
-                      if (routine.muscleGroupsTargeted.isNotEmpty) ...[
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 4,
-                          children: routine.muscleGroupsTargeted
-                              .map(
-                                (m) => AppBadge(
-                                  label: m.displayName,
-                                  variant: AppBadgeVariant.outline,
-                                ),
-                              )
-                              .toList(),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-
-                      // Section header
-                      Text(
-                        'Exercises',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                     ],
-                  ),
+                    _StartWorkoutButton(
+                      key: _startWorkoutKey,
+                      routine: routine,
+                      onStart: () => _pickStartExerciseAndWorkout(routine),
+                    ),
+                  ],
                 ),
               ),
-
-              // Exercise List
-              if (routine.exercises.isEmpty)
-                SliverFillRemaining(
-                  child: AppEmptyState(
-                    icon: Icons.fitness_center,
-                    title: 'No Exercises',
-                    description: 'This routine has no exercises yet.',
-                  ),
-                )
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: _ExerciseListSliver(
-                    routine: routine,
-                    exerciseCardKey: _exerciseCardKey,
-                    analyzeFormKey: _analyzeFormKey,
-                    prescriptionKey: _prescriptionKey,
+            ),
+            body: CustomScrollView(
+              slivers: [
+                // App Bar
+                SliverAppBar(
+                  expandedHeight: 140,
+                  pinned: true,
+                  actions: [
+                    InfoIconButton(
+                      content: kRoutineDetailHelp,
+                      onTapOverride: () {
+                        ref
+                            .read(tourProvider.notifier)
+                            .startTour(
+                              GuidanceRepository.kRoutineDetail,
+                              kRoutineDetailTourSteps,
+                            );
+                      },
+                    ),
+                  ],
+                  flexibleSpace: FlexibleSpaceBar(
+                    title: Text(
+                      routine.name,
+                      style: const TextStyle(fontSize: 18),
+                    ),
+                    background: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            isDark
+                                ? AppColors.primaryDark
+                                : AppColors.primaryLight,
+                            isDark
+                                ? AppColors.primaryDark.withValues(alpha: 0.7)
+                                : AppColors.primaryLight.withValues(alpha: 0.7),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
 
-              // Bottom spacing to account for persistent bottom bar
-              const SliverToBoxAdapter(child: SizedBox(height: 16)),
-            ],
+                // Routine Info
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Description
+                        if (routine.description.isNotEmpty) ...[
+                          Text(
+                            routine.description,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight,
+                                ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+
+                        // Stats row
+                        Row(
+                          children: [
+                            _StatChip(
+                              icon: Icons.fitness_center,
+                              label: '${routine.totalExercises} exercises',
+                              isDark: isDark,
+                            ),
+                            const SizedBox(width: 12),
+                            _StatChip(
+                              icon: Icons.repeat,
+                              label: '${routine.totalSets} sets',
+                              isDark: isDark,
+                            ),
+                            const SizedBox(width: 12),
+                            _StatChip(
+                              icon: Icons.timer_outlined,
+                              label: '${routine.estimatedDurationMinutes} min',
+                              isDark: isDark,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Muscle groups
+                        if (routine.muscleGroupsTargeted.isNotEmpty) ...[
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            children: routine.muscleGroupsTargeted
+                                .map(
+                                  (m) => AppBadge(
+                                    label: m.displayName,
+                                    variant: AppBadgeVariant.outline,
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+
+                        // Section header
+                        Text(
+                          'Exercises',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Exercise List
+                if (routine.exercises.isEmpty)
+                  SliverFillRemaining(
+                    child: AppEmptyState(
+                      icon: Icons.fitness_center,
+                      title: 'No Exercises',
+                      description: 'This routine has no exercises yet.',
+                    ),
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    sliver: _ExerciseListSliver(
+                      routine: routine,
+                      exerciseCardKey: _exerciseCardKey,
+                      analyzeFormKey: _analyzeFormKey,
+                      prescriptionKey: _prescriptionKey,
+                    ),
+                  ),
+
+                // Bottom spacing to account for persistent bottom bar
+                const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              ],
+            ),
           ),
         );
       },
