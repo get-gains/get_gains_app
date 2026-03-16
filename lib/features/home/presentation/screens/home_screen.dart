@@ -348,6 +348,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       data: (status) {
                         switch (status) {
                           case HomeStatus.noCoach:
+                            if (isCoach) return const SizedBox.shrink();
                             return _FindCoachCta(isDark: isDark);
                           case HomeStatus.noSubscription:
                             return Padding(
