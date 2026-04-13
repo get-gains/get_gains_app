@@ -46,6 +46,7 @@ class ApiConstants {
   static const String performedSets = '/workout/sets';
   static const String performedSetsSync = '/workout/sets/sync';
   static const String todayWorkout = '/workout/today';
+  static const String todayStatus = '/today';
   static const String weeklyStats = '/workout/stats/weekly';
   static const String activeSession = '/workout/sessions/active';
 
