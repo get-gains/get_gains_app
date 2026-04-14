@@ -51,15 +51,17 @@ class _CoachProgramsScreenState extends ConsumerState<CoachProgramsScreen> {
         ],
       ),
       body: _buildBody(state, isDark),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push(AppRoutes.coachCreateProgram),
-        backgroundColor: isDark
-            ? AppColors.primaryDark
-            : AppColors.primaryLight,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('New Program'),
-      ),
+      floatingActionButton: state is CoachProgramsLoaded && state.programs.isNotEmpty
+          ? FloatingActionButton.extended(
+              onPressed: () => context.push(AppRoutes.coachCreateProgram),
+              backgroundColor: isDark
+                  ? AppColors.primaryDark
+                  : AppColors.primaryLight,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add),
+              label: const Text('New Program'),
+            )
+          : null,
     );
   }
 
