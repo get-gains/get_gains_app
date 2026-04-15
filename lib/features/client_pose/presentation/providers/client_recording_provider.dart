@@ -7,12 +7,16 @@ import '../../../../core/utils/logger.dart';
 import '../../../coach_pose/data/models/models.dart';
 import '../../../coach_pose/services/feature_extractor.dart';
 import '../../../coach_pose/services/landmark_preprocessor.dart';
+import '../../../coach_pose/services/pose_detection_service.dart';
 import '../../data/client_pose_repository.dart';
 import '../../data/models/models.dart';
 import '../../services/form_comparison_service.dart';
-import '../../services/rep_counter.dart';
 
 part 'client_recording_provider.g.dart';
+
+/// Minimum pose/vertex data rate (FPS) for client recording.
+/// We require 30+ landmark frames per second for DTW; video FPS is irrelevant.
+const kMinClientFrameRate = 30;
 
 /// State for the client recording + comparison pipeline.
 sealed class ClientRecordingState {
@@ -62,6 +66,7 @@ class ClientRecordingActive extends ClientRecordingState {
     required this.clientFeatureFrames,
     required this.repCount,
     required this.recordingDurationMs,
+    required this.referenceDurationMs,
     this.poseConfig,
     this.coachName,
   });
@@ -75,13 +80,19 @@ class ClientRecordingActive extends ClientRecordingState {
   final List<FeatureFrame> clientFeatureFrames;
   final int repCount;
   final int recordingDurationMs;
+  final int referenceDurationMs;
   final PoseConfigModel? poseConfig;
   final String? coachName;
 }
 
 /// Recording stopped, processing comparison
 class ClientRecordingProcessing extends ClientRecordingState {
-  const ClientRecordingProcessing();
+  const ClientRecordingProcessing({
+    this.progress = 0.0,
+    this.message = 'Preparing...',
+  });
+  final double progress;
+  final String message;
 }
 
 /// Comparison complete — show results
@@ -115,37 +126,29 @@ class ClientRecordingError extends ClientRecordingState {
 class ClientRecording extends _$ClientRecording {
   late final FeatureExtractor _featureExtractor;
   late final LandmarkPreprocessor _preprocessor;
-  late final RepCounter _repCounter;
   late final FormComparisonService _comparisonService;
 
-  // Recording state
-  final List<LandmarkFrame> _clientLandmarks = []; // Raw 0-1 coords for display
-  final List<LandmarkFrame> _clientNormalizedLandmarks =
-      []; // Procrustes-normalized for comparison
+  // Recording state: raw capture only during recording; no live MLKit or rep counter
+  final List<CapturedFrame> _capturedFramesBuffer = [];
+  final List<LandmarkFrame> _clientLandmarks = [];
+  final List<LandmarkFrame> _clientNormalizedLandmarks = [];
   final List<FeatureFrame> _clientFeatures = [];
   List<FeatureFrame> _referenceFeatures = [];
   List<LandmarkFrame> _referenceLandmarks = [];
+  List<String> _relevantAngles = [];
   String? _formId;
   String? _cameraAngle;
   String? _exerciseName;
   String? _coachName;
   PoseConfigModel? _poseConfig;
   int _recordingStartMs = 0;
-  Map<String, LandmarkPoint> _lastDisplayLandmarks = {};
-
-  // Velocity-adaptive EMA parameters
-  static const double _emaAlphaMin = 0.12; // heavy smoothing for noise
-  static const double _emaAlphaMax = 0.55; // light smoothing for real movement
-  static const double _noiseGate = 0.005; // movement below this is clamped to 0
-  static const double _velocitySaturation =
-      0.06; // movement above this gets max alpha
-  static const double _minDisplayConfidence = 0.5;
+  int _referenceDurationMs = 0;
+  Timer? _elapsedTimer;
 
   @override
   ClientRecordingState build(String exerciseId) {
     _featureExtractor = FeatureExtractor();
     _preprocessor = LandmarkPreprocessor();
-    _repCounter = RepCounter();
     _comparisonService = FormComparisonService();
     return const ClientRecordingInitial();
   }
@@ -158,11 +161,11 @@ class ClientRecording extends _$ClientRecording {
       final repo = ref.read(clientPoseRepositoryProvider);
       final resultFuture = repo.downloadExerciseForm(exerciseId);
 
-      // Apply a 15-second timeout so the screen never hangs indefinitely
+      // Form downloads contain heavy landmark payloads — allow generous timeout
       final result = await resultFuture.timeout(
-        const Duration(seconds: 15),
+        const Duration(seconds: 120),
         onTimeout: () => throw TimeoutException(
-          'Server did not respond within 15 seconds. Check your connection.',
+          'Server did not respond within 120 seconds. Check your connection.',
         ),
       );
 
@@ -205,6 +208,21 @@ class ClientRecording extends _$ClientRecording {
           _referenceFeatures = referenceFeatureFrames;
           _referenceLandmarks = referenceFrames;
 
+          // Parse relevant angles from the form (hybrid vertex-dilution fix)
+          final relevantAnglesJson = form['relevantAngles'] as List?;
+          if (relevantAnglesJson != null && relevantAnglesJson.isNotEmpty) {
+            _relevantAngles = relevantAnglesJson.cast<String>();
+          } else {
+            // Fallback: auto-detect from reference feature frames
+            _relevantAngles = FeatureExtractor.detectRelevantAngles(
+              referenceFeatureFrames,
+            );
+          }
+          AppLogger.info(
+            'Relevant angles for comparison: $_relevantAngles',
+            tag: 'ClientRecording',
+          );
+
           // Parse pose config if available
           final configJson = data['poseConfig'] as Map<String, dynamic>?;
           if (configJson != null) {
@@ -222,8 +240,20 @@ class ClientRecording extends _$ClientRecording {
             }
           }
 
-          // Tell the rep counter which exercise this is
-          _repCounter.configure(exerciseName: _exerciseName);
+          // Compute reference duration for auto-stop
+          final formDurationMs = form['durationMs'] as int?;
+          if (formDurationMs != null && formDurationMs > 0) {
+            _referenceDurationMs = formDurationMs + 500; // 500ms buffer
+          } else if (referenceFrames.isNotEmpty) {
+            // Fallback: derive from frame count at 30 FPS
+            _referenceDurationMs =
+                ((referenceFrames.length / 30) * 1000).round() + 500;
+          }
+          AppLogger.info(
+            'Reference form duration: ${_referenceDurationMs}ms '
+            '(${referenceFrames.length} frames)',
+            tag: 'ClientRecording',
+          );
 
           state = ClientRecordingReady(
             exerciseName: _exerciseName ?? 'Exercise',
@@ -251,14 +281,14 @@ class ClientRecording extends _$ClientRecording {
     }
   }
 
-  /// Step 2: Start recording
+  /// Step 2: Start recording (capture only; no live MLKit or rep counter)
   void startRecording() {
+    _capturedFramesBuffer.clear();
     _clientLandmarks.clear();
     _clientNormalizedLandmarks.clear();
     _clientFeatures.clear();
-    _lastDisplayLandmarks = {};
-    _repCounter.reset();
     _recordingStartMs = DateTime.now().millisecondsSinceEpoch;
+    _elapsedTimer?.cancel();
 
     state = ClientRecordingActive(
       exerciseName: _exerciseName ?? 'Exercise',
@@ -266,79 +296,241 @@ class ClientRecording extends _$ClientRecording {
       cameraAngle: _cameraAngle ?? 'FRONT',
       referenceLandmarkFrames: _referenceLandmarks,
       referenceFeatureFrames: _referenceFeatures,
-      clientLandmarkFrames: List.unmodifiable(_clientLandmarks),
-      clientFeatureFrames: List.unmodifiable(_clientFeatures),
+      clientLandmarkFrames: const [],
+      clientFeatureFrames: const [],
       repCount: 0,
       recordingDurationMs: 0,
+      referenceDurationMs: _referenceDurationMs,
       poseConfig: _poseConfig,
       coachName: _coachName,
     );
+
+    // Update elapsed time every second so REC badge counts up.
+    // Auto-stop recording when elapsed >= reference duration.
+    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (state is! ClientRecordingActive) return;
+      final active = state as ClientRecordingActive;
+      final elapsedMs =
+          DateTime.now().millisecondsSinceEpoch - _recordingStartMs;
+
+      // Auto-stop: elapsed reached the coach reference form duration
+      if (_referenceDurationMs > 0 && elapsedMs >= _referenceDurationMs) {
+        AppLogger.info(
+          'Auto-stopping recording: elapsed ${elapsedMs}ms >= '
+          'reference ${_referenceDurationMs}ms',
+          tag: 'ClientRecording',
+        );
+        stopRecordingAndCompare();
+        return;
+      }
+
+      state = ClientRecordingActive(
+        exerciseName: active.exerciseName,
+        formId: active.formId,
+        cameraAngle: active.cameraAngle,
+        referenceLandmarkFrames: active.referenceLandmarkFrames,
+        referenceFeatureFrames: active.referenceFeatureFrames,
+        clientLandmarkFrames: active.clientLandmarkFrames,
+        clientFeatureFrames: active.clientFeatureFrames,
+        repCount: active.repCount,
+        recordingDurationMs: elapsedMs,
+        referenceDurationMs: _referenceDurationMs,
+        poseConfig: active.poseConfig,
+        coachName: active.coachName,
+      );
+    });
   }
 
-  /// Step 3: Process each camera frame during recording
-  void processFrame(LandmarkFrame landmarkFrame) {
+  /// Add a raw camera frame during recording (no MLKit). Post-processing runs after stop.
+  void addCapturedFrame(CapturedFrame frame) {
     if (state is! ClientRecordingActive) return;
-
-    // Stabilize raw landmarks for smooth display (keeps 0-1 range)
-    final stabilized = _stabilizeForDisplay(landmarkFrame);
-    _clientLandmarks.add(stabilized);
-
-    // Normalize for comparison (Procrustes: centered around 0, unit scale)
-    final normalized = _preprocessor.normalize(stabilized);
-    _clientNormalizedLandmarks.add(normalized);
-
-    // Extract features from normalized landmarks
-    final features = _featureExtractor.extractFrame(normalized);
-    _clientFeatures.add(features);
-
-    // Count reps
-    final repCount = _repCounter.processFrame(features);
-
-    final elapsed = DateTime.now().millisecondsSinceEpoch - _recordingStartMs;
-
-    state = ClientRecordingActive(
-      exerciseName: _exerciseName ?? 'Exercise',
-      formId: _formId ?? '',
-      cameraAngle: _cameraAngle ?? 'FRONT',
-      referenceLandmarkFrames: _referenceLandmarks,
-      referenceFeatureFrames: _referenceFeatures,
-      clientLandmarkFrames: List.unmodifiable(_clientLandmarks),
-      clientFeatureFrames: List.unmodifiable(_clientFeatures),
-      repCount: repCount,
-      recordingDurationMs: elapsed,
-      poseConfig: _poseConfig,
-      coachName: _coachName,
-    );
+    _capturedFramesBuffer.add(frame);
   }
 
-  /// Step 4: Stop recording and run comparison
+  /// Step 4: Stop recording and run comparison.
+  ///
+  /// Same quality as coach: batch MLKit on captured frames, then normalize, features, DTW.
+  ///   1. Run MLKit on each captured frame (post-record, high sampling)
+  ///   2. Upsample to 30 FPS if needed
+  ///   3. Trim to reference length, batch normalise, extract features, DTW, upload
   Future<void> stopRecordingAndCompare() async {
     if (state is! ClientRecordingActive) return;
     final activeState = state as ClientRecordingActive;
+    _elapsedTimer?.cancel();
+    _elapsedTimer = null;
 
-    state = const ClientRecordingProcessing();
+    state = const ClientRecordingProcessing(
+      progress: 0.0,
+      message: 'Detecting pose...',
+    );
 
     try {
-      // Trim client frames to reference length to prevent over-length
-      // recordings from corrupting the form score (US2).
-      final refLen = _referenceFeatures.length;
-      final trimLen = math.min(_clientFeatures.length, refLen);
-      final trimmedFeatures = _clientFeatures.sublist(0, trimLen);
-      final trimmedLandmarks = _clientLandmarks.sublist(
-        0,
-        math.min(_clientLandmarks.length, trimLen),
+      final recordingDurationMs =
+          DateTime.now().millisecondsSinceEpoch - _recordingStartMs;
+      final captured = List<CapturedFrame>.from(_capturedFramesBuffer);
+      _capturedFramesBuffer.clear();
+
+      // Batch MLKit on captured frames (same as coach — high-quality pose data from full capture rate)
+      final poseService = ref.read(poseDetectionServiceProvider);
+      final startMs = _recordingStartMs;
+      final rawLandmarks = <LandmarkFrame>[];
+      for (var i = 0; i < captured.length; i++) {
+        state = ClientRecordingProcessing(
+          progress: 0.05 + 0.25 * (i / math.max(1, captured.length)),
+          message: 'Detecting pose...',
+        );
+        final timestampMs = startMs + (i * 1000 ~/ 30);
+        final frame = await poseService.processCapturedFrame(
+          captured[i],
+          timestampMs,
+        );
+        if (frame != null) rawLandmarks.add(frame);
+      }
+
+      state = const ClientRecordingProcessing(
+        progress: 0.35,
+        message: 'Analyzing form...',
       );
 
-      // Run DTW comparison with trimmed frames
-      final result = _comparisonService.compare(
+      var clientLandmarksForPipeline = rawLandmarks;
+      var poseFps =
+          recordingDurationMs > 0 && clientLandmarksForPipeline.isNotEmpty
+          ? (clientLandmarksForPipeline.length * 1000 / recordingDurationMs)
+                .round()
+          : 0;
+
+      // Post-processing: if below 30 FPS but we have enough data, upsample to 30 FPS
+      // (e.g. when Unity + camera run together, capture rate can drop to ~12 FPS)
+      const minFpsToUpsample = 10;
+      if (poseFps < kMinClientFrameRate &&
+          poseFps >= minFpsToUpsample &&
+          recordingDurationMs > 0) {
+        AppLogger.info(
+          'Upsampling client pose data from $poseFps FPS to $kMinClientFrameRate FPS (post-processing)',
+          tag: 'ClientRecording',
+        );
+        clientLandmarksForPipeline = LandmarkPreprocessor.upsampleToTargetFps(
+          clientLandmarksForPipeline,
+          recordingDurationMs,
+          kMinClientFrameRate,
+        );
+        poseFps =
+            (clientLandmarksForPipeline.length * 1000 / recordingDurationMs)
+                .round();
+      }
+
+      if (poseFps < kMinClientFrameRate) {
+        AppLogger.warning(
+          'Pose data rate ($poseFps FPS) below minimum '
+          '($kMinClientFrameRate FPS)',
+          tag: 'ClientRecording',
+        );
+        state = ClientRecordingError(
+          'Pose data rate too low ($poseFps FPS). '
+          'Minimum $kMinClientFrameRate FPS of pose data required for accurate analysis. '
+          'Keep your whole body in frame and try again.',
+        );
+        return;
+      }
+
+      state = const ClientRecordingProcessing(
+        progress: 0.45,
+        message: 'Comparing to reference...',
+      );
+
+      // Reference: same pipeline as client (filter + normalize+align; skip smooth if already smoothed on server)
+      final refLen = _referenceLandmarks.length;
+      final angleDefinitions = _relevantAngles.isNotEmpty
+          ? FeatureExtractor.filteredDefinitions(_relevantAngles)
+          : null;
+      final referenceNormalized = _preprocessor.processBatch(
+        _referenceLandmarks,
+        skipSmooth: true,
+      );
+      final referenceFeatures = _featureExtractor.extractBatch(
+        referenceNormalized,
+        angleDefinitions: angleDefinitions,
+      );
+
+      // Temporal alignment: try several client start offsets, keep best-scoring comparison
+      const maxOffsetFrames = 30;
+      const offsetStep = 2;
+      const maxTries = 15;
+      final clientLen = clientLandmarksForPipeline.length;
+      final trimLen = math.min(clientLen, refLen);
+      if (trimLen < refLen) {
+        AppLogger.warning(
+          'Client frames ($clientLen) shorter than reference ($refLen); no offset search',
+          tag: 'ClientRecording',
+        );
+      }
+
+      int bestOffset = 0;
+      ComparisonResultModel bestResult = _comparisonService.compare(
         exerciseFormId: activeState.formId,
-        referenceFrames: _referenceFeatures,
-        clientFrames: trimmedFeatures,
+        referenceFrames: referenceFeatures,
+        clientFrames: _featureExtractor.extractBatch(
+          _preprocessor.processBatch(
+            clientLandmarksForPipeline.sublist(0, trimLen),
+          ),
+          angleDefinitions: angleDefinitions,
+        ),
         cameraAngle: activeState.cameraAngle,
         avgLandmarkConfidence: null,
       );
+      List<LandmarkFrame> bestTrimmedLandmarks = clientLandmarksForPipeline
+          .sublist(0, trimLen);
 
-      final repCount = _repCounter.repCount;
+      final maxOffset = trimLen == refLen
+          ? math.min(maxOffsetFrames, clientLen - refLen)
+          : -1;
+      if (maxOffset > 0) {
+        int tries = 0;
+        for (
+          int o = 0;
+          o <= maxOffset && tries < maxTries;
+          o += offsetStep, tries++
+        ) {
+          if (o + refLen > clientLen) break;
+          final trimmed = clientLandmarksForPipeline.sublist(o, o + refLen);
+          final normalizedLandmarks = _preprocessor.processBatch(trimmed);
+          final clientFeatures = _featureExtractor.extractBatch(
+            normalizedLandmarks,
+            angleDefinitions: angleDefinitions,
+          );
+          final result = _comparisonService.compare(
+            exerciseFormId: activeState.formId,
+            referenceFrames: referenceFeatures,
+            clientFrames: clientFeatures,
+            cameraAngle: activeState.cameraAngle,
+            avgLandmarkConfidence: null,
+          );
+          if (result.overallScore > bestResult.overallScore) {
+            bestResult = result;
+            bestOffset = o;
+            bestTrimmedLandmarks = trimmed;
+          }
+        }
+        if (bestOffset > 0) {
+          AppLogger.info(
+            'Best temporal offset: $bestOffset frames (score: ${(bestResult.overallScore * 100).toStringAsFixed(1)}%)',
+            tag: 'ClientRecording',
+          );
+        }
+      }
+
+      final result = bestResult;
+
+      state = const ClientRecordingProcessing(
+        progress: 0.9,
+        message: 'Uploading result...',
+      );
+
+      AppLogger.info(
+        'Post-record batch: ${bestTrimmedLandmarks.length} frames, '
+        'angles: ${_relevantAngles.isNotEmpty ? _relevantAngles : "all"}',
+        tag: 'ClientRecording',
+      );
 
       // Upload result to server
       bool uploadSuccess = false;
@@ -364,12 +556,11 @@ class ClientRecording extends _$ClientRecording {
 
       state = ClientRecordingComplete(
         result: result,
-        repCount: repCount,
+        repCount: 0,
         uploadSuccess: uploadSuccess,
         referenceLandmarkFrames: List.unmodifiable(_referenceLandmarks),
-        // Apply batch smoothing to trimmed client landmarks for clean results playback
         clientLandmarkFrames: List.unmodifiable(
-          _preprocessor.smoothFrames(trimmedLandmarks),
+          _preprocessor.smoothFrames(bestTrimmedLandmarks),
         ),
         exerciseName: _exerciseName,
       );
@@ -385,11 +576,10 @@ class ClientRecording extends _$ClientRecording {
 
   /// Reset to initial state for another attempt
   void resetForNewAttempt() {
+    _capturedFramesBuffer.clear();
     _clientLandmarks.clear();
     _clientNormalizedLandmarks.clear();
     _clientFeatures.clear();
-    _lastDisplayLandmarks = {};
-    _repCounter.reset();
 
     if (_formId != null) {
       state = ClientRecordingReady(
@@ -404,74 +594,5 @@ class ClientRecording extends _$ClientRecording {
     } else {
       state = const ClientRecordingInitial();
     }
-  }
-
-  /// Velocity-adaptive EMA stabilization for smooth, jitter-free display.
-  ///
-  /// Instead of a fixed alpha, the blend factor scales with how much each
-  /// landmark actually moved. Tiny movements (noise) get heavy smoothing,
-  /// large movements (real motion) pass through quickly.
-  LandmarkFrame _stabilizeForDisplay(LandmarkFrame frame) {
-    final filtered = _preprocessor.filterByConfidence(frame);
-
-    final current = filtered.landmarks;
-    final prev = _lastDisplayLandmarks;
-    final allKeys = <String>{...current.keys, ...prev.keys};
-    final stabilized = <String, LandmarkPoint>{};
-
-    for (final key in allKeys) {
-      final curr = current[key];
-      final old = prev[key];
-
-      if (curr != null && old != null) {
-        // Compute per-landmark velocity (Euclidean distance)
-        final dx = curr.x - old.x;
-        final dy = curr.y - old.y;
-        final velocity = math.sqrt(dx * dx + dy * dy);
-
-        // Below noise gate → snap to previous (no jitter)
-        if (velocity < _noiseGate) {
-          stabilized[key] = old;
-          continue;
-        }
-
-        // Adaptive alpha: scales linearly from min to max based on velocity
-        final t = ((velocity - _noiseGate) / (_velocitySaturation - _noiseGate))
-            .clamp(0.0, 1.0);
-        final alpha = _emaAlphaMin + t * (_emaAlphaMax - _emaAlphaMin);
-
-        final x = (curr.x * alpha) + (old.x * (1 - alpha));
-        final y = (curr.y * alpha) + (old.y * (1 - alpha));
-        final z = (curr.z * alpha) + (old.z * (1 - alpha));
-        stabilized[key] = LandmarkPoint(
-          x: x.clamp(0.0, 1.0),
-          y: y.clamp(0.0, 1.0),
-          z: z,
-          confidence: curr.confidence,
-        );
-      } else if (curr != null) {
-        // New landmark — use as-is
-        stabilized[key] = LandmarkPoint(
-          x: curr.x.clamp(0.0, 1.0),
-          y: curr.y.clamp(0.0, 1.0),
-          z: curr.z,
-          confidence: curr.confidence,
-        );
-      } else if (old != null) {
-        // Landmark disappeared — hold with decaying confidence
-        final decayedConfidence = old.confidence * 0.92;
-        if (decayedConfidence >= _minDisplayConfidence) {
-          stabilized[key] = LandmarkPoint(
-            x: old.x,
-            y: old.y,
-            z: old.z,
-            confidence: decayedConfidence,
-          );
-        }
-      }
-    }
-
-    _lastDisplayLandmarks = stabilized;
-    return LandmarkFrame(timestampMs: frame.timestampMs, landmarks: stabilized);
   }
 }

@@ -32,6 +32,8 @@ import 'deep_link_provider.dart';
 
 part 'router_provider.g.dart';
 
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
 /// Route Paths
 class AppRoutes {
   AppRoutes._();
@@ -71,6 +73,9 @@ class AppRoutes {
   static const String createExercise = '/coach/exercises/create';
   static const String exerciseDetail = '/coach/exercises/:id';
   static const String recordForm = '/coach/exercises/:id/record';
+  static const String coachViewForm = '/coach/exercises/:id/forms/:formId/view';
+  static const String coachForm3DPreview =
+      '/coach/exercises/:id/forms/:formId/3d-preview';
 
   // Client Pose routes
   static const String clientViewForm = '/client/exercise/:id/view-form';
@@ -158,6 +163,7 @@ GoRouter router(Ref ref) {
   final refreshNotifier = _GoRouterRefreshStream(ref);
 
   final routerInstance = GoRouter(
+    navigatorKey: appNavigatorKey,
     initialLocation: AppRoutes.splash,
     debugLogDiagnostics: true,
     refreshListenable: refreshNotifier,
@@ -379,6 +385,26 @@ GoRouter router(Ref ref) {
           return FormRecordingScreen(exerciseId: id);
         },
       ),
+      GoRoute(
+        path: AppRoutes.coachViewForm,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          final formId = state.pathParameters['formId']!;
+          return CoachViewFormScreen(exerciseId: id, formId: formId);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.coachForm3DPreview,
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final frames = extra?['landmarkFrames'] as List<LandmarkFrame>? ?? [];
+          final angle = extra?['cameraAngle'] as String? ?? 'FRONT';
+          return Form3DPreviewScreen(
+            landmarkFrames: frames,
+            cameraAngle: angle,
+          );
+        },
+      ),
 
       // Client Pose Routes
       GoRoute(
@@ -535,9 +561,15 @@ GoRouter router(Ref ref) {
       ),
 
       // Coach Discovery Routes (Client-Facing)
+      // IMPORTANT: Literal routes must come before parametric `:id` route
+      // to prevent GoRouter from matching e.g. `/coaches/subscribed` as `:id`.
       GoRoute(
         path: AppRoutes.discoverCoaches,
         builder: (context, state) => const CoachDiscoveryScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.subscribedCoaches,
+        builder: (context, state) => const SubscribedCoachesScreen(),
       ),
       GoRoute(
         path: AppRoutes.coachProfile,
@@ -545,10 +577,6 @@ GoRouter router(Ref ref) {
           final id = state.pathParameters['id']!;
           return CoachProfileScreen(coachId: id);
         },
-      ),
-      GoRoute(
-        path: AppRoutes.subscribedCoaches,
-        builder: (context, state) => const SubscribedCoachesScreen(),
       ),
 
       // Standalone Workout Routes
@@ -630,6 +658,9 @@ GoRouter router(Ref ref) {
             sessionDurationMin: (extra['sessionDurationMin'] as int?) ?? 0,
             avgAccuracy: (extra['avgAccuracy'] as double?) ?? 1.0,
             streakDays: (extra['streakDays'] as int?) ?? 0,
+            showWorkoutSummaryAfterContinue:
+                (extra['showWorkoutSummaryAfterCoins'] as bool?) ?? false,
+            workoutSummary: extra['workoutSummary'] as Map<String, dynamic>?,
           );
         },
       ),

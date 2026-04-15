@@ -41,6 +41,12 @@ class RecordingControls extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Recording instructions (setup phase only)
+            if (state.phase == RecordingPhase.setupGuidance) ...[
+              _RecordingInstructions(isDark: isDark),
+              const SizedBox(height: 12),
+            ],
+
             // Timer display during recording
             if (state.isRecording) ...[
               Row(
@@ -64,7 +70,9 @@ class RecordingControls extends StatelessWidget {
                   ),
                   const SizedBox(width: 16),
                   Text(
-                    '${state.frameCount} frames',
+                    state.phase == RecordingPhase.recording
+                        ? 'Recording… (analyzed when you stop)'
+                        : '${state.frameCount} frames',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: isDark
                           ? AppColors.mutedForegroundDark
@@ -134,6 +142,66 @@ class RecordingControls extends StatelessWidget {
     final minutes = seconds ~/ 60;
     final remainingSeconds = seconds % 60;
     return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+  }
+}
+
+/// Compact instructions card shown during setup to guide the coach on what
+/// to do when recording their form.
+class _RecordingInstructions extends StatelessWidget {
+  const _RecordingInstructions({required this.isDark});
+  final bool isDark;
+
+  static const _tips = [
+    (Icons.repeat_one, 'Perform the exercise at a slow, controlled pace'),
+    (Icons.accessibility_new, 'Keep your whole body visible in the frame'),
+    (Icons.phone_android, 'Prop up or mount your phone keep it steady'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = isDark ? Colors.white70 : Colors.black87;
+    final iconColor = isDark ? AppColors.primaryDark : AppColors.primaryLight;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.tips_and_updates, size: 16, color: iconColor),
+            const SizedBox(width: 6),
+            Text(
+              'Recording Tips',
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: textColor,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        for (final (icon, text) in _tips)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, size: 16, color: iconColor),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    text,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: textColor,
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
   }
 }
 

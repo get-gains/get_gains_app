@@ -156,7 +156,8 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
     );
   }
 
-  /// Start a new workout session
+  /// Start a new workout session, or resume an existing active session
+  /// for the same routine.
   Future<void> startSession({
     required String routineModelId,
     String? assignedProgramId,
@@ -169,6 +170,32 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
     }
 
     state = const WorkoutSessionLoading();
+
+    // Check for an existing active session for the same routine first.
+    // This prevents creating orphan sessions when the user leaves and
+    // returns to the same workout.
+    final activeResult = await _repository.getActiveSession(_userId!);
+    if (!ref.mounted) return;
+    final activeSession = activeResult.valueOrNull;
+    if (activeSession != null && activeSession.routineId == routineModelId) {
+      // Resume the existing session — all logged sets are already in the
+      // model's performedSets (loaded from Drift by getActiveSession).
+      final routineResult = await _repository.getRoutineByModelId(
+        routineModelId,
+      );
+      if (!ref.mounted) return;
+      final routine = routineResult.valueOrNull;
+
+      state = WorkoutSessionActive(
+        session: activeSession,
+        routine: routine,
+        currentExerciseIndex: _calculateCurrentExerciseIndex(
+          activeSession,
+          routine,
+        ),
+      );
+      return;
+    }
 
     // Get routine first
     final routineResult = await _repository.getRoutineByModelId(routineModelId);
@@ -199,7 +226,7 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
   }
 
   /// Log a set for the current exercise
-  Future<void> logSet({
+  Future<bool> logSet({
     required int setNumber,
     required int reps,
     double? weight,
@@ -208,11 +235,19 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
     String? routineExerciseIdOverride,
   }) async {
     final currentState = state;
-    if (currentState is! WorkoutSessionActive) return;
+    if (currentState is! WorkoutSessionActive) return false;
 
     final routineExerciseId =
         routineExerciseIdOverride ?? currentState.currentExercise?.id;
-    if (routineExerciseId == null) return;
+    if (routineExerciseId == null) return false;
+
+    final loggedExerciseIndex = currentState.routine?.exercises.indexWhere(
+      (exercise) => exercise.id == routineExerciseId,
+    );
+    final resolvedLoggedExerciseIndex =
+        (loggedExerciseIndex != null && loggedExerciseIndex >= 0)
+        ? loggedExerciseIndex
+        : currentState.currentExerciseIndex;
 
     final result = await _repository.logSet(
       workoutSessionModelId: currentState.session.id,
@@ -224,8 +259,11 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
       notes: notes,
     );
 
+    var didLogSuccessfully = false;
+
     result.when(
       success: (performedSet) {
+        didLogSuccessfully = true;
         // Update session with new set
         final updatedSets = [
           ...currentState.session.performedSets,
@@ -236,11 +274,30 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
           performedSets: updatedSets,
         );
 
-        // Auto-advance to next exercise if current one is now complete
-        final newIndex = _calculateCurrentExerciseIndex(
-          updatedSession,
-          currentState.routine,
-        );
+        // Keep focus on the exercise that was just logged. Only advance
+        // forward when that specific exercise is completed.
+        var newIndex = resolvedLoggedExerciseIndex;
+        final routine = currentState.routine;
+        if (routine != null &&
+            resolvedLoggedExerciseIndex < routine.exercises.length) {
+          final loggedExercise = routine.exercises[resolvedLoggedExerciseIndex];
+          final loggedSets = updatedSession.setsForExercise(loggedExercise.id);
+          final isLoggedExerciseCompleted =
+              loggedSets.length >= loggedExercise.sets;
+
+          if (isLoggedExerciseCompleted) {
+            final nextIncomplete = routine.exercises.indexWhere(
+              (exercise) =>
+                  updatedSession.setsForExercise(exercise.id).length <
+                  exercise.sets,
+              resolvedLoggedExerciseIndex + 1,
+            );
+
+            newIndex = nextIncomplete >= 0
+                ? nextIncomplete
+                : routine.exercises.length;
+          }
+        }
 
         state = currentState.copyWith(
           session: updatedSession,
@@ -249,6 +306,8 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
       },
       failure: (_) {},
     );
+
+    return didLogSuccessfully;
   }
 
   /// Move to the next exercise
@@ -322,6 +381,64 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
   /// Reset to initial state
   void reset() {
     state = const WorkoutSessionInitial();
+  }
+
+  /// Refresh active session from local repository.
+  ///
+  /// Rehydrates session + all performed sets from Drift DB. Called when
+  /// returning to session screen with readOnly: true, or after process
+  /// recreation to restore full state from the local database.
+  ///
+  /// When [preferredExerciseIndex] is provided, it is used (if valid) so
+  /// external flows can restore focus to the expected exercise page.
+  Future<void> refreshActiveSession({int? preferredExerciseIndex}) async {
+    if (_userId == null) return;
+
+    final result = await _repository.getActiveSession(_userId!);
+    if (!ref.mounted) return;
+
+    result.when(
+      success: (session) async {
+        if (session == null) {
+          state = const WorkoutSessionInitial();
+          return;
+        }
+
+        RoutineModel? routine;
+        if (session.routineId != null) {
+          final routineResult = await _repository.getRoutineByModelId(
+            session.routineId!,
+          );
+          if (!ref.mounted) return;
+          routine = routineResult.valueOrNull;
+        }
+
+        int? resolvedIndex;
+        if (preferredExerciseIndex != null &&
+            preferredExerciseIndex >= 0 &&
+            routine != null &&
+            preferredExerciseIndex < routine.exercises.length) {
+          resolvedIndex = preferredExerciseIndex;
+        }
+
+        final currentState = state;
+        if (resolvedIndex == null && currentState is WorkoutSessionActive) {
+          if (routine == null ||
+              currentState.currentExerciseIndex < routine.exercises.length) {
+            resolvedIndex = currentState.currentExerciseIndex;
+          }
+        }
+
+        resolvedIndex ??= _calculateCurrentExerciseIndex(session, routine);
+
+        state = WorkoutSessionActive(
+          session: session,
+          routine: routine,
+          currentExerciseIndex: resolvedIndex,
+        );
+      },
+      failure: (_) {},
+    );
   }
 
   /// Calculate current exercise index based on completed sets

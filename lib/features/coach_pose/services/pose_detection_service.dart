@@ -7,6 +7,7 @@ import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/utils/logger.dart';
+import '../data/models/captured_frame.dart';
 import '../data/models/landmark_models.dart';
 
 part 'pose_detection_service.g.dart';
@@ -23,8 +24,8 @@ part 'pose_detection_service.g.dart';
 /// enables GPU acceleration (MediaPipe GPU delegate) which deadlocks with
 /// CameraX on many Android devices (especially Mali GPUs). `single` mode
 /// uses CPU-only TFLite inference — slower per frame (~50-100ms) but reliable.
-/// Since we only process every 10th frame during setup and every 3rd during
-/// recording, this is fast enough.
+/// Coach form recording captures raw frames during recording and processes
+/// them in batch after stop (no live MLKit), so FPS equals camera output.
 class PoseDetectionService {
   PoseDetectionService() {
     _initDetector();
@@ -224,6 +225,97 @@ class PoseDetectionService {
       return null;
     } finally {
       _isBusy = false;
+    }
+  }
+
+  /// Process a previously captured frame (post-recording batch).
+  /// Used by coach form: capture raw frames during recording, then run
+  /// MLKit on each frame after stop so FPS = camera FPS regardless of device speed.
+  Future<LandmarkFrame?> processCapturedFrame(
+    CapturedFrame captured,
+    int timestampMs,
+  ) async {
+    final inputImage = _buildInputImageFromCaptured(captured);
+    if (inputImage == null) return null;
+
+    try {
+      final poses = await _poseDetector
+          .processImage(inputImage)
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => <Pose>[],
+          );
+
+      if (poses.isEmpty) return null;
+
+      final pose = poses.first;
+      final rotation = _rotationFromDegrees(captured.rotationDegrees);
+      return _poseToLandmarkFrame(
+        pose,
+        timestampMs,
+        captured.width.toDouble(),
+        captured.height.toDouble(),
+        rotation: rotation,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  InputImageRotation _rotationFromDegrees(int degrees) {
+    return switch (degrees) {
+      90 => InputImageRotation.rotation90deg,
+      180 => InputImageRotation.rotation180deg,
+      270 => InputImageRotation.rotation270deg,
+      _ => InputImageRotation.rotation0deg,
+    };
+  }
+
+  InputImage? _buildInputImageFromCaptured(CapturedFrame captured) {
+    final rotation = _rotationFromDegrees(captured.rotationDegrees);
+    final size = Size(captured.width.toDouble(), captured.height.toDouble());
+
+    switch (captured.format) {
+      case 'nv21':
+        return InputImage.fromBytes(
+          bytes: captured.bytes,
+          metadata: InputImageMetadata(
+            size: size,
+            rotation: rotation,
+            format: InputImageFormat.nv21,
+            bytesPerRow: captured.bytesPerRow,
+          ),
+        );
+      case 'bgra8888':
+        return InputImage.fromBytes(
+          bytes: captured.bytes,
+          metadata: InputImageMetadata(
+            size: size,
+            rotation: rotation,
+            format: InputImageFormat.bgra8888,
+            bytesPerRow: captured.bytesPerRow,
+          ),
+        );
+      case 'yuv420':
+        return InputImage.fromBytes(
+          bytes: captured.bytes,
+          metadata: InputImageMetadata(
+            size: size,
+            rotation: rotation,
+            format: InputImageFormat.yuv_420_888,
+            bytesPerRow: captured.bytesPerRow,
+          ),
+        );
+      default:
+        return InputImage.fromBytes(
+          bytes: captured.bytes,
+          metadata: InputImageMetadata(
+            size: size,
+            rotation: rotation,
+            format: InputImageFormat.nv21,
+            bytesPerRow: captured.bytesPerRow,
+          ),
+        );
     }
   }
 

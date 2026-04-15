@@ -115,6 +115,17 @@ class SubscriptionGuard {
   SubscriptionGuardResult checkAccess(int requiredTier) {
     final state = _ref.read(subscriptionProvider);
 
+    // Error state: treat as free tier — don't hang waiting for subscription.
+    if (state is SubscriptionError) {
+      return requiredTier <= 0
+          ? const SubscriptionGranted()
+          : SubscriptionDenied(
+              requiredTier: requiredTier,
+              currentTier: 0,
+              requiredTierName: 'Subscription',
+            );
+    }
+
     if (state is! SubscriptionLoaded) {
       return const SubscriptionPending();
     }

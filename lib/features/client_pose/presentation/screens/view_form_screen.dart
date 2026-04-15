@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' show pi;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_embed_unity/flutter_embed_unity.dart';
@@ -6,10 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../../../../providers/router_provider.dart';
 import '../../../../services/database/app_database.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../coach_pose/data/models/landmark_models.dart';
+import '../../../guidance/guidance.dart';
 import '../../../unity/data/unity_cosmetics_loader.dart';
 import '../../../unity/data/unity_message_contract.dart';
 import '../../data/client_pose_repository.dart';
@@ -31,6 +32,7 @@ class ViewFormScreen extends ConsumerStatefulWidget {
 
 class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
   late Future<Map<String, dynamic>?> _formFuture;
+  bool _overlayDismissed = false;
 
   @override
   void initState() {
@@ -65,7 +67,11 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
       backgroundColor: isDark
           ? AppColors.backgroundDark
           : AppColors.backgroundLight,
-      appBar: AppBar(title: const Text('Reference Form'), centerTitle: true),
+      appBar: AppBar(
+        title: const Text('Reference Form'),
+        centerTitle: true,
+        actions: [InfoIconButton(content: kViewFormHelp)],
+      ),
       body: FutureBuilder<Map<String, dynamic>?>(
         future: _formFuture,
         builder: (context, snapshot) {
@@ -102,40 +108,175 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
             );
           }
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  exerciseName,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+          final showOverlay =
+              !_overlayDismissed &&
+              !ref
+                  .read(guidanceRepositoryProvider)
+                  .isCompleted(GuidanceRepository.kViewForm);
+
+          return Stack(
+            children: [
+              SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      exerciseName,
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 16),
+                    ...forms.map((formData) {
+                      final form = formData as Map<String, dynamic>;
+                      final landmarkFrames = _parseLandmarkFrames(
+                        form['landmarkFrames'] as List?,
+                      );
+                      return _FormPlaybackCard(
+                        exerciseId: widget.exerciseId,
+                        form: form,
+                        landmarkFrames: landmarkFrames,
+                        isDark: isDark,
+                      );
+                    }),
+                    if (poseConfig != null) ...[
+                      const SizedBox(height: 16),
+                      _PoseConfigInfo(config: poseConfig, isDark: isDark),
+                    ],
+                    const SizedBox(height: 32),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                ...forms.map((formData) {
-                  final form = formData as Map<String, dynamic>;
-                  final landmarkFrames = _parseLandmarkFrames(
-                    form['landmarkFrames'] as List?,
-                  );
-                  return _FormPlaybackCard(
-                    exerciseId: widget.exerciseId,
-                    form: form,
-                    landmarkFrames: landmarkFrames,
-                    isDark: isDark,
-                  );
-                }),
-                if (poseConfig != null) ...[
-                  const SizedBox(height: 16),
-                  _PoseConfigInfo(config: poseConfig, isDark: isDark),
-                ],
-                const SizedBox(height: 32),
-              ],
-            ),
+              ),
+              if (showOverlay)
+                _ViewFormGuidanceOverlay(
+                  isDark: isDark,
+                  onDismiss: () {
+                    setState(() => _overlayDismissed = true);
+                    ref
+                        .read(guidanceRepositoryProvider)
+                        .markCompleted(GuidanceRepository.kViewForm);
+                  },
+                ),
+            ],
           );
         },
       ),
+    );
+  }
+}
+
+/// First-time instructional overlay for the view form screen.
+class _ViewFormGuidanceOverlay extends StatelessWidget {
+  const _ViewFormGuidanceOverlay({
+    required this.isDark,
+    required this.onDismiss,
+  });
+
+  final bool isDark;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black54,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: AppCard.elevated(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.visibility,
+                      size: 48,
+                      color: isDark
+                          ? AppColors.primaryDark
+                          : AppColors.primaryLight,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Understanding the Reference Form',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    _BulletPoint(
+                      isDark: isDark,
+                      text:
+                          "This is your coach's ideal form for the exercise. "
+                          'Study the movement pattern before recording.',
+                    ),
+                    const SizedBox(height: 8),
+                    _BulletPoint(
+                      isDark: isDark,
+                      text:
+                          'Toggle between 2D skeleton and 3D avatar views '
+                          'for different perspectives.',
+                    ),
+                    const SizedBox(height: 8),
+                    _BulletPoint(
+                      isDark: isDark,
+                      text:
+                          "When recording, follow the same direction — don't "
+                          'mirror the movement.',
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: onDismiss,
+                        child: const Text('Got it'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BulletPoint extends StatelessWidget {
+  const _BulletPoint({required this.isDark, required this.text});
+
+  final bool isDark;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Icon(
+            Icons.circle,
+            size: 6,
+            color: isDark
+                ? AppColors.textSecondaryDark
+                : AppColors.textSecondaryLight,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: isDark
+                  ? AppColors.textSecondaryDark
+                  : AppColors.textSecondaryLight,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -160,12 +301,31 @@ class _FormPlaybackCard extends StatefulWidget {
   State<_FormPlaybackCard> createState() => _FormPlaybackCardState();
 }
 
+/// Debug: 3D rotation range limited so the figure stays readable (no stretched lines).
+const double _rotationMinRadians = -pi / 3; // -60°
+const double _rotationMaxRadians = pi / 3; // 60°
+
 class _FormPlaybackCardState extends State<_FormPlaybackCard> {
   _PreviewMode _mode = _PreviewMode.twoD;
   bool _unityReady = false;
   bool _poseSent = false;
+  double _rotationRadians = 0;
+  bool _rotatorSliderEnabled = true;
+  double _rotationRadiansBackup = 0;
 
   String get _cameraAngle => widget.form['cameraAngle'] as String? ?? 'FRONT';
+
+  void _toggleRotatorSlider() {
+    setState(() {
+      _rotatorSliderEnabled = !_rotatorSliderEnabled;
+      if (!_rotatorSliderEnabled) {
+        _rotationRadiansBackup = _rotationRadians;
+        _rotationRadians = 0;
+      } else {
+        _rotationRadians = _rotationRadiansBackup;
+      }
+    });
+  }
 
   void _toggle3D() {
     setState(() {
@@ -282,6 +442,7 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
                           borderRadius: const BorderRadius.vertical(
                             top: Radius.circular(12),
                           ),
+                          rotationY: _rotationRadians,
                         )
                       else
                         EmbedUnity(onMessageFromUnity: _onMessageFromUnity),
@@ -290,11 +451,77 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
                       Positioned(
                         top: 8,
                         right: 8,
-                        child: _ViewModeToggle(
-                          mode: _mode,
-                          onToggle: _toggle3D,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_mode == _PreviewMode.twoD)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: _RotatorTogglePill(
+                                  enabled: _rotatorSliderEnabled,
+                                  onToggle: _toggleRotatorSlider,
+                                ),
+                              ),
+                            _ViewModeToggle(
+                              mode: _mode,
+                              onToggle: _toggle3D,
+                            ),
+                          ],
                         ),
                       ),
+
+                      // Debug: 3D rotate (limited range so figure stays readable)
+                      if (_mode == _PreviewMode.twoD && _rotatorSliderEnabled)
+                        Positioned(
+                          left: 8,
+                          right: 8,
+                          bottom: 8,
+                          child: Material(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.rotate_right,
+                                    color: Colors.white70,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '3D Rotate:',
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Slider(
+                                      value: _rotationRadians,
+                                      min: _rotationMinRadians,
+                                      max: _rotationMaxRadians,
+                                      activeColor: Colors.cyanAccent,
+                                      onChanged: (v) => setState(
+                                        () => _rotationRadians = v,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    '${(_rotationRadians * 180 / pi).round()}°',
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
 
                       // Fullscreen button (only in 3D mode)
                       if (_mode == _PreviewMode.threeD)
@@ -499,6 +726,51 @@ class _ViewModeToggle extends StatelessWidget {
                 is3D ? '3D' : '2D',
                 style: const TextStyle(
                   color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Toggle pill for enabling/disabling the (2D) rotator slider overlay.
+class _RotatorTogglePill extends StatelessWidget {
+  const _RotatorTogglePill({
+    required this.enabled,
+    required this.onToggle,
+  });
+
+  final bool enabled;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black54,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onToggle,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.rotate_right,
+                size: 16,
+                color: enabled ? Colors.cyanAccent : Colors.white70,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Rotator',
+                style: TextStyle(
+                  color: enabled ? Colors.cyanAccent : Colors.white70,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),

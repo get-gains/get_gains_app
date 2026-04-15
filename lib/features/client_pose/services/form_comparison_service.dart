@@ -96,20 +96,24 @@ class FormComparisonService {
 
       if (refSeries.length < 2 || clientSeries.length < 2) continue;
 
-      final dtwDistance = _dtw(refSeries, clientSeries);
+      final smoothedRef = _smooth(refSeries);
+      final smoothedClient = _smooth(clientSeries);
+
+      final (dtwDistance, pathLength) = _dtw(smoothedRef, smoothedClient);
 
       // Mean angular deviation per aligned frame pair
-      final alignedLen = math.max(refSeries.length, clientSeries.length);
-      final meanDev = alignedLen > 0 ? dtwDistance / alignedLen : 180.0;
+      final meanDev = pathLength > 0 ? dtwDistance / pathLength : 180.0;
 
-      // Score: 0° mean deviation → 1.0, ≥45° → 0.0
-      final score = (1.0 - meanDev / 45.0).clamp(0.0, 1.0);
+      // Subtract baseline noise floor (~5° from MLKit detection jitter)
+      // then map to 0-1: 5° adjusted → 1.0, ≥40° adjusted → 0.0
+      final adjustedDev = math.max(0.0, meanDev - 5.0);
+      final score = (1.0 - adjustedDev / 40.0).clamp(0.0, 1.0);
       angleScores[angleName] = score;
 
       // Generate correction if score is below threshold
       if (score < 0.7) {
         final avgDev = meanDev;
-        final maxDev = _maxDeviation(refSeries, clientSeries);
+        final maxDev = _maxDeviation(smoothedRef, smoothedClient);
         final direction = _inferDirection(refSeries, clientSeries);
         final segment = _angleToSegment(angleName).name;
 
@@ -157,30 +161,58 @@ class FormComparisonService {
     return result;
   }
 
-  /// Classic DTW algorithm — returns accumulated distance
-  double _dtw(List<double> s, List<double> t) {
+  /// Classic DTW algorithm — returns (accumulated distance, path length).
+  (double, int) _dtw(List<double> s, List<double> t) {
     final n = s.length;
     final m = t.length;
     final dtw = List.generate(
       n + 1,
       (_) => List.filled(m + 1, double.infinity),
     );
+    final pathLen = List.generate(
+      n + 1,
+      (_) => List.filled(m + 1, 0),
+    );
     dtw[0][0] = 0;
 
     for (int i = 1; i <= n; i++) {
       for (int j = 1; j <= m; j++) {
         final cost = (s[i - 1] - t[j - 1]).abs();
-        dtw[i][j] =
-            cost +
-            [
-              dtw[i - 1][j], // insertion
-              dtw[i][j - 1], // deletion
-              dtw[i - 1][j - 1], // match
-            ].reduce(math.min);
+        final prevs = [
+          dtw[i - 1][j], // insertion
+          dtw[i][j - 1], // deletion
+          dtw[i - 1][j - 1], // match
+        ];
+        final minPrev = prevs.reduce(math.min);
+        dtw[i][j] = cost + minPrev;
+
+        // Track path length through the same predecessor
+        if (minPrev == dtw[i - 1][j - 1]) {
+          pathLen[i][j] = pathLen[i - 1][j - 1] + 1;
+        } else if (minPrev == dtw[i - 1][j]) {
+          pathLen[i][j] = pathLen[i - 1][j] + 1;
+        } else {
+          pathLen[i][j] = pathLen[i][j - 1] + 1;
+        }
       }
     }
 
-    return dtw[n][m];
+    return (dtw[n][m], pathLen[n][m]);
+  }
+
+  /// Sliding-window average smoother to reduce frame-to-frame jitter.
+  List<double> _smooth(List<double> series, {int window = 3}) {
+    if (series.length <= window) return series;
+    final half = window ~/ 2;
+    return List.generate(series.length, (i) {
+      final start = math.max(0, i - half);
+      final end = math.min(series.length, i + half + 1);
+      double sum = 0;
+      for (int k = start; k < end; k++) {
+        sum += series[k];
+      }
+      return sum / (end - start);
+    });
   }
 
   Set<String> _collectAngleNames(List<FeatureFrame> frames) {

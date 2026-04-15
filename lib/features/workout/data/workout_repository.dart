@@ -10,6 +10,7 @@ import '../../../core/utils/result.dart';
 import '../../../services/api/api_client.dart';
 import '../../../services/database/app_database.dart';
 import 'models/models.dart';
+import '../../home/data/models/today_status_model.dart';
 
 part 'workout_repository.g.dart';
 
@@ -999,6 +1000,36 @@ class WorkoutRepository {
       tag: 'WorkoutRepo',
       error: failure.error,
     );
+    return Failure(failure.error);
+  }
+
+  /// Fetch unified today status from `GET /api/today`.
+  ///
+  /// Returns subscription state + coach today + standalone today in one call.
+  /// Always 200 — never throws [SubscriptionRequiredError].
+  Future<Result<TodayStatusModel, AppError>> getTodayStatus() async {
+    AppLogger.debug('Fetching today status', tag: 'WorkoutRepo');
+
+    final result = await _apiClient.get<Map<String, dynamic>>(
+      ApiConstants.todayStatus,
+    );
+
+    if (result is Success<Map<String, dynamic>, AppError>) {
+      try {
+        final model = TodayStatusModel.fromJson(result.value);
+        AppLogger.info(
+          'Today status: subscribed=${model.isSubscribed} hasCoach=${model.hasCoach}',
+          tag: 'WorkoutRepo',
+        );
+        return Success(model);
+      } catch (e) {
+        AppLogger.error('Failed to parse today status', tag: 'WorkoutRepo', error: e);
+        return Failure(UnknownError(message: 'Failed to parse today status: $e', originalError: e));
+      }
+    }
+
+    final failure = result as Failure<Map<String, dynamic>, AppError>;
+    AppLogger.error('Failed to fetch today status', tag: 'WorkoutRepo', error: failure.error);
     return Failure(failure.error);
   }
 
