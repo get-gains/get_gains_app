@@ -23,8 +23,25 @@ abstract class RoutineModel with _$RoutineModel {
     DateTime? updatedAt,
   }) = _RoutineModel;
 
-  factory RoutineModel.fromJson(Map<String, dynamic> json) =>
-      _$RoutineModelFromJson(json);
+  factory RoutineModel.fromJson(Map<String, dynamic> json) {
+    final normalizedJson = Map<String, dynamic>.from(json);
+
+    normalizedJson['coachId'] ??=
+        normalizedJson['coach_id'] ??
+        normalizedJson['userId'] ??
+        normalizedJson['user_id'];
+    normalizedJson['estimatedDurationMinutes'] ??=
+        normalizedJson['estimated_duration_minutes'];
+    normalizedJson['muscleGroupsTargeted'] = normalizeMuscleGroupApiList(
+      normalizedJson['muscleGroupsTargeted'] ??
+          normalizedJson['muscle_groups_targeted'],
+    );
+    normalizedJson['exercises'] ??= const [];
+    normalizedJson['createdAt'] ??= normalizedJson['created_at'];
+    normalizedJson['updatedAt'] ??= normalizedJson['updated_at'];
+
+    return _$RoutineModelFromJson(normalizedJson);
+  }
 }
 
 /// Extension for routine completion status

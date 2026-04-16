@@ -3,6 +3,78 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'exercise_model.freezed.dart';
 part 'exercise_model.g.dart';
 
+const _supportedMuscleGroupValues = <String>{
+  'TRAPS',
+  'SHOULDERS',
+  'CHEST',
+  'ABS',
+  'OBLIQUES',
+  'UPPER_BACK',
+  'LATS',
+  'LOWER_BACK',
+  'BICEPS',
+  'TRICEPS',
+  'FOREARMS',
+  'GLUTES',
+  'QUADS',
+  'HAMSTRINGS',
+  'CALVES',
+};
+
+String? normalizeMuscleGroupApiValue(dynamic value) {
+  if (value == null) return null;
+
+  final normalized = value.toString().trim().toUpperCase();
+  if (normalized.isEmpty) return null;
+
+  final token = normalized.replaceAll('-', '_').replaceAll(' ', '_');
+  switch (token) {
+    case 'UPPERBACK':
+      return 'UPPER_BACK';
+    case 'LOWERBACK':
+      return 'LOWER_BACK';
+  }
+
+  if (_supportedMuscleGroupValues.contains(token)) {
+    return token;
+  }
+  return null;
+}
+
+List<String> normalizeMuscleGroupApiList(dynamic value) {
+  if (value is! List<dynamic>) return const [];
+  return value
+      .map(normalizeMuscleGroupApiValue)
+      .whereType<String>()
+      .toList(growable: false);
+}
+
+List<String> normalizeStringList(dynamic value) {
+  if (value is! List<dynamic>) return const [];
+  return value
+      .where((item) => item != null)
+      .map((item) => item.toString())
+      .toList(growable: false);
+}
+
+String resolvePrimaryMuscleGroupApiValue(Map<String, dynamic> json) {
+  final primary = normalizeMuscleGroupApiValue(
+    json['primaryMuscleGroup'] ?? json['primary_muscle_group'],
+  );
+  if (primary != null) {
+    return primary;
+  }
+
+  final targetMuscles = normalizeMuscleGroupApiList(
+    json['targetMuscles'] ?? json['target_muscles'],
+  );
+  if (targetMuscles.isNotEmpty) {
+    return targetMuscles.first;
+  }
+
+  return 'CHEST';
+}
+
 /// Muscle Group enum
 enum MuscleGroup {
   @JsonValue('TRAPS')
@@ -73,8 +145,20 @@ abstract class ExerciseModel with _$ExerciseModel {
     DateTime? updatedAt,
   }) = _ExerciseModel;
 
-  factory ExerciseModel.fromJson(Map<String, dynamic> json) =>
-      _$ExerciseModelFromJson(json);
+  factory ExerciseModel.fromJson(Map<String, dynamic> json) {
+    final normalizedJson = Map<String, dynamic>.from(json);
+
+    normalizedJson['primaryMuscleGroup'] =
+        resolvePrimaryMuscleGroupApiValue(normalizedJson);
+    normalizedJson['equipmentNeeded'] = normalizeStringList(
+      normalizedJson['equipmentNeeded'] ?? normalizedJson['equipment_needed'],
+    );
+    normalizedJson['createdAt'] ??= normalizedJson['created_at'];
+    normalizedJson['updatedAt'] ??= normalizedJson['updated_at'];
+    normalizedJson['description'] ??= '';
+
+    return _$ExerciseModelFromJson(normalizedJson);
+  }
 }
 
 /// Routine Exercise Model
@@ -97,6 +181,18 @@ abstract class RoutineExerciseModel with _$RoutineExerciseModel {
     DateTime? updatedAt,
   }) = _RoutineExerciseModel;
 
-  factory RoutineExerciseModel.fromJson(Map<String, dynamic> json) =>
-      _$RoutineExerciseModelFromJson(json);
+  factory RoutineExerciseModel.fromJson(Map<String, dynamic> json) {
+    final normalizedJson = Map<String, dynamic>.from(json);
+
+    normalizedJson['routineId'] ??= normalizedJson['routine_id'];
+    normalizedJson['exerciseId'] ??= normalizedJson['exercise_id'];
+    normalizedJson['repsMin'] ??= normalizedJson['reps_min'];
+    normalizedJson['repsMax'] ??= normalizedJson['reps_max'];
+    normalizedJson['restSeconds'] ??= normalizedJson['rest_seconds'];
+    normalizedJson['orderInRoutine'] ??= normalizedJson['order_in_routine'];
+    normalizedJson['createdAt'] ??= normalizedJson['created_at'];
+    normalizedJson['updatedAt'] ??= normalizedJson['updated_at'];
+
+    return _$RoutineExerciseModelFromJson(normalizedJson);
+  }
 }

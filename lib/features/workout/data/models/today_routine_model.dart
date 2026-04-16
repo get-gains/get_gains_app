@@ -33,7 +33,7 @@ abstract class TodayRoutineModel with _$TodayRoutineModel {
 abstract class TodayRoutineDetails with _$TodayRoutineDetails {
   const factory TodayRoutineDetails({
     required String programRoutineId,
-    required int dayNumber,
+    required String dayOfWeek,
     required String assignedProgramId,
     required String programName,
     required RoutineModel routine,
