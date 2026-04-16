@@ -1,7 +1,8 @@
 # Standalone Workout Feature Documentation
 
 > **Created**: March 1, 2026
-> **Status**: Data layer complete — presentation layer pending
+> **Updated**: April 16, 2026
+> **Status**: Data and presentation implemented
 
 ---
 
@@ -11,9 +12,9 @@ The **Standalone Workout** feature allows users to build and manage their own tr
 
 - **Exercises** — Create and manage a personal exercise library (alongside public/coach exercises)
 - **Routines** — Build custom routines from any exercises
-- **Programs** — Organise routines into a cycling program (day 1, day 2, … day N, repeat)
-- **Self-assignment** — Activate a program to start the day-cycling loop
-- **Today's routine** — Server resolves which routine to do today based on active program + start date
+- **Programs** — Organize routines into weekday slots (Monday to Sunday)
+- **Self-assignment** — Activate or deactivate a standalone program
+- **Today's routine** — Server resolves current weekday routine or rest day
 - **Sessions** — Start/complete workout sessions tied to a routine
 - **Weekly stats** — Aggregated workout stats (same shape as coach-assigned flow)
 
@@ -28,8 +29,8 @@ The **Standalone Workout** feature allows users to build and manage their own tr
 | Exercise CRUD      | Save locally → sync to server → SyncQueue on failure |
 | Routine CRUD       | Save locally → sync to server → SyncQueue on failure |
 | Program CRUD       | Save locally → sync to server → SyncQueue on failure |
-| Program activation | Server-only (requires day-cycling setup)             |
-| Today's routine    | Server-only (day-cycling logic)                      |
+| Program activation | Server-only (activates assignment state)             |
+| Today's routine    | Server-only (weekday schedule resolution)            |
 | Sessions           | Server-only (create/complete)                        |
 | Weekly stats       | Server-only (aggregation)                            |
 
@@ -40,6 +41,9 @@ The **Standalone Workout** feature allows users to build and manage their own tr
 ```
 lib/features/standalone_workout/
 ├── standalone_workout.dart               # Feature barrel export
+├── presentation/
+│   ├── providers/                        # Riverpod state for exercises, routines, programs, today, sessions, stats
+│   └── screens/                          # Standalone CRUD + today/session UI
 └── data/
     ├── data.dart                         # Data layer barrel export
     ├── standalone_workout_repository.dart # Offline-first repository
@@ -48,12 +52,10 @@ lib/features/standalone_workout/
         ├── standalone_exercise_model.dart # Exercise + list response
         ├── standalone_routine_model.dart  # Routine summary + list response
         ├── standalone_program_model.dart  # Program hierarchy models
-        ├── standalone_today_model.dart    # Day-cycling today model
+        ├── standalone_today_model.dart    # Weekday-aware today model
         ├── standalone_session_model.dart  # Session summary + re-exports
         └── standalone_request_models.dart # All CRUD request bodies
 ```
-
-> **Presentation layer** (`presentation/providers/`, `presentation/screens/`) — **not yet implemented**.
 
 ---
 
@@ -115,18 +117,18 @@ StandaloneProgramSummaryModel { id, name, description, userId, routineCount, cre
 // Full detail with routine tree
 StandaloneProgramDetailModel {
   id, name, description, userId,
-  List<StandaloneProgramRoutineSlotModel> routines,  // sorted by dayNumber
+  List<StandaloneProgramRoutineSlotModel> routines,  // sorted by dayOfWeek
   createdAt, updatedAt,
 }
 
 // Day-slot inside a program
 StandaloneProgramRoutineSlotModel {
-  id, programId, routineId, dayNumber,
+  id, programId, routineId, dayOfWeek,
   RoutineModel routine,  // fully nested
 }
 
 // Raw junction record (returned from assign/update endpoints)
-StandaloneProgramRoutineModel { id, programId, routineId, dayNumber, createdAt, updatedAt }
+StandaloneProgramRoutineModel { id, programId, routineId, dayOfWeek, createdAt, updatedAt }
 
 // User's self-assignment record
 StandaloneAssignedProgramModel {
@@ -135,11 +137,7 @@ StandaloneAssignedProgramModel {
 }
 ```
 
-**Extension helpers on `StandaloneProgramDetailModel`:**
-
-| Getter            | Returns                          |
-| ----------------- | -------------------------------- |
-| `cycleLengthDays` | Max `dayNumber` across all slots |
+| `hasRoutineOnDay(DayOfWeek day)` | Whether a routine is scheduled for the given day |
 
 ### Today's Workout
 
@@ -157,7 +155,7 @@ abstract class StandaloneTodayModel with _$StandaloneTodayModel {
 abstract class StandaloneTodayDetails with _$StandaloneTodayDetails {
   const factory StandaloneTodayDetails({
     required String programRoutineId,
-    required int dayNumber,
+    required String dayOfWeek,
     required String assignedProgramId,
     required String programName,
     required RoutineModel routine,
@@ -225,14 +223,14 @@ class StandaloneSessionListResponse {
 
 ---
 
-## Database Tables (Drift — Schema v2)
+## Database Tables (Drift - Schema v6)
 
-Three new tables added in migration `from < 2`:
+Standalone tables were introduced in migration `from < 2`, then updated in `from < 6` to store weekday text values.
 
 | Table                        | Description                                                                                                    |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `StandalonePrograms`         | User-owned training programs (`remoteId`, `userId`, `name`, `description`, `isSynced`)                         |
-| `StandaloneProgramRoutines`  | Day-slot junction linking a routine to a program on a specific `dayNumber`; cascades on program/routine delete |
+| `StandaloneProgramRoutines`  | Day-slot junction linking a routine to a program on a specific `dayOfWeek`; cascades on program/routine delete |
 | `StandaloneAssignedPrograms` | Tracks the user's self-assigned program with `isActive`, `startDate`, `endDate`                                |
 
 **New CRUD methods on `AppDatabase`:**
@@ -245,7 +243,7 @@ Three new tables added in migration `from < 2`:
 | `upsertStandaloneProgram(companion)`         | Insert or replace                            |
 | `deleteStandaloneProgram(id)`                | Delete (cascades to program routines)        |
 | `deleteAllStandalonePrograms(userId)`        | Bulk delete                                  |
-| `getStandaloneProgramRoutines(programId)`    | Day-slots ordered by `dayNumber`             |
+| `getStandaloneProgramRoutines(programId)`    | Day-slots ordered by `dayOfWeek`             |
 | `upsertStandaloneProgramRoutine(companion)`  | Insert or replace                            |
 | `deleteStandaloneProgramRoutine(id)`         | Delete single slot                           |
 | `getActiveStandaloneAssignment(userId)`      | Single active assignment (`isActive = true`) |
@@ -311,14 +309,14 @@ static const String standaloneWeeklyStats  = '/standalone/stats/weekly';
 | `updateProgram({programId, request})`                          | Update on server           | Server-only                      |
 | `deleteProgram(programId)`                                     | Delete on server           | Server-only                      |
 | `assignRoutine({programId, request})`                          | Add routine to program day | Server-only                      |
-| `updateProgramRoutine({programId, programRoutineId, request})` | Change day number          | Server-only                      |
+| `updateProgramRoutine({programId, programRoutineId, request})` | Change weekday slot        | Server-only                      |
 | `removeProgramRoutine({programId, programRoutineId})`          | Remove from program        | Server-only                      |
 
 ### Self-Assignment Operations
 
 | Method                                   | Description                   | Notes                                           |
 | ---------------------------------------- | ----------------------------- | ----------------------------------------------- |
-| `activateProgram({programId, request?})` | Self-assign + start day cycle | Deactivates prior active assignment server-side |
+| `activateProgram({programId, request?})` | Self-assign and activate      | Deactivates prior active assignment server-side |
 | `deactivateProgram(programId)`           | Stop program                  | Sets `endDate` on server                        |
 | `getActiveProgram()`                     | Get current active assignment | 404 → `Success(null)`                           |
 
@@ -326,7 +324,7 @@ static const String standaloneWeeklyStats  = '/standalone/stats/weekly';
 
 | Method                                                     | Description                           | Strategy                                                           |
 | ---------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------ |
-| `getTodayRoutine({assignedProgramId?})`                    | Server day-cycling resolution         | Server-only; 404 → `Success(StandaloneTodayModel(message: '...'))` |
+| `getTodayRoutine({assignedProgramId?})`                    | Server weekday schedule resolution    | Server-only; 404 → `Success(StandaloneTodayModel(message: '...'))` |
 | `startSession({assignedProgramId?})`                       | Start session; 409 if one in progress | Server-only                                                        |
 | `getActiveSession()`                                       | Get in-progress session               | Server-only; 404 → `Success(null)`                                 |
 | `getSessionDetail(sessionId)`                              | Full session with performed sets      | Server-only                                                        |
@@ -372,7 +370,7 @@ All routes are under `/api/standalone/` and require authentication.
 | `PATCH`  | `/programs/:programId`                | Update program                 |
 | `DELETE` | `/programs/:programId`                | Delete program                 |
 | `POST`   | `/programs/:programId/routines`       | Assign routine to day          |
-| `PATCH`  | `/programs/:programId/routines/:prId` | Change day number              |
+| `PATCH`  | `/programs/:programId/routines/:prId` | Change weekday slot            |
 | `DELETE` | `/programs/:programId/routines/:prId` | Remove routine from program    |
 | `POST`   | `/programs/:programId/activate`       | Self-assign program            |
 | `POST`   | `/programs/:programId/deactivate`     | Stop program                   |
@@ -382,7 +380,7 @@ All routes are under `/api/standalone/` and require authentication.
 
 | Method | Endpoint                        | Description                                        |
 | ------ | ------------------------------- | -------------------------------------------------- |
-| `GET`  | `/today`                        | Day-cycle resolution → today's routine or rest day |
+| `GET`  | `/today`                        | Weekday resolution -> today's routine or rest day  |
 | `POST` | `/sessions`                     | Start session                                      |
 | `GET`  | `/sessions/active`              | Get in-progress session                            |
 | `GET`  | `/sessions`                     | List past sessions                                 |
@@ -443,12 +441,12 @@ result.when(
 | Layer                                                | Status             |
 | ---------------------------------------------------- | ------------------ |
 | Models (`standalone_*_model.dart`, request models)   | ✅ Complete        |
-| Drift tables (3 new tables, schema v2, CRUD methods) | ✅ Complete        |
+| Drift tables (schema v6, weekday migration included)  | ✅ Complete        |
 | API constants                                        | ✅ Complete        |
 | Repository (`StandaloneWorkoutRepository`)           | ✅ Complete        |
-| Presentation providers                               | 🔮 Not Implemented |
-| Screens & widgets                                    | 🔮 Not Implemented |
-| Routes                                               | 🔮 Not Implemented |
+| Presentation providers                               | ✅ Complete        |
+| Screens & widgets                                    | ✅ Complete        |
+| Routes                                               | ✅ Complete        |
 
 ---
 
@@ -461,9 +459,9 @@ result.when(
 | `lib/features/standalone_workout/data/models/standalone_exercise_model.dart` | Exercise + list response                                                               |
 | `lib/features/standalone_workout/data/models/standalone_routine_model.dart`  | Routine summary + list response                                                        |
 | `lib/features/standalone_workout/data/models/standalone_program_model.dart`  | Program hierarchy (summary, detail, slot, junction, assignment)                        |
-| `lib/features/standalone_workout/data/models/standalone_today_model.dart`    | Day-cycling today model with extension helpers                                         |
+| `lib/features/standalone_workout/data/models/standalone_today_model.dart`    | Weekday-aware today model with extension helpers                                       |
 | `lib/features/standalone_workout/data/models/standalone_session_model.dart`  | Session summary + list response (re-exports `WorkoutSessionModel`, `WeeklyStatsModel`) |
 | `lib/features/standalone_workout/data/models/standalone_request_models.dart` | All 12 CRUD request body models                                                        |
-| `lib/services/database/app_database.dart`                                    | +3 tables, +14 CRUD methods, v1→v2 migration                                           |
+| `lib/services/database/app_database.dart`                                    | Standalone tables + weekday migration in schema v6                                     |
 | `lib/core/constants/api_constants.dart`                                      | +8 standalone endpoint constants                                                       |
 | `lib/core/constants/app_constants.dart`                                      | `databaseVersion` bumped `1 → 2`                                                       |
