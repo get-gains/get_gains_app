@@ -10,6 +10,52 @@ part 'program_model.freezed.dart';
 part 'program_model.g.dart';
 
 // ──────────────────────────────────────────────────────────
+// Day of Week Enum
+// ──────────────────────────────────────────────────────────
+
+enum DayOfWeek {
+  @JsonValue('MONDAY') monday,
+  @JsonValue('TUESDAY') tuesday,
+  @JsonValue('WEDNESDAY') wednesday,
+  @JsonValue('THURSDAY') thursday,
+  @JsonValue('FRIDAY') friday,
+  @JsonValue('SATURDAY') saturday,
+  @JsonValue('SUNDAY') sunday;
+
+  /// Human-readable label, e.g. DayOfWeek.monday.label == 'Monday'
+  String get label {
+    switch (this) {
+      case DayOfWeek.monday: return 'Monday';
+      case DayOfWeek.tuesday: return 'Tuesday';
+      case DayOfWeek.wednesday: return 'Wednesday';
+      case DayOfWeek.thursday: return 'Thursday';
+      case DayOfWeek.friday: return 'Friday';
+      case DayOfWeek.saturday: return 'Saturday';
+      case DayOfWeek.sunday: return 'Sunday';
+    }
+  }
+
+  /// Short 3-letter label, e.g. 'Mon'
+  String get shortLabel {
+    switch (this) {
+      case DayOfWeek.monday: return 'Mon';
+      case DayOfWeek.tuesday: return 'Tue';
+      case DayOfWeek.wednesday: return 'Wed';
+      case DayOfWeek.thursday: return 'Thu';
+      case DayOfWeek.friday: return 'Fri';
+      case DayOfWeek.saturday: return 'Sat';
+      case DayOfWeek.sunday: return 'Sun';
+    }
+  }
+
+  /// Returns the DayOfWeek matching today (based on DateTime.now())
+  static DayOfWeek get today {
+    // DateTime.weekday: 1=Monday ... 7=Sunday
+    return DayOfWeek.values[DateTime.now().weekday - 1];
+  }
+}
+
+// ──────────────────────────────────────────────────────────
 // Program Models
 // ──────────────────────────────────────────────────────────
 
@@ -48,19 +94,26 @@ abstract class ProgramDetailModel with _$ProgramDetailModel {
     DateTime? updatedAt,
   }) = _ProgramDetailModel;
 
-  factory ProgramDetailModel.fromJson(Map<String, dynamic> json) =>
-      _$ProgramDetailModelFromJson(json);
+  factory ProgramDetailModel.fromJson(Map<String, dynamic> json) {
+    final normalizedJson = Map<String, dynamic>.from(json);
+
+    normalizedJson['coachId'] ??=
+        normalizedJson['coach_id'] ??
+        normalizedJson['userId'] ??
+        normalizedJson['user_id'];
+    normalizedJson['createdAt'] ??= normalizedJson['created_at'];
+    normalizedJson['updatedAt'] ??= normalizedJson['updated_at'];
+    normalizedJson['description'] ??= '';
+    normalizedJson['routines'] ??= const [];
+
+    return _$ProgramDetailModelFromJson(normalizedJson);
+  }
 }
 
 /// Extension for program detail
 extension ProgramDetailModelX on ProgramDetailModel {
   /// Total number of day-slots in this program
   int get totalDays => routines.length;
-
-  /// Max day number (defines the cycle length)
-  int get cycleLengthDays => routines.isEmpty
-      ? 0
-      : routines.map((r) => r.dayNumber).reduce((a, b) => a > b ? a : b);
 }
 
 // ──────────────────────────────────────────────────────────
@@ -74,7 +127,7 @@ extension ProgramDetailModelX on ProgramDetailModel {
 abstract class ProgramRoutineSlotModel with _$ProgramRoutineSlotModel {
   const factory ProgramRoutineSlotModel({
     required String id,
-    required int dayNumber,
+    required DayOfWeek dayOfWeek,
     required RoutineModel routine,
   }) = _ProgramRoutineSlotModel;
 
@@ -89,7 +142,7 @@ abstract class ProgramRoutineModel with _$ProgramRoutineModel {
     required String id,
     required String programId,
     required String routineId,
-    required int dayNumber,
+    required DayOfWeek dayOfWeek,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) = _ProgramRoutineModel;
@@ -120,8 +173,29 @@ abstract class RoutineSummaryModel with _$RoutineSummaryModel {
     DateTime? updatedAt,
   }) = _RoutineSummaryModel;
 
-  factory RoutineSummaryModel.fromJson(Map<String, dynamic> json) =>
-      _$RoutineSummaryModelFromJson(json);
+  factory RoutineSummaryModel.fromJson(Map<String, dynamic> json) {
+    final normalizedJson = Map<String, dynamic>.from(json);
+
+    normalizedJson['coachId'] ??=
+        normalizedJson['coach_id'] ??
+        normalizedJson['userId'] ??
+        normalizedJson['user_id'] ??
+        'unknown';
+    normalizedJson['estimatedDurationMinutes'] ??=
+        normalizedJson['estimated_duration_minutes'] ??
+        0;
+    normalizedJson['muscleGroupsTargeted'] = normalizeMuscleGroupApiList(
+      normalizedJson['muscleGroupsTargeted'] ??
+          normalizedJson['muscle_groups_targeted'],
+    );
+    normalizedJson['exerciseCount'] ??= normalizedJson['exercise_count'] ?? 0;
+    normalizedJson['programCount'] ??= normalizedJson['program_count'] ?? 0;
+    normalizedJson['createdAt'] ??= normalizedJson['created_at'];
+    normalizedJson['updatedAt'] ??= normalizedJson['updated_at'];
+    normalizedJson['description'] ??= '';
+
+    return _$RoutineSummaryModelFromJson(normalizedJson);
+  }
 }
 
 // ──────────────────────────────────────────────────────────
