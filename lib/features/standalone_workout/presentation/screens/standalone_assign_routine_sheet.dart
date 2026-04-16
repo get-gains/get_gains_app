@@ -14,14 +14,16 @@ import '../providers/standalone_routine_provider.dart';
 Future<bool?> showStandaloneAssignRoutineSheet({
   required BuildContext context,
   required String programId,
-  required List<int> existingDayNumbers,
+  required List<DayOfWeek> assignedDays,
+  DayOfWeek? initialDay,
 }) async {
   return showAppBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     builder: (context) => _AssignRoutineSheetContent(
       programId: programId,
-      existingDayNumbers: existingDayNumbers,
+      assignedDays: assignedDays,
+      initialDay: initialDay,
     ),
   );
 }
@@ -29,11 +31,13 @@ Future<bool?> showStandaloneAssignRoutineSheet({
 class _AssignRoutineSheetContent extends ConsumerStatefulWidget {
   const _AssignRoutineSheetContent({
     required this.programId,
-    required this.existingDayNumbers,
+    required this.assignedDays,
+    this.initialDay,
   });
 
   final String programId;
-  final List<int> existingDayNumbers;
+  final List<DayOfWeek> assignedDays;
+  final DayOfWeek? initialDay;
 
   @override
   ConsumerState<_AssignRoutineSheetContent> createState() =>
@@ -42,18 +46,18 @@ class _AssignRoutineSheetContent extends ConsumerStatefulWidget {
 
 class _AssignRoutineSheetContentState
     extends ConsumerState<_AssignRoutineSheetContent> {
-  final _dayController = TextEditingController();
   String? _selectedRoutineId;
+  DayOfWeek? _selectedDay;
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    // Suggest next day number
-    final maxDay = widget.existingDayNumbers.isEmpty
-        ? 0
-        : widget.existingDayNumbers.reduce((a, b) => a > b ? a : b);
-    _dayController.text = '${maxDay + 1}';
+
+    final initialDay = widget.initialDay;
+    if (initialDay != null && !widget.assignedDays.contains(initialDay)) {
+      _selectedDay = initialDay;
+    }
 
     // Ensure routines list is loaded
     final routinesState = ref.read(standaloneRoutinesProvider);
@@ -62,12 +66,6 @@ class _AssignRoutineSheetContentState
         () => ref.read(standaloneRoutinesProvider.notifier).loadRoutines(),
       );
     }
-  }
-
-  @override
-  void dispose() {
-    _dayController.dispose();
-    super.dispose();
   }
 
   @override
@@ -81,7 +79,7 @@ class _AssignRoutineSheetContentState
         left: 20,
         right: 20,
         top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -90,7 +88,7 @@ class _AssignRoutineSheetContentState
           Text('Assign Routine to Day', style: theme.textTheme.headlineSmall),
           const SizedBox(height: 4),
           Text(
-            'Choose a routine and assign it to a day number in this program.',
+            'Pick a day of the week and choose a routine for that day.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: isDark
                   ? AppColors.mutedForegroundDark
@@ -99,19 +97,16 @@ class _AssignRoutineSheetContentState
           ),
           const SizedBox(height: 20),
 
+          // Day of week chip selector
+          Text('Select Day', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 12),
+          _buildDaySelector(isDark, theme),
+          const SizedBox(height: 20),
+
           // Routine selector
           Text('Select Routine', style: theme.textTheme.titleSmall),
           const SizedBox(height: 8),
           _buildRoutineDropdown(routinesState, isDark, theme),
-          const SizedBox(height: 16),
-
-          // Day number input
-          AppTextField(
-            controller: _dayController,
-            label: 'Day Number',
-            hint: '1',
-            keyboardType: TextInputType.number,
-          ),
           const SizedBox(height: 24),
 
           Row(
@@ -136,6 +131,70 @@ class _AssignRoutineSheetContentState
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDaySelector(bool isDark, ThemeData theme) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: DayOfWeek.values.map((day) {
+        final isAssigned = widget.assignedDays.contains(day);
+        final isSelected = _selectedDay == day;
+
+        return GestureDetector(
+          onTap: isAssigned ? null : () => setState(() => _selectedDay = day),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? theme.colorScheme.primary
+                  : isAssigned
+                  ? (isDark ? AppColors.surface1Dark : AppColors.mutedLight)
+                  : (isDark ? AppColors.inputDark : AppColors.inputLight),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isSelected
+                    ? theme.colorScheme.primary
+                    : isAssigned
+                    ? Colors.transparent
+                    : (isDark ? AppColors.borderDark : AppColors.borderLight),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  day.shortLabel,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: isSelected
+                        ? theme.colorScheme.onPrimary
+                        : isAssigned
+                        ? (isDark
+                              ? AppColors.mutedForegroundDark
+                              : AppColors.mutedForegroundLight)
+                        : null,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+                if (isAssigned) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Taken',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      fontSize: 9,
+                      color: isDark
+                          ? AppColors.mutedForegroundDark
+                          : AppColors.mutedForegroundLight,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -213,10 +272,8 @@ class _AssignRoutineSheetContentState
       AppToast.warning(context, 'Please select a routine');
       return;
     }
-
-    final dayNumber = int.tryParse(_dayController.text.trim());
-    if (dayNumber == null || dayNumber < 1) {
-      AppToast.warning(context, 'Enter a valid day number');
+    if (_selectedDay == null) {
+      AppToast.warning(context, 'Please select a day');
       return;
     }
 
@@ -228,13 +285,16 @@ class _AssignRoutineSheetContentState
           .assignRoutine(
             AssignStandaloneRoutineRequest(
               routineId: _selectedRoutineId!,
-              dayNumber: dayNumber,
+              dayOfWeek: _selectedDay!,
             ),
           );
 
       if (mounted) {
         if (success) {
-          AppToast.success(context, 'Routine assigned to Day $dayNumber');
+          AppToast.success(
+            context,
+            'Routine assigned to ${_selectedDay!.label}',
+          );
           Navigator.of(context).pop(true);
         } else {
           AppToast.error(context, 'Failed to assign routine');

@@ -1,5 +1,6 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../coach_programs/data/models/program_model.dart' show DayOfWeek;
 import '../../../workout/data/models/exercise_model.dart';
 
 part 'standalone_request_models.freezed.dart';
@@ -156,7 +157,7 @@ abstract class AssignStandaloneRoutineRequest
     with _$AssignStandaloneRoutineRequest {
   const factory AssignStandaloneRoutineRequest({
     required String routineId,
-    required int dayNumber,
+    required DayOfWeek dayOfWeek,
   }) = _AssignStandaloneRoutineRequest;
 
   factory AssignStandaloneRoutineRequest.fromJson(Map<String, dynamic> json) =>
@@ -168,7 +169,7 @@ abstract class AssignStandaloneRoutineRequest
 abstract class UpdateStandaloneProgramRoutineRequest
     with _$UpdateStandaloneProgramRoutineRequest {
   const factory UpdateStandaloneProgramRoutineRequest({
-    required int dayNumber,
+    required DayOfWeek dayOfWeek,
   }) = _UpdateStandaloneProgramRoutineRequest;
 
   factory UpdateStandaloneProgramRoutineRequest.fromJson(

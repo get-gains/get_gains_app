@@ -36,7 +36,7 @@ abstract class StandaloneTodayModel with _$StandaloneTodayModel {
 abstract class StandaloneTodayDetails with _$StandaloneTodayDetails {
   const factory StandaloneTodayDetails({
     required String programRoutineId,
-    required int dayNumber,
+    required String dayOfWeek,
     required String assignedProgramId,
     required String programName,
     required RoutineModel routine,

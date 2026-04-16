@@ -236,7 +236,7 @@ class _StandaloneTodayScreenState extends ConsumerState<StandaloneTodayScreen> {
           Row(
             children: [
               AppBadge(
-                label: 'Day ${details.dayNumber}',
+                label: _formatDayLabel(details.dayOfWeek),
                 variant: AppBadgeVariant.primary,
               ),
               const SizedBox(width: 8),
@@ -342,6 +342,12 @@ class _StandaloneTodayScreenState extends ConsumerState<StandaloneTodayScreen> {
         ],
       ),
     );
+  }
+
+  /// Converts a DayOfWeek string (e.g. 'MONDAY') to a display label (e.g. 'Monday').
+  String _formatDayLabel(String dayOfWeek) {
+    if (dayOfWeek.isEmpty) return '';
+    return dayOfWeek[0] + dayOfWeek.substring(1).toLowerCase();
   }
 
   Widget _buildNoActiveProgram(bool isDark) {
