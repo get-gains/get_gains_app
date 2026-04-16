@@ -68,13 +68,22 @@ class CoachPoseRepository {
     List<String> targetMuscles = const [],
     List<String> equipmentNeeded = const [],
   }) async {
+    final normalizedTargetMuscles = <String>{
+      primaryMuscleGroup.toUpperCase(),
+      ...targetMuscles.map((muscle) => muscle.toUpperCase()),
+    }.toList(growable: false);
+
     final result = await _apiClient.post<Map<String, dynamic>>(
       '/workout/exercises',
       data: {
         'name': name,
         'description': description,
+        'target_muscles': normalizedTargetMuscles,
+        'is_public': true,
+
+        // Backward compatibility for environments still expecting camelCase.
         'primaryMuscleGroup': primaryMuscleGroup,
-        'targetMuscles': targetMuscles,
+        'targetMuscles': normalizedTargetMuscles,
         'equipmentNeeded': equipmentNeeded,
       },
     );
