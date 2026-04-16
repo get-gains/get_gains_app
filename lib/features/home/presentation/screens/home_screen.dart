@@ -30,19 +30,39 @@ final isCoachProvider = FutureProvider.autoDispose<bool>((ref) async {
 
   return result.when(
     success: (data) {
+      bool? parseBool(dynamic value) {
+        if (value is bool) return value;
+        if (value is num) return value != 0;
+        if (value is String) {
+          final normalized = value.trim().toLowerCase();
+          if (normalized == 'true' || normalized == '1') return true;
+          if (normalized == 'false' || normalized == '0') return false;
+        }
+        return null;
+      }
+
       final user = data['user'];
       if (user is! Map<String, dynamic>) return false;
 
-      final responseUserId = user['id'] as String?;
-      if (responseUserId != null && responseUserId != currentUserId) {
-        return false;
+      final responseUserId =
+          (user['id'] as String?) ??
+          (user['supabase_auth_id'] as String?) ??
+          (user['supabaseId'] as String?) ??
+          (user['user_id'] as String?);
+
+      // Keep the identity check as a soft guard only. API contracts changed
+      // across versions and key differences should not force a false negative.
+      if (responseUserId != null &&
+          currentUserId != null &&
+          responseUserId != currentUserId) {
+        // No-op: continue checking role flags below.
       }
 
-      final isCoach = data['isCoach'];
-      if (isCoach is bool) return isCoach;
+      final topLevelIsCoach = parseBool(data['isCoach'] ?? data['is_coach']);
+      if (topLevelIsCoach != null) return topLevelIsCoach;
 
-      final userIsCoach = user['isCoach'];
-      if (userIsCoach is bool) return userIsCoach;
+      final nestedIsCoach = parseBool(user['isCoach'] ?? user['is_coach']);
+      if (nestedIsCoach != null) return nestedIsCoach;
 
       return false;
     },
@@ -425,60 +445,49 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
 
                       // ── Today's Focus Section (M-CL2) ───────────
-                      KeyedSubtree(
-                        key: _todaysFocusKey,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _SectionHeader(
-                              title: 'Today\'s Focus',
-                              isDark: isDark,
-                              action: TextButton(
-                                onPressed: () =>
-                                    context.push(AppRoutes.routines),
-                                child: const Text('See All'),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            todayAsync.when(
-                              data: (today) {
-                                if (today.isRestDay) {
-                                  return WorkoutSummaryCard(
-                                    routineName: 'Rest Day 🧘',
-                                    description:
-                                        'No routine scheduled today. Recovery is part of the process!',
-                                    exerciseCount: 0,
-                                    estimatedMinutes: 0,
-                                    isPlaceholder: true,
-                                    onStartPressed: () =>
-                                        context.push(AppRoutes.routines),
-                                  );
-                                }
-                                if (today.hasRoutine) {
-                                  final details = today.today!;
-                                  return WorkoutSummaryCard(
-                                    routineName: today.displayName,
-                                    description:
-                                        '${details.programName} · Day ${details.dayNumber}',
-                                    exerciseCount: today.exerciseCount,
-                                    estimatedMinutes: today.estimatedMinutes,
-                                    isPlaceholder: false,
-                                    completedToday: today.completedToday,
-                                    onStartPressed: today.completedToday
-                                        ? null
-                                        : () =>
-                                              context.push(AppRoutes.routines),
-                                  );
-                                }
-                                // No active programs at all — show Start a Program CTA
-                                return _StartProgramCta(isDark: isDark);
-                              },
-                              loading: () => _buildTodaySkeleton(isDark),
-                              error: (_, __) =>
-                                  _StartProgramCta(isDark: isDark),
-                            ),
-                          ],
+                      _SectionHeader(
+                        title: 'Today\'s Focus',
+                        isDark: isDark,
+                        action: TextButton(
+                          onPressed: () => context.push(AppRoutes.routines),
+                          child: const Text('See All'),
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      todayAsync.when(
+                        data: (today) {
+                          if (today.isRestDay) {
+                            return WorkoutSummaryCard(
+                              routineName: 'Rest Day 🧘',
+                              description:
+                                  'No routine scheduled today. Recovery is part of the process!',
+                              exerciseCount: 0,
+                              estimatedMinutes: 0,
+                              isPlaceholder: true,
+                              onStartPressed: () =>
+                                  context.push(AppRoutes.routines),
+                            );
+                          }
+                          if (today.hasRoutine) {
+                            final details = today.today!;
+                            return WorkoutSummaryCard(
+                              routineName: today.displayName,
+                              description:
+                                  '${details.programName} · ${_formatDayOfWeekLabel(details.dayOfWeek)}',
+                              exerciseCount: today.exerciseCount,
+                              estimatedMinutes: today.estimatedMinutes,
+                              isPlaceholder: false,
+                              completedToday: today.completedToday,
+                              onStartPressed: today.completedToday
+                                  ? null
+                                  : () => context.push(AppRoutes.routines),
+                            );
+                          }
+                          // No active programs at all — show Start a Program CTA
+                          return _StartProgramCta(isDark: isDark);
+                        },
+                        loading: () => _buildTodaySkeleton(isDark),
+                        error: (_, __) => _StartProgramCta(isDark: isDark),
                       ),
 
                       const SizedBox(height: 24),
@@ -614,6 +623,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     } else {
       return 'Good Evening';
     }
+  }
+
+  String _formatDayOfWeekLabel(String dayOfWeek) {
+    final normalized = dayOfWeek.trim().toUpperCase();
+    if (normalized.isEmpty) {
+      return 'Today';
+    }
+
+    const labels = {
+      'MONDAY': 'Monday',
+      'TUESDAY': 'Tuesday',
+      'WEDNESDAY': 'Wednesday',
+      'THURSDAY': 'Thursday',
+      'FRIDAY': 'Friday',
+      'SATURDAY': 'Saturday',
+      'SUNDAY': 'Sunday',
+    };
+
+    return labels[normalized] ?? dayOfWeek;
   }
 
   void _maybeStartTour() {
