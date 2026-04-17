@@ -5,6 +5,38 @@ import 'exercise_model.dart';
 part 'routine_model.freezed.dart';
 part 'routine_model.g.dart';
 
+Map<String, dynamic> _normalizeRoutineModelJson(Map<String, dynamic> json) {
+  final normalizedJson = Map<String, dynamic>.from(json);
+
+  normalizedJson['coachId'] ??=
+      normalizedJson['coach_id'] ??
+      normalizedJson['userId'] ??
+      normalizedJson['user_id'];
+  normalizedJson['estimatedDurationMinutes'] ??=
+      normalizedJson['estimated_duration_minutes'];
+  normalizedJson['muscleGroupsTargeted'] = normalizeMuscleGroupApiList(
+    normalizedJson['muscleGroupsTargeted'] ??
+        normalizedJson['muscle_groups_targeted'],
+  );
+  normalizedJson['exercises'] ??= const [];
+  normalizedJson['createdAt'] ??= normalizedJson['created_at'];
+  normalizedJson['updatedAt'] ??= normalizedJson['updated_at'];
+
+  return normalizedJson;
+}
+
+class RoutineModelConverter
+    implements JsonConverter<RoutineModel, Map<String, dynamic>> {
+  const RoutineModelConverter();
+
+  @override
+  RoutineModel fromJson(Map<String, dynamic> json) =>
+      RoutineModel.fromJson(json);
+
+  @override
+  Map<String, dynamic> toJson(RoutineModel object) => object.toJson();
+}
+
 /// Routine Model
 ///
 /// Represents a workout routine containing multiple exercises.
@@ -23,25 +55,8 @@ abstract class RoutineModel with _$RoutineModel {
     DateTime? updatedAt,
   }) = _RoutineModel;
 
-  factory RoutineModel.fromJson(Map<String, dynamic> json) {
-    final normalizedJson = Map<String, dynamic>.from(json);
-
-    normalizedJson['coachId'] ??=
-        normalizedJson['coach_id'] ??
-        normalizedJson['userId'] ??
-        normalizedJson['user_id'];
-    normalizedJson['estimatedDurationMinutes'] ??=
-        normalizedJson['estimated_duration_minutes'];
-    normalizedJson['muscleGroupsTargeted'] = normalizeMuscleGroupApiList(
-      normalizedJson['muscleGroupsTargeted'] ??
-          normalizedJson['muscle_groups_targeted'],
-    );
-    normalizedJson['exercises'] ??= const [];
-    normalizedJson['createdAt'] ??= normalizedJson['created_at'];
-    normalizedJson['updatedAt'] ??= normalizedJson['updated_at'];
-
-    return _$RoutineModelFromJson(normalizedJson);
-  }
+  factory RoutineModel.fromJson(Map<String, dynamic> json) =>
+      _$RoutineModelFromJson(_normalizeRoutineModelJson(json));
 }
 
 /// Extension for routine completion status

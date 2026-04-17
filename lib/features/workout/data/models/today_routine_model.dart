@@ -36,6 +36,7 @@ abstract class TodayRoutineDetails with _$TodayRoutineDetails {
     required String dayOfWeek,
     required String assignedProgramId,
     required String programName,
+    @RoutineModelConverter()
     required RoutineModel routine,
   }) = _TodayRoutineDetails;
 

@@ -75,6 +75,7 @@ abstract class StandaloneProgramRoutineSlotModel
   const factory StandaloneProgramRoutineSlotModel({
     required String id,
     required DayOfWeek dayOfWeek,
+    @RoutineModelConverter()
     required RoutineModel routine,
   }) = _StandaloneProgramRoutineSlotModel;
 

@@ -3,6 +3,38 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'exercise_model.freezed.dart';
 part 'exercise_model.g.dart';
 
+Map<String, dynamic> _normalizeExerciseModelJson(Map<String, dynamic> json) {
+  final normalizedJson = Map<String, dynamic>.from(json);
+
+  normalizedJson['primaryMuscleGroup'] =
+      resolvePrimaryMuscleGroupApiValue(normalizedJson);
+  normalizedJson['equipmentNeeded'] = normalizeStringList(
+    normalizedJson['equipmentNeeded'] ?? normalizedJson['equipment_needed'],
+  );
+  normalizedJson['createdAt'] ??= normalizedJson['created_at'];
+  normalizedJson['updatedAt'] ??= normalizedJson['updated_at'];
+  normalizedJson['description'] ??= '';
+
+  return normalizedJson;
+}
+
+Map<String, dynamic> _normalizeRoutineExerciseModelJson(
+  Map<String, dynamic> json,
+) {
+  final normalizedJson = Map<String, dynamic>.from(json);
+
+  normalizedJson['routineId'] ??= normalizedJson['routine_id'];
+  normalizedJson['exerciseId'] ??= normalizedJson['exercise_id'];
+  normalizedJson['repsMin'] ??= normalizedJson['reps_min'];
+  normalizedJson['repsMax'] ??= normalizedJson['reps_max'];
+  normalizedJson['restSeconds'] ??= normalizedJson['rest_seconds'];
+  normalizedJson['orderInRoutine'] ??= normalizedJson['order_in_routine'];
+  normalizedJson['createdAt'] ??= normalizedJson['created_at'];
+  normalizedJson['updatedAt'] ??= normalizedJson['updated_at'];
+
+  return normalizedJson;
+}
+
 const _supportedMuscleGroupValues = <String>{
   'TRAPS',
   'SHOULDERS',
@@ -145,20 +177,8 @@ abstract class ExerciseModel with _$ExerciseModel {
     DateTime? updatedAt,
   }) = _ExerciseModel;
 
-  factory ExerciseModel.fromJson(Map<String, dynamic> json) {
-    final normalizedJson = Map<String, dynamic>.from(json);
-
-    normalizedJson['primaryMuscleGroup'] =
-        resolvePrimaryMuscleGroupApiValue(normalizedJson);
-    normalizedJson['equipmentNeeded'] = normalizeStringList(
-      normalizedJson['equipmentNeeded'] ?? normalizedJson['equipment_needed'],
-    );
-    normalizedJson['createdAt'] ??= normalizedJson['created_at'];
-    normalizedJson['updatedAt'] ??= normalizedJson['updated_at'];
-    normalizedJson['description'] ??= '';
-
-    return _$ExerciseModelFromJson(normalizedJson);
-  }
+  factory ExerciseModel.fromJson(Map<String, dynamic> json) =>
+      _$ExerciseModelFromJson(_normalizeExerciseModelJson(json));
 }
 
 /// Routine Exercise Model
@@ -181,18 +201,6 @@ abstract class RoutineExerciseModel with _$RoutineExerciseModel {
     DateTime? updatedAt,
   }) = _RoutineExerciseModel;
 
-  factory RoutineExerciseModel.fromJson(Map<String, dynamic> json) {
-    final normalizedJson = Map<String, dynamic>.from(json);
-
-    normalizedJson['routineId'] ??= normalizedJson['routine_id'];
-    normalizedJson['exerciseId'] ??= normalizedJson['exercise_id'];
-    normalizedJson['repsMin'] ??= normalizedJson['reps_min'];
-    normalizedJson['repsMax'] ??= normalizedJson['reps_max'];
-    normalizedJson['restSeconds'] ??= normalizedJson['rest_seconds'];
-    normalizedJson['orderInRoutine'] ??= normalizedJson['order_in_routine'];
-    normalizedJson['createdAt'] ??= normalizedJson['created_at'];
-    normalizedJson['updatedAt'] ??= normalizedJson['updated_at'];
-
-    return _$RoutineExerciseModelFromJson(normalizedJson);
-  }
+  factory RoutineExerciseModel.fromJson(Map<String, dynamic> json) =>
+      _$RoutineExerciseModelFromJson(_normalizeRoutineExerciseModelJson(json));
 }

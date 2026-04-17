@@ -39,6 +39,7 @@ abstract class StandaloneTodayDetails with _$StandaloneTodayDetails {
     required String dayOfWeek,
     required String assignedProgramId,
     required String programName,
+    @RoutineModelConverter()
     required RoutineModel routine,
   }) = _StandaloneTodayDetails;
 
