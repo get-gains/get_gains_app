@@ -269,12 +269,6 @@ class _RoutineCard extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               _InfoChip(
-                icon: Icons.assignment_outlined,
-                label: '${routine.programCount} programs',
-                isDark: isDark,
-              ),
-              const SizedBox(width: 12),
-              _InfoChip(
                 icon: Icons.timer_outlined,
                 label: '${routine.estimatedDurationMinutes} min',
                 isDark: isDark,

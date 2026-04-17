@@ -281,12 +281,6 @@ class _ProgramCard extends StatelessWidget {
                 label: '${program.routineCount} routines',
                 isDark: isDark,
               ),
-              const SizedBox(width: 12),
-              _InfoChip(
-                icon: Icons.people_outline,
-                label: '${program.assignedClientCount} clients',
-                isDark: isDark,
-              ),
             ],
           ),
         ],
