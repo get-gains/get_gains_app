@@ -26,6 +26,22 @@ Map<String, dynamic> _normalizeProgramDetailModelJson(
   return normalizedJson;
 }
 
+Map<String, dynamic> _normalizeProgramSummaryModelJson(
+  Map<String, dynamic> json,
+) {
+  final normalizedJson = Map<String, dynamic>.from(json);
+
+  normalizedJson['routineCount'] ??= normalizedJson['routine_count'] ?? 0;
+  normalizedJson['assignedClientCount'] ??=
+      normalizedJson['assigned_client_count'] ??
+      0;
+  normalizedJson['createdAt'] ??= normalizedJson['created_at'];
+  normalizedJson['updatedAt'] ??= normalizedJson['updated_at'];
+  normalizedJson['description'] ??= '';
+
+  return normalizedJson;
+}
+
 Map<String, dynamic> _normalizeRoutineSummaryModelJson(
   Map<String, dynamic> json,
 ) {
@@ -118,7 +134,7 @@ abstract class ProgramSummaryModel with _$ProgramSummaryModel {
   }) = _ProgramSummaryModel;
 
   factory ProgramSummaryModel.fromJson(Map<String, dynamic> json) =>
-      _$ProgramSummaryModelFromJson(json);
+      _$ProgramSummaryModelFromJson(_normalizeProgramSummaryModelJson(json));
 }
 
 /// Program Detail Model
