@@ -165,6 +165,12 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
     if (_poseSent || _frames.isEmpty) return;
     _poseSent = true;
 
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodSetCameraViewMode,
+      'WORKOUT',
+    );
+
     final payload = jsonEncode({
       'frames': _frames.map((f) => f.toJson()).toList(),
       'fps': 15,
@@ -190,6 +196,11 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
       UnityMessageContract.gameObjectName,
       UnityMessageContract.methodPlayPose,
       '',
+    );
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodSetPoseDebugOptions,
+      UnityMessageContract.defaultPoseDebugOptionsPayload(),
     );
   }
 

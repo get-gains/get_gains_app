@@ -219,15 +219,15 @@ class CosmeticsRepository {
     );
   }
 
-  /// Unequip a cosmetic from its category slot
+  /// Unequip a cosmetic by its ID
   Future<Result<EquipResponse, AppError>> unequipCosmetic(
-    String category,
+    String cosmeticId,
   ) async {
-    AppLogger.debug('Unequipping category: $category', tag: 'CosmeticsRepo');
+    AppLogger.debug('Unequipping cosmetic: $cosmeticId', tag: 'CosmeticsRepo');
 
     final result = await _apiClient.post<Map<String, dynamic>>(
       ApiConstants.cosmeticsUnequip,
-      data: {'category': category},
+      data: {'cosmeticId': cosmeticId},
     );
 
     return result.when(
@@ -239,7 +239,7 @@ class CosmeticsRepository {
           await _cacheEquippedFromResponse(response);
 
           AppLogger.info(
-            'Unequipped category: $category',
+            'Unequipped cosmetic: $cosmeticId',
             tag: 'CosmeticsRepo',
           );
           return Success(response);

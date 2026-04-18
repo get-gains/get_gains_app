@@ -358,6 +358,13 @@ class _ClientUnityRecordingScreenState
       'loop': true,
     });
 
+    // Ensure full-figure framing (restores wide orbit if previously in Cosmetic mode).
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodSetCameraViewMode,
+      'WORKOUT',
+    );
+
     sendToUnity(
       UnityMessageContract.gameObjectName,
       UnityMessageContract.methodLoadPoseFrames,
