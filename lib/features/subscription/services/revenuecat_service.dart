@@ -17,7 +17,9 @@ RevenueCatService revenueCatService(Ref ref) {
 class RevenueCatService {
   static const String _tag = 'RevenueCatService';
 
-  bool _isConfigured = false;
+  /// Static so the flag is shared across all instances (main() creates one,
+  /// Riverpod provider creates another).
+  static bool _isConfigured = false;
 
   /// Initialize RevenueCat SDK. Call once at app start.
   Future<void> init() async {
@@ -48,10 +50,7 @@ class RevenueCatService {
 
     try {
       final result = await Purchases.logIn(supabaseAuthId);
-      AppLogger.info(
-        'RevenueCat login: created=${result.created}',
-        tag: _tag,
-      );
+      AppLogger.info('RevenueCat login: created=${result.created}', tag: _tag);
     } catch (e) {
       AppLogger.error('RevenueCat login failed', tag: _tag, error: e);
     }
@@ -93,8 +92,6 @@ class RevenueCatService {
 
   /// Check if the premium entitlement is active.
   bool isEntitlementActive(CustomerInfo info) {
-    return info.entitlements.active.containsKey(
-      RevenueCatConfig.entitlementId,
-    );
+    return info.entitlements.active.containsKey(RevenueCatConfig.entitlementId);
   }
 }
