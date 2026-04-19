@@ -74,8 +74,6 @@ class ApiClient {
     _dio.interceptors.addAll([
       // Logging (only in debug)
       if (kDebugMode) LoggingInterceptor(),
-      // Error transformation
-      ErrorInterceptor(),
       // Retry logic
       RetryInterceptor(),
       // Auth (added last so it runs first on requests)
