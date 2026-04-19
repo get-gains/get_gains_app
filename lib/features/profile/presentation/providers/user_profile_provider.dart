@@ -69,7 +69,7 @@ class UserProfileNotifier extends _$UserProfileNotifier {
       },
       failure: (error) {
         AppLogger.error('Failed to load profile', tag: _tag, error: error);
-        throw Exception(error.message);
+        throw error;
       },
     );
   }
@@ -97,7 +97,7 @@ class UserProfileNotifier extends _$UserProfileNotifier {
       },
       failure: (error) {
         AppLogger.error('Create profile failed', tag: _tag, error: error);
-        throw Exception(error.message);
+        throw error;
       },
     );
   }
@@ -121,7 +121,7 @@ class UserProfileNotifier extends _$UserProfileNotifier {
       },
       failure: (error) {
         AppLogger.error('Update profile failed', tag: _tag, error: error);
-        throw Exception(error.message);
+        throw error;
       },
     );
   }

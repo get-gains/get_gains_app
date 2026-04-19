@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../core/constants/api_constants.dart';
+import '../../core/errors/api_error_codes.dart';
 import '../../core/utils/app_error.dart';
 import '../../core/utils/logger.dart';
 import '../../features/client_pose/data/models/body_segment.dart';
@@ -150,8 +151,8 @@ class WorkoutSyncService {
           return remoteId;
         },
         failure: (error) async {
-          // 409 = active session already exists on server — fetch it
-          if (error.message.contains('active workout session')) {
+          // Server returned 409 — active session already exists; fetch it
+          if (error.code == ApiErrorCode.workoutSessionAlreadyActive) {
             return _fetchActiveSessionId(session.id);
           }
           AppLogger.warning(

@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../../core/errors/error_messages.dart';
+import '../../../../core/utils/app_error.dart';
 import '../../../../core/utils/logger.dart';
 import '../../data/models/profile_request_models.dart';
 import '../../data/models/user_profile_model.dart';
@@ -281,6 +283,13 @@ class EditProfileNotifier extends _$EditProfileNotifier {
       state = state.copyWith(status: EditProfileStatus.success);
       AppLogger.info('Profile saved from edit screen', tag: _tag);
       return true;
+    } on AppError catch (e) {
+      state = state.copyWith(
+        status: EditProfileStatus.error,
+        errorMessage: errorMessageFor(e),
+      );
+      AppLogger.error('Profile save failed', tag: _tag, error: e);
+      return false;
     } catch (e) {
       final message = e is Exception
           ? e.toString().replaceFirst('Exception: ', '')
