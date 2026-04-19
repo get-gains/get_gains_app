@@ -1,5 +1,6 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../../core/errors/api_error_codes.dart';
 import '../../../../core/utils/app_error.dart';
 import '../../../../core/utils/logger.dart';
 import '../../data/models/cosmetic_model.dart';
@@ -41,7 +42,7 @@ class ShopLoaded extends ShopState {
   final int? filterTier;
   final String? filterCategory;
   final bool isPurchasing;
-  final String? purchaseError;
+  final AppError? purchaseError;
 
   /// Items grouped by tier for tiered display
   Map<int, List<CosmeticModel>> get itemsByTier {
@@ -95,7 +96,7 @@ class ShopLoaded extends ShopState {
     int? Function()? filterTier,
     String? Function()? filterCategory,
     bool? isPurchasing,
-    String? Function()? purchaseError,
+    AppError? Function()? purchaseError,
   }) {
     return ShopLoaded(
       items: items ?? this.items,
@@ -260,9 +261,23 @@ class ShopNotifier extends _$ShopNotifier {
         return true;
       },
       failure: (error) {
+        // Item already owned — not really an error. Refresh inventory so
+        // the UI reflects ownership, then show a soft info message.
+        if (error.code == ApiErrorCode.shopItemAlreadyOwned) {
+          final updatedOwned = [...currentState.ownedCosmeticIds, cosmeticId];
+          state = currentState.copyWith(
+            ownedCosmeticIds: updatedOwned,
+            isPurchasing: false,
+            purchaseError: () => null,
+          );
+          // Refresh from server to ensure consistency
+          refresh();
+          return true;
+        }
+
         state = (state as ShopLoaded).copyWith(
           isPurchasing: false,
-          purchaseError: () => error.message,
+          purchaseError: () => error,
         );
         AppLogger.error(
           'Purchase failed: ${error.message}',
