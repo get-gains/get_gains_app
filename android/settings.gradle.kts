@@ -26,17 +26,19 @@ plugins {
 
 include(":app")
 // Unity export is optional (not in repo); include only when present so CI/fresh clones can build.
-// Support both structures: flat (unityLibrary/build.gradle) or nested (unityLibrary/unityLibrary/build.gradle).
-val unityLibraryFlat = file("unityLibrary/build.gradle")
+// Support both structures: nested (unityLibrary/unityLibrary/build.gradle) or flat (unityLibrary/build.gradle).
+// Check nested first — a Unity export drops a root build.gradle that only declares plugins,
+// while the actual android-library module lives one level deeper.
 val unityLibraryNested = file("unityLibrary/unityLibrary/build.gradle")
 val unityLibraryNestedKts = file("unityLibrary/unityLibrary/build.gradle.kts")
+val unityLibraryFlat = file("unityLibrary/build.gradle")
 when {
-    unityLibraryFlat.exists() -> {
-        include(":unityLibrary")
-        project(":unityLibrary").projectDir = file("unityLibrary")
-    }
     unityLibraryNested.exists() || unityLibraryNestedKts.exists() -> {
         include(":unityLibrary")
         project(":unityLibrary").projectDir = file("unityLibrary/unityLibrary")
+    }
+    unityLibraryFlat.exists() -> {
+        include(":unityLibrary")
+        project(":unityLibrary").projectDir = file("unityLibrary")
     }
 }
