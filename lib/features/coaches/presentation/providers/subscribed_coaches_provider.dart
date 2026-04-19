@@ -115,7 +115,12 @@ class SubscribedCoachesNotifier extends _$SubscribedCoachesNotifier {
   /// Server-side guards handle:
   /// - ML-2: 403 if no platform subscription
   /// - ML-5: 409 if coach not accepting / at capacity
-  Future<bool> subscribeToCoach(String coachId) async {
+  ///
+  /// Returns a record with [success] and an optional [error] so screens can
+  /// branch on [AppError.code] for code-aware UX.
+  Future<({bool success, AppError? error})> subscribeToCoach(
+    String coachId,
+  ) async {
     final result = await _repo.subscribeToCoach(coachId);
 
     return result.when(
@@ -135,20 +140,25 @@ class SubscribedCoachesNotifier extends _$SubscribedCoachesNotifier {
           // providers pick up the new subscription immediately.
           loadCoaches();
         }
-        return true;
+        return (success: true, error: null);
       },
       failure: (error) {
         AppLogger.error(
           'Subscribe failed: ${error.message}',
           tag: 'SubscribedCoachesNotifier',
         );
-        return false;
+        return (success: false, error: error);
       },
     );
   }
 
   /// Unsubscribe from a coach and remove them from the list.
-  Future<bool> unsubscribeFromCoach(String coachId) async {
+  ///
+  /// Returns a record with [success] and an optional [error] so screens can
+  /// branch on [AppError.code] for code-aware UX.
+  Future<({bool success, AppError? error})> unsubscribeFromCoach(
+    String coachId,
+  ) async {
     final result = await _repo.unsubscribeFromCoach(coachId);
 
     return result.when(
@@ -162,14 +172,14 @@ class SubscribedCoachesNotifier extends _$SubscribedCoachesNotifier {
             ),
           );
         }
-        return true;
+        return (success: true, error: null);
       },
       failure: (error) {
         AppLogger.error(
           'Unsubscribe failed: ${error.message}',
           tag: 'SubscribedCoachesNotifier',
         );
-        return false;
+        return (success: false, error: error);
       },
     );
   }
