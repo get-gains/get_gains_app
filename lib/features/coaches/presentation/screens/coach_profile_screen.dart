@@ -6,6 +6,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_error.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../../core/access/access_guard.dart';
+import '../../../../core/access/access_guard_provider.dart';
 import '../../../subscription/subscription.dart';
 import '../../data/models/coach_model.dart';
 import '../providers/coach_profile_provider.dart';
@@ -351,19 +353,19 @@ class _CoachProfileScreenState extends ConsumerState<CoachProfileScreen> {
       } else {
         // Proactive subscription check — show upgrade prompt instead of
         // relying on server 403 with a vague error toast (US2 / T026).
-        final guard = ref.read(subscriptionGuardProvider);
-        final canAccess = await guard.requireTier(
-          SubscriptionTiers.basic,
-          onDenied: (_) {
-            if (mounted) {
-              showUpgradeSheet(
-                context: context,
-                feature: SubscriptionFeature.coachAccess,
-              );
-            }
-          },
+        final guard = ref.read(accessGuardProvider);
+        final decision = await guard.evaluateAsync(
+          const AccessRequirement(requireTier: SubscriptionTier.premium),
         );
-        if (!canAccess) return;
+        if (decision is! AccessGranted) {
+          if (mounted) {
+            showUpgradeSheet(
+              context: context,
+              feature: SubscriptionFeature.coachAccess,
+            );
+          }
+          return;
+        }
 
         // Subscribe — server still enforces ML-2 + ML-5 as fallback
         final success = await ref

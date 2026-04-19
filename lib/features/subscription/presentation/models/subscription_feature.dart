@@ -1,7 +1,7 @@
 /// Subscription Feature Definitions
 ///
 /// Centralizes per-feature upgrade prompt metadata used by
-/// [UpgradePrompt] and [SubscriptionGatedWidget] for contextual messaging.
+/// [UpgradePrompt] and [AccessGated] for contextual messaging.
 ///
 /// Each feature has a human-readable benefit description for display
 /// in upgrade prompts and an analytics key for tracking.
