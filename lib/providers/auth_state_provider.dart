@@ -1,8 +1,10 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../core/utils/logger.dart';
 import '../features/profile/presentation/providers/profile_provider.dart';
 import '../features/profile/presentation/providers/user_profile_provider.dart';
 import '../features/subscription/presentation/providers/subscription_provider.dart';
+import '../features/subscription/services/revenuecat_service.dart';
 import '../services/api/api_client.dart';
 import '../services/storage/secure_storage_service.dart';
 
@@ -139,6 +141,8 @@ class AuthStateNotifier extends _$AuthStateNotifier {
                 email: email,
                 isLoading: false,
               );
+              // Alias RC user (fire-and-forget)
+              ref.read(revenueCatServiceProvider).login(userId);
               return;
             }
 
@@ -162,6 +166,10 @@ class AuthStateNotifier extends _$AuthStateNotifier {
           email: email,
           isLoading: false,
         );
+        // Alias RC user on app start (fire-and-forget)
+        if (userId != null) {
+          ref.read(revenueCatServiceProvider).login(userId);
+        }
         // ignore: avoid_print
         print('[AuthState] Set to authenticated');
       } else {
@@ -206,6 +214,9 @@ class AuthStateNotifier extends _$AuthStateNotifier {
       email: email,
       isLoading: false,
     );
+
+    // Alias RevenueCat user to Supabase auth ID (fire-and-forget)
+    ref.read(revenueCatServiceProvider).login(userId);
   }
 
   /// Logout and clear all stored credentials
@@ -219,6 +230,9 @@ class AuthStateNotifier extends _$AuthStateNotifier {
       await _storage.delete(key: 'user_email');
 
       state = const AuthState(status: AuthStatus.unauthenticated);
+
+      // Log out of RevenueCat (fire-and-forget)
+      ref.read(revenueCatServiceProvider).logout();
 
       // Invalidate all user-specific cached providers so the next
       // login always fetches fresh data for the new account.

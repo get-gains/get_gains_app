@@ -3,5 +3,5 @@
 /// Subscription services exports
 library;
 
-export 'billing_error_parser.dart';
-export 'in_app_purchase_service.dart';
+export 'revenuecat_error_mapper.dart';
+export 'revenuecat_service.dart';

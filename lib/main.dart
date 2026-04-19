@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'core/core.dart';
 import 'features/auth/services/user_preferences_service.dart';
+import 'features/subscription/services/revenuecat_service.dart';
 import 'providers/providers.dart';
 import 'widgets/widgets.dart';
 
@@ -31,6 +32,9 @@ Future<void> main() async {
     maxRetries: 5,
     initialDelay: const Duration(milliseconds: 300),
   );
+
+  // Initialize RevenueCat SDK (before runApp, no user login yet)
+  await RevenueCatService().init();
 
   AppLogger.info('Starting Get Gains App', tag: 'Main');
 
