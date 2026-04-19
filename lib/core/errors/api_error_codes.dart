@@ -1,7 +1,7 @@
 // GENERATED FILE — DO NOT EDIT
 // Re-generate via:  npm run codegen:errors  (in server/)
 //
-// Source: src/lib/errors/codes.ts  (103 codes)
+// Source: src/lib/errors/codes.ts  (108 codes)
 
 /// Machine-readable error codes returned by the Get Gains API.
 ///
@@ -162,6 +162,12 @@ enum ApiErrorCode {
   coachClientNotFound('COACH_CLIENT_NOT_FOUND'),
   /// `COACH_PROGRAM_LOCKED`
   coachProgramLocked('COACH_PROGRAM_LOCKED'),
+  /// `PROGRAM_ROUTINE_NOT_FOUND`
+  programRoutineNotFound('PROGRAM_ROUTINE_NOT_FOUND'),
+  /// `PROGRAM_ROUTINE_DAY_CONFLICT`
+  programRoutineDayConflict('PROGRAM_ROUTINE_DAY_CONFLICT'),
+  /// `PROGRAM_REQUIRED`
+  programRequired('PROGRAM_REQUIRED'),
   /// `SUBSCRIPTION_NOT_FOUND`
   subscriptionNotFound('SUBSCRIPTION_NOT_FOUND'),
   /// `SUBSCRIPTION_SYNC_FAILED`
@@ -190,6 +196,8 @@ enum ApiErrorCode {
   statsRangeInvalid('STATS_RANGE_INVALID'),
   /// `CLASS_NOT_FOUND`
   classNotFound('CLASS_NOT_FOUND'),
+  /// `CLASS_CLIENT_ALREADY_REMOVED`
+  classClientAlreadyRemoved('CLASS_CLIENT_ALREADY_REMOVED'),
   /// `COIN_INSUFFICIENT_BALANCE`
   coinInsufficientBalance('COIN_INSUFFICIENT_BALANCE'),
   /// `COIN_HISTORY_FETCH_FAILED`
@@ -214,6 +222,8 @@ enum ApiErrorCode {
   poseImageInvalid('POSE_IMAGE_INVALID'),
   /// `POSE_ANALYSIS_FAILED`
   poseAnalysisFailed('POSE_ANALYSIS_FAILED'),
+  /// `POSE_FORM_NOT_FOUND`
+  poseFormNotFound('POSE_FORM_NOT_FOUND'),
 
   /// Fallback for codes added server-side but not yet in this enum.
   unknown('UNKNOWN');
