@@ -118,7 +118,7 @@ class GoogleSignInService {
           AuthError(
             message:
                 'Google sign-in is not configured. Please contact support.',
-            code: 'GOOGLE_NOT_CONFIGURED',
+            transportCode: 'GOOGLE_NOT_CONFIGURED',
           ),
         );
       }
@@ -139,7 +139,7 @@ class GoogleSignInService {
         return const Failure(
           AuthError(
             message: 'Sign-in cancelled',
-            code: 'GOOGLE_SIGN_IN_CANCELLED',
+            transportCode: 'GOOGLE_SIGN_IN_CANCELLED',
           ),
         );
       }
@@ -156,7 +156,7 @@ class GoogleSignInService {
         return const Failure(
           AuthError(
             message: 'Failed to authenticate with Google',
-            code: 'GOOGLE_NO_ID_TOKEN',
+            transportCode: 'GOOGLE_NO_ID_TOKEN',
           ),
         );
       }
@@ -182,7 +182,7 @@ class GoogleSignInService {
       return Failure(
         AuthError(
           message: errorMessage,
-          code: 'GOOGLE_SIGN_IN_ERROR',
+          transportCode: 'GOOGLE_SIGN_IN_ERROR',
           originalError: e,
         ),
       );
@@ -191,7 +191,7 @@ class GoogleSignInService {
       return Failure(
         AuthError(
           message: 'Google sign-in failed: ${e.toString()}',
-          code: 'GOOGLE_SIGN_IN_ERROR',
+          transportCode: 'GOOGLE_SIGN_IN_ERROR',
           originalError: e,
         ),
       );

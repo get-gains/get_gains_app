@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 
 import '../../core/constants/api_constants.dart';
+import '../../core/errors/api_error_codes.dart';
 import '../../core/utils/logger.dart';
 import '../storage/secure_storage_service.dart';
 
@@ -54,6 +55,8 @@ class AuthInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     // Handle 401 Unauthorized
     if (err.response?.statusCode == HttpStatus.unauthorized) {
+      final apiCode = _extractErrorCode(err.response);
+
       // Don't retry if already refreshing or if this is a refresh/recovery request
       if (_isRefreshing ||
           err.requestOptions.path.contains('/auth/refresh') ||
@@ -68,6 +71,20 @@ class AuthInterceptor extends Interceptor {
           tag: 'AuthInterceptor',
         );
         onAuthFailure();
+        handler.next(err);
+        return;
+      }
+
+      // Decide whether a token refresh might help based on the error code.
+      if (!_shouldAttemptRefresh(err.requestOptions, apiCode)) {
+        AppLogger.info(
+          'Unrecoverable 401 (code=${apiCode?.value}), skipping refresh',
+          tag: 'AuthInterceptor',
+        );
+        // Auth endpoints (e.g. login) — just propagate, don't force logout
+        if (!_isAuthEndpoint(err.requestOptions.path)) {
+          onAuthFailure();
+        }
         handler.next(err);
         return;
       }
@@ -106,6 +123,62 @@ class AuthInterceptor extends Interceptor {
 
     handler.next(err);
   }
+
+  /// Extracts the first [ApiErrorCode] from a Dio error response envelope.
+  ///
+  /// Returns `null` when the response body is not a standard JSON envelope
+  /// (e.g. proxy-generated HTML 401 pages).
+  ApiErrorCode? _extractErrorCode(Response<dynamic>? response) {
+    try {
+      final data = response?.data;
+      if (data is Map<String, dynamic>) {
+        final errors = data['errors'] as List<dynamic>?;
+        if (errors != null && errors.isNotEmpty) {
+          final raw = (errors.first as Map<String, dynamic>)['code'] as String?;
+          if (raw != null && raw.isNotEmpty) {
+            return ApiErrorCode.fromString(raw);
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Whether a 401 with the given [code] on [options] should trigger a token
+  /// refresh attempt.
+  ///
+  /// Returns `true` for recoverable codes (`authTokenExpired`,
+  /// `authSessionExpired`) and for `null` (legacy / envelope-less 401s — keep
+  /// the existing behaviour to avoid regressions).
+  ///
+  /// Returns `false` for clearly unrecoverable codes like
+  /// `authInvalidCredentials`, `authTokenInvalid`, etc. — refreshing would
+  /// loop or fail needlessly.
+  bool _shouldAttemptRefresh(RequestOptions options, ApiErrorCode? code) {
+    // No code (legacy server or non-JSON response) — default to refresh
+    if (code == null) return true;
+
+    // Codes where a refresh can recover the session
+    const recoverableCodes = {
+      ApiErrorCode.authTokenExpired,
+      ApiErrorCode.authSessionExpired,
+      // unknown — server sent a code we don't recognise; safest to try refresh
+      ApiErrorCode.unknown,
+    };
+
+    return recoverableCodes.contains(code);
+  }
+
+  /// Whether the request path is an auth endpoint that should not trigger
+  /// automatic logout on failure.
+  bool _isAuthEndpoint(String path) =>
+      path.contains('/auth/login') ||
+      path.contains('/auth/register') ||
+      path.contains('/auth/refresh') ||
+      path.contains('/auth/reset-password') ||
+      path.contains('/auth/send-recovery-email') ||
+      path.contains('/auth/check-email-verified') ||
+      path.contains('/auth/exchange-code');
 }
 
 /// Logging Interceptor
