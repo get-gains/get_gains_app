@@ -2,14 +2,15 @@
 
 import 'dart:async';
 
+import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/utils/app_error.dart';
 import '../../../../core/utils/logger.dart';
 import '../../data/models/models.dart';
 import '../../data/subscription_repository.dart';
-import '../../services/billing_error_parser.dart';
-import '../../services/in_app_purchase_service.dart';
+import '../../services/revenuecat_error_mapper.dart';
+import '../../services/revenuecat_service.dart';
 
 part 'subscription_provider.g.dart';
 
@@ -32,16 +33,16 @@ class SubscriptionLoading extends SubscriptionState {
 class SubscriptionLoaded extends SubscriptionState {
   const SubscriptionLoaded({
     required this.status,
-    required this.plans,
+    this.currentOffering,
     this.purchaseInProgress = false,
     this.purchaseError,
   });
 
-  /// Current subscription status
+  /// Current subscription status (from backend — source of truth)
   final SubscriptionStatusModel status;
 
-  /// Available plans for purchase
-  final List<PlanModel> plans;
+  /// Current RC offering (packages to display)
+  final Offering? currentOffering;
 
   /// Whether a purchase is currently in progress
   final bool purchaseInProgress;
@@ -51,13 +52,13 @@ class SubscriptionLoaded extends SubscriptionState {
 
   SubscriptionLoaded copyWith({
     SubscriptionStatusModel? status,
-    List<PlanModel>? plans,
+    Offering? currentOffering,
     bool? purchaseInProgress,
     String? purchaseError,
   }) {
     return SubscriptionLoaded(
       status: status ?? this.status,
-      plans: plans ?? this.plans,
+      currentOffering: currentOffering ?? this.currentOffering,
       purchaseInProgress: purchaseInProgress ?? this.purchaseInProgress,
       purchaseError: purchaseError,
     );
@@ -74,40 +75,19 @@ class SubscriptionError extends SubscriptionState {
 /// Subscription State Notifier
 ///
 /// Manages subscription state for the app:
-/// - Loads subscription status and plans
-/// - Handles purchase flow
-/// - Updates state after purchases
-///
-/// Usage:
-/// ```dart
-/// // Watch subscription state
-/// final state = ref.watch(subscriptionNotifierProvider);
-///
-/// // Load subscription data
-/// await ref.read(subscriptionNotifierProvider.notifier).load();
-///
-/// // Purchase a plan
-/// await ref.read(subscriptionNotifierProvider.notifier).purchase('premium_monthly');
-/// ```
+/// - Loads subscription status from backend (source of truth)
+/// - Loads RC offerings for paywall display
+/// - Handles purchase flow via RevenueCat SDK
+/// - Polls backend with backoff after purchase for webhook reconciliation
 @Riverpod(keepAlive: true)
 class SubscriptionNotifier extends _$SubscriptionNotifier {
   late SubscriptionRepository _repository;
-  late InAppPurchaseService _iapService;
-  StreamSubscription<PurchaseResult>? _purchaseSubscription;
+  late RevenueCatService _rcService;
 
   @override
   SubscriptionState build() {
     _repository = ref.watch(subscriptionRepositoryProvider);
-    _iapService = ref.watch(inAppPurchaseServiceProvider);
-
-    // Listen to purchase results
-    _purchaseSubscription = _iapService.purchaseResults.listen(
-      _handlePurchaseResult,
-    );
-
-    ref.onDispose(() {
-      _purchaseSubscription?.cancel();
-    });
+    _rcService = ref.watch(revenueCatServiceProvider);
 
     // Auto-load on first access
     Future.microtask(() => load());
@@ -115,62 +95,40 @@ class SubscriptionNotifier extends _$SubscriptionNotifier {
     return const SubscriptionInitial();
   }
 
-  /// Load subscription status and available plans
+  /// Load subscription status and RC offerings in parallel.
   Future<void> load() async {
     state = const SubscriptionLoading();
 
     AppLogger.debug('Loading subscription data', tag: 'SubProvider');
 
-    // Fetch status and plans in parallel
+    // Fetch backend status and RC offerings in parallel
     final results = await Future.wait([
       _repository.getSubscriptionStatus(),
-      _repository.getPlans(),
+      _fetchOfferings(),
     ]);
 
     final statusResult = results[0] as dynamic;
-    final plansResult = results[1] as dynamic;
+    final offering = results[1] as Offering?;
 
-    // Check for errors
     if (statusResult.isFailure) {
       state = SubscriptionError(error: statusResult.error as AppError);
       return;
     }
 
-    if (plansResult.isFailure) {
-      state = SubscriptionError(error: plansResult.error as AppError);
-      return;
-    }
-
     final status = statusResult.value as SubscriptionStatusModel;
-    final plans = plansResult.value as List<PlanModel>;
 
-    // Set state first so UI is not stuck on loading
-    state = SubscriptionLoaded(status: status, plans: plans);
-
-    AppLogger.info(
-      'Subscription loaded: isSubscribed=${status.isSubscribed}, tier=${status.tierLevel}',
-      tag: 'SubProvider',
+    state = SubscriptionLoaded(
+      status: status,
+      currentOffering: offering,
     );
 
-    // Initialize IAP service with product IDs (non-blocking)
-    if (!_iapService.isInitialized && plans.isNotEmpty) {
-      final productIds = plans.map((p) => p.productId).toList();
-      // Don't await - let it initialize in the background
-      _iapService
-          .initialize(productIds)
-          .then((_) {
-            AppLogger.debug('IAP service initialized', tag: 'SubProvider');
-          })
-          .catchError((e) {
-            AppLogger.warning(
-              'IAP initialization failed: $e',
-              tag: 'SubProvider',
-            );
-          });
-    }
+    AppLogger.info(
+      'Subscription loaded: isSubscribed=${status.isSubscribed}, tier=${status.tier}',
+      tag: 'SubProvider',
+    );
   }
 
-  /// Refresh subscription status only (faster than full load)
+  /// Refresh subscription status only (no offerings refetch).
   Future<void> refresh() async {
     final currentState = state;
     if (currentState is! SubscriptionLoaded) {
@@ -186,7 +144,7 @@ class SubscriptionNotifier extends _$SubscriptionNotifier {
       success: (status) {
         state = currentState.copyWith(status: status);
         AppLogger.info(
-          'Subscription refreshed: isSubscribed=${status.isSubscribed}',
+          'Subscription refreshed: isSubscribed=${status.isSubscribed}, tier=${status.tier}',
           tag: 'SubProvider',
         );
       },
@@ -196,188 +154,129 @@ class SubscriptionNotifier extends _$SubscriptionNotifier {
           tag: 'SubProvider',
           error: error,
         );
-        // Keep current state, don't fail completely
+        // Keep current state on refresh failure
       },
     );
   }
 
-  /// Purchase a subscription plan
+  /// Purchase a package via RevenueCat.
   ///
-  /// [productId] - The product ID from the plan to purchase
-  Future<bool> purchase(String productId) async {
+  /// After purchase succeeds, polls backend with backoff to wait
+  /// for webhook reconciliation before declaring PREMIUM.
+  Future<void> purchase(Package package) async {
     final currentState = state;
-    if (currentState is! SubscriptionLoaded) {
-      AppLogger.warning(
-        'Cannot purchase - subscription not loaded',
-        tag: 'SubProvider',
-      );
-      return false;
-    }
+    if (currentState is! SubscriptionLoaded) return;
 
     state = currentState.copyWith(
       purchaseInProgress: true,
       purchaseError: null,
     );
 
-    AppLogger.debug('Starting purchase for: $productId', tag: 'SubProvider');
+    AppLogger.debug(
+      'Starting purchase for: ${package.storeProduct.identifier}',
+      tag: 'SubProvider',
+    );
 
-    // Ensure IAP service is initialized with products before purchasing
-    if (!_iapService.isInitialized) {
-      AppLogger.debug(
-        'IAP service not initialized, initializing now...',
-        tag: 'SubProvider',
-      );
-      final productIds = currentState.plans.map((p) => p.productId).toList();
-      await _iapService.initialize(productIds);
-    } else if (_iapService.products.isEmpty && currentState.plans.isNotEmpty) {
-      // Initialized but no products loaded - try loading again
-      AppLogger.debug('No products loaded, reloading...', tag: 'SubProvider');
-      final productIds = currentState.plans.map((p) => p.productId).toList();
-      await _iapService.loadProducts(productIds);
-    }
+    try {
+      await _rcService.purchase(package);
 
-    final result = await _iapService.purchaseProduct(productId);
+      // Purchase succeeded — poll backend with backoff for webhook lag
+      await _pollForPremium(currentState);
+    } on Exception catch (e) {
+      final errorMsg = RevenueCatErrorMapper.mapError(e);
 
-    if (result.isError) {
-      state = currentState.copyWith(
-        purchaseInProgress: false,
-        purchaseError: result.errorMessage,
-      );
-      return false;
-    }
-
-    // Purchase initiated - wait for result via stream
-    // The _handlePurchaseResult will update state
-    return true;
-  }
-
-  /// Handle purchase result from IAP service
-  void _handlePurchaseResult(PurchaseResult result) async {
-    final currentState = state;
-    if (currentState is! SubscriptionLoaded) return;
-
-    switch (result.status) {
-      case PurchaseState.completed:
-        AppLogger.info('Purchase completed, verifying...', tag: 'SubProvider');
-
-        // Verify with backend
-        final purchase = result.purchaseDetails!;
-        final token = _iapService.getPurchaseToken(purchase);
-
-        if (token != null) {
-          final verifyResult = await _repository.verifyPurchase(
-            productId: purchase.productID,
-            purchaseToken: token,
-            provider: _iapService.currentProvider,
-          );
-
-          await verifyResult.when(
-            success: (response) async {
-              if (response.success) {
-                AppLogger.info(
-                  'Purchase verified successfully',
-                  tag: 'SubProvider',
-                );
-                // Refresh to get updated status
-                await refresh();
-                state = (state as SubscriptionLoaded).copyWith(
-                  purchaseInProgress: false,
-                );
-              } else {
-                state = currentState.copyWith(
-                  purchaseInProgress: false,
-                  purchaseError: 'Purchase verification failed',
-                );
-              }
-            },
-            failure: (error) {
-              state = currentState.copyWith(
-                purchaseInProgress: false,
-                purchaseError: error.message,
-              );
-            },
-          );
-        } else {
-          state = currentState.copyWith(
-            purchaseInProgress: false,
-            purchaseError: 'Could not get purchase token',
-          );
-        }
-        break;
-
-      case PurchaseState.canceled:
+      if (RevenueCatErrorMapper.isUserCanceled(e)) {
         AppLogger.info('Purchase canceled by user', tag: 'SubProvider');
         state = currentState.copyWith(purchaseInProgress: false);
-        break;
+        return;
+      }
 
-      case PurchaseState.error:
-        final errorMsg = result.errorMessage;
-
-        // Don't show error for user cancellation (already handled above,
-        // but some platforms report it as error)
-        if (BillingErrorParser.isUserCanceled(errorMsg)) {
-          AppLogger.info(
-            'Purchase canceled by user (via error)',
-            tag: 'SubProvider',
-          );
-          state = currentState.copyWith(purchaseInProgress: false);
-          break;
-        }
-
-        // For already owned items, suggest restore
-        if (BillingErrorParser.isAlreadyOwned(errorMsg)) {
-          AppLogger.info(
-            'Item already owned, prompting restore',
-            tag: 'SubProvider',
-          );
-          state = currentState.copyWith(
-            purchaseInProgress: false,
-            purchaseError:
-                'You already own this subscription. Tap "Restore Purchases" to restore it.',
-          );
-          break;
-        }
-
-        AppLogger.error('Purchase error: $errorMsg', tag: 'SubProvider');
-        state = currentState.copyWith(
-          purchaseInProgress: false,
-          purchaseError: errorMsg,
-        );
-        break;
-
-      case PurchaseState.pending:
-        AppLogger.info('Purchase pending', tag: 'SubProvider');
-        // Keep purchase in progress
-        break;
-
-      case PurchaseState.idle:
-      case PurchaseState.purchasing:
-        // No action needed
-        break;
+      AppLogger.error('Purchase error: $errorMsg', tag: 'SubProvider');
+      state = currentState.copyWith(
+        purchaseInProgress: false,
+        purchaseError: errorMsg,
+      );
     }
   }
 
-  /// Restore previous purchases
+  /// Restore purchases via RevenueCat, then poll backend.
   Future<void> restorePurchases() async {
     final currentState = state;
     if (currentState is! SubscriptionLoaded) return;
 
     state = currentState.copyWith(purchaseInProgress: true);
 
-    await _iapService.restorePurchases();
+    try {
+      await _rcService.restorePurchases();
+      await _pollForPremium(currentState);
+    } on Exception catch (e) {
+      final errorMsg = RevenueCatErrorMapper.mapError(e);
+      AppLogger.error('Restore error: $errorMsg', tag: 'SubProvider');
+      state = currentState.copyWith(
+        purchaseInProgress: false,
+        purchaseError: errorMsg,
+      );
+    }
+  }
 
-    // The results will come through the purchase stream
-    // Give it a moment then refresh
-    await Future.delayed(const Duration(seconds: 2));
+  /// Poll backend with backoff: 1s → 2s → 5s.
+  /// Bail as soon as backend reports PREMIUM. Max ~8s total.
+  Future<void> _pollForPremium(SubscriptionLoaded prePurchaseState) async {
+    const delays = [
+      Duration(seconds: 1),
+      Duration(seconds: 2),
+      Duration(seconds: 5),
+    ];
+
+    for (final delay in delays) {
+      await refresh();
+
+      final current = state;
+      if (current is SubscriptionLoaded &&
+          current.status.subscriptionTier == SubscriptionTier.premium) {
+        state = current.copyWith(purchaseInProgress: false);
+        AppLogger.info(
+          'Backend confirmed PREMIUM after purchase',
+          tag: 'SubProvider',
+        );
+        return;
+      }
+
+      await Future.delayed(delay);
+    }
+
+    // Final attempt
     await refresh();
+    final finalState = state;
+    if (finalState is SubscriptionLoaded) {
+      state = finalState.copyWith(purchaseInProgress: false);
+      if (finalState.status.subscriptionTier != SubscriptionTier.premium) {
+        AppLogger.warning(
+          'Backend still reports FREE after polling — webhook may be delayed',
+          tag: 'SubProvider',
+        );
+      }
+    }
+  }
 
-    state = (state as SubscriptionLoaded).copyWith(purchaseInProgress: false);
+  /// Fetch current RC offering (null on failure — non-fatal).
+  Future<Offering?> _fetchOfferings() async {
+    try {
+      final offerings = await _rcService.getOfferings();
+      return offerings.current;
+    } catch (e) {
+      AppLogger.warning(
+        'Failed to fetch RC offerings: $e',
+        tag: 'SubProvider',
+      );
+      return null;
+    }
   }
 }
 
 // ============== Convenience Providers ==============
 
-/// Whether the user has an active subscription
+/// Whether the user has an active subscription.
 @riverpod
 bool isSubscribed(Ref ref) {
   final state = ref.watch(subscriptionProvider);
@@ -387,71 +286,22 @@ bool isSubscribed(Ref ref) {
   return false;
 }
 
-/// Current subscription tier level (0 if none)
+/// Current subscription tier.
 @riverpod
-int subscriptionTier(Ref ref) {
+SubscriptionTier subscriptionTier(Ref ref) {
   final state = ref.watch(subscriptionProvider);
   if (state is SubscriptionLoaded) {
-    return state.status.tierLevel;
+    return state.status.subscriptionTier;
   }
-  return 0;
+  return SubscriptionTier.free;
 }
 
-/// Current subscription (null if none)
+/// Available RC packages for purchase.
 @riverpod
-SubscriptionModel? currentSubscription(Ref ref) {
+List<Package> availablePackages(Ref ref) {
   final state = ref.watch(subscriptionProvider);
   if (state is SubscriptionLoaded) {
-    return state.status.subscription;
-  }
-  return null;
-}
-
-/// Available plans for purchase
-@riverpod
-List<PlanModel> availablePlans(Ref ref) {
-  final state = ref.watch(subscriptionProvider);
-  if (state is SubscriptionLoaded) {
-    return state.plans;
+    return state.currentOffering?.availablePackages ?? [];
   }
   return [];
-}
-
-/// Get plan name for a specific tier level
-///
-/// Returns the plan name from available plans, or 'Subscription' if not found.
-/// Useful for displaying tier names in UI without hardcoding.
-@riverpod
-String planNameForTier(Ref ref, int tierLevel) {
-  final plans = ref.watch(availablePlansProvider);
-
-  // Find a plan with matching tier level
-  final matchingPlan = plans.where((p) => p.tierLevel == tierLevel).firstOrNull;
-  if (matchingPlan != null) {
-    return _formatPlanName(matchingPlan.name);
-  }
-  return 'Subscription';
-}
-
-/// Format plan name for display (e.g., "premium_monthly" -> "Premium")
-String _formatPlanName(String name) {
-  // Remove common suffixes like _monthly, _yearly, etc.
-  final baseName = name
-      .replaceAll(
-        RegExp(
-          r'[_-](monthly|yearly|annual|weekly|daily)$',
-          caseSensitive: false,
-        ),
-        '',
-      )
-      .replaceAll('_', ' ');
-  // Capitalize first letter of each word
-  return baseName
-      .split(' ')
-      .map(
-        (word) => word.isNotEmpty
-            ? word[0].toUpperCase() + word.substring(1).toLowerCase()
-            : '',
-      )
-      .join(' ');
 }

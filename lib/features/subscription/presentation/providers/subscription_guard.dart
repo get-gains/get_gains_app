@@ -1,4 +1,7 @@
 // lib/features/subscription/presentation/providers/subscription_guard.dart
+//
+// LEGACY — will be replaced by AccessGuard in Session 2.
+// Adapted to compile with the new 2-tier model (FREE/PREMIUM).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,21 +17,11 @@ import 'subscription_provider.dart';
 
 part 'subscription_guard.g.dart';
 
-/// Subscription tier levels
-///
-/// These correspond to the tierLevel field in Plan model.
-/// Higher tier = more access.
+/// Subscription tier levels (legacy compat — maps to 2-tier model)
 abstract class SubscriptionTiers {
-  /// Free tier - no subscription required
   static const int free = 0;
-
-  /// Basic tier - entry-level subscription
   static const int basic = 1;
-
-  /// Premium tier - standard subscription
   static const int premium = 2;
-
-  /// Pro tier - full-featured subscription
   static const int pro = 3;
 }
 
@@ -37,12 +30,10 @@ sealed class SubscriptionGuardResult {
   const SubscriptionGuardResult();
 }
 
-/// Access granted - user has required tier
 class SubscriptionGranted extends SubscriptionGuardResult {
   const SubscriptionGranted();
 }
 
-/// Access denied - user needs higher tier
 class SubscriptionDenied extends SubscriptionGuardResult {
   const SubscriptionDenied({
     required this.requiredTier,
@@ -53,76 +44,42 @@ class SubscriptionDenied extends SubscriptionGuardResult {
 
   final int requiredTier;
   final int currentTier;
-
-  /// The display name of the required tier (from plan name)
   final String requiredTierName;
-
   final String? message;
 
-  /// Get default denial message
   String get defaultMessage {
     return 'This feature requires a $requiredTierName subscription';
   }
 }
 
-/// Subscription not loaded yet
 class SubscriptionPending extends SubscriptionGuardResult {
   const SubscriptionPending();
 }
 
-/// Subscription Guard Provider
-///
-/// Provides utilities for checking subscription access.
-/// Use this for:
-/// - Route protection (redirect to upgrade page)
-/// - Feature gating (disable/hide UI elements)
-/// - Function execution guards (prevent API calls)
-///
-/// Usage:
-/// ```dart
-/// // Check if user has required tier
-/// final guard = ref.read(subscriptionGuardProvider);
-/// final result = guard.checkAccess(SubscriptionTiers.premium);
-///
-/// if (result is SubscriptionDenied) {
-///   // Show upgrade prompt
-/// }
-///
-/// // Use in async function
-/// final canAccess = await guard.requireTier(
-///   SubscriptionTiers.premium,
-///   onDenied: (result) => showUpgradeSheet(context),
-/// );
-/// if (!canAccess) return;
-/// ```
 @riverpod
 SubscriptionGuard subscriptionGuard(Ref ref) {
   return SubscriptionGuard(ref);
 }
 
-/// Subscription Guard
-///
-/// Centralized subscription access control.
 class SubscriptionGuard {
   SubscriptionGuard(this._ref);
 
   final Ref _ref;
 
-  /// Check if user has access to the required tier
-  ///
-  /// [requiredTier] - Minimum tier level required
-  /// Returns SubscriptionGuardResult indicating access status
+  /// Map the new 2-tier model to legacy int tier.
+  int _tierToInt(SubscriptionTier tier) =>
+      tier == SubscriptionTier.premium ? SubscriptionTiers.premium : SubscriptionTiers.free;
+
   SubscriptionGuardResult checkAccess(int requiredTier) {
     final state = _ref.read(subscriptionProvider);
 
-    // Error state: treat as free tier — don't hang waiting for subscription.
     if (state is SubscriptionError) {
       return requiredTier <= 0
           ? const SubscriptionGranted()
           : SubscriptionDenied(
               requiredTier: requiredTier,
               currentTier: 0,
-              requiredTierName: 'Subscription',
+              requiredTierName: 'Premium',
             );
     }
 
@@ -130,95 +87,34 @@ class SubscriptionGuard {
       return const SubscriptionPending();
     }
 
-    final currentTier = state.status.tierLevel;
+    final currentTier = _tierToInt(state.status.subscriptionTier);
 
     if (currentTier >= requiredTier) {
       return const SubscriptionGranted();
     }
 
-    // Get the plan name for the required tier from available plans
-    final tierName = _getPlanNameForTier(state.plans, requiredTier);
-
     return SubscriptionDenied(
       requiredTier: requiredTier,
       currentTier: currentTier,
-      requiredTierName: tierName,
+      requiredTierName: 'Premium',
     );
   }
 
-  /// Get plan name for a given tier level from available plans
-  String _getPlanNameForTier(List<PlanModel> plans, int tier) {
-    // Find a plan with matching tier level
-    final matchingPlan = plans.where((p) => p.tierLevel == tier).firstOrNull;
-    if (matchingPlan != null) {
-      // Extract base name (remove billing cycle suffix if present)
-      return _formatPlanName(matchingPlan.name);
-    }
-    return 'Subscription';
-  }
-
-  /// Format plan name for display (e.g., "premium_monthly" -> "Premium")
-  String _formatPlanName(String name) {
-    // Remove common suffixes like _monthly, _yearly, etc.
-    final baseName = name
-        .replaceAll(
-          RegExp(
-            r'[_-](monthly|yearly|annual|weekly|daily)\$',
-            caseSensitive: false,
-          ),
-          '',
-        )
-        .replaceAll('_', ' ');
-    // Capitalize first letter of each word
-    return baseName
-        .split(' ')
-        .map(
-          (word) => word.isNotEmpty
-              ? word[0].toUpperCase() + word.substring(1).toLowerCase()
-              : '',
-        )
-        .join(' ');
-  }
-
-  /// Check if user has at least the required tier
-  ///
-  /// Simple boolean check for conditional rendering.
   bool hasTier(int requiredTier) {
     final result = checkAccess(requiredTier);
     return result is SubscriptionGranted;
   }
 
-  /// Check if user is subscribed (any tier > 0)
   bool get isSubscribed => hasTier(SubscriptionTiers.basic);
 
-  /// Get current tier level
   int get currentTier {
     final state = _ref.read(subscriptionProvider);
     if (state is SubscriptionLoaded) {
-      return state.status.tierLevel;
+      return _tierToInt(state.status.subscriptionTier);
     }
     return 0;
   }
 
-  /// Require a specific tier for a function execution
-  ///
-  /// Use this to guard async operations that require subscription.
-  /// If denied, calls [onDenied] callback and returns false.
-  ///
-  /// Example:
-  /// ```dart
-  /// Future<void> getCoaches() async {
-  ///   final guard = ref.read(subscriptionGuardProvider);
-  ///   final canAccess = await guard.requireTier(
-  ///     SubscriptionTiers.premium,
-  ///     onDenied: (result) => showUpgradeSheet(context),
-  ///   );
-  ///   if (!canAccess) return;
-  ///
-  ///   // Proceed with API call
-  ///   await apiClient.get('/coaches');
-  /// }
-  /// ```
   Future<bool> requireTier(
     int requiredTier, {
     void Function(SubscriptionDenied)? onDenied,
@@ -228,7 +124,6 @@ class SubscriptionGuard {
     switch (result) {
       case SubscriptionGranted():
         return true;
-
       case SubscriptionDenied():
         AppLogger.info(
           'Access denied: requires tier $requiredTier, has ${result.currentTier}',
@@ -236,18 +131,14 @@ class SubscriptionGuard {
         );
         onDenied?.call(result);
         return false;
-
       case SubscriptionPending():
-        // Wait for subscription to load
         AppLogger.debug('Waiting for subscription to load', tag: 'SubGuard');
         await _waitForSubscription();
         return requireTier(requiredTier, onDenied: onDenied);
     }
   }
 
-  /// Wait for subscription state to load
   Future<void> _waitForSubscription() async {
-    // Poll for up to 5 seconds
     for (var i = 0; i < 10; i++) {
       await Future.delayed(const Duration(milliseconds: 500));
       final state = _ref.read(subscriptionProvider);
@@ -258,23 +149,7 @@ class SubscriptionGuard {
   }
 }
 
-// ============== Function Execution Guards ==============
-
-/// Extension for adding subscription guards to functions
-///
-/// Usage:
-/// ```dart
-/// Future<Result<List<Coach>, AppError>> getCoaches() async {
-///   return ref.read(subscriptionGuardProvider).guardedCall(
-///     requiredTier: SubscriptionTiers.premium,
-///     call: () => repository.getCoaches(),
-///   );
-/// }
-/// ```
 extension SubscriptionGuardExtension on SubscriptionGuard {
-  /// Execute a function only if user has required tier
-  ///
-  /// Returns Failure with AuthError if denied.
   Future<Result<T, AppError>> guardedCall<T>({
     required int requiredTier,
     required Future<Result<T, AppError>> Function() call,
@@ -284,7 +159,6 @@ extension SubscriptionGuardExtension on SubscriptionGuard {
     switch (result) {
       case SubscriptionGranted():
         return call();
-
       case SubscriptionDenied():
         AppLogger.info(
           'Guarded call denied: requires tier $requiredTier',
@@ -296,7 +170,6 @@ extension SubscriptionGuardExtension on SubscriptionGuard {
             code: 'SUBSCRIPTION_REQUIRED',
           ),
         );
-
       case SubscriptionPending():
         await _waitForSubscription();
         return guardedCall(requiredTier: requiredTier, call: call);
@@ -304,33 +177,6 @@ extension SubscriptionGuardExtension on SubscriptionGuard {
   }
 }
 
-// ============== Route Protection ==============
-
-/// Route guard that checks subscription tier
-///
-/// Use in GoRouter redirect logic:
-/// ```dart
-/// redirect: (context, state) {
-///   final guard = ref.read(subscriptionGuardProvider);
-///   if (!guard.hasTier(SubscriptionTiers.premium)) {
-///     return AppRoutes.upgrade;
-///   }
-///   return null;
-/// }
-/// ```
-///
-/// Or use the helper:
-/// ```dart
-/// GoRoute(
-///   path: '/coaches',
-///   redirect: subscriptionRouteGuard(
-///     ref: ref,
-///     requiredTier: SubscriptionTiers.premium,
-///     redirectTo: AppRoutes.upgrade,
-///   ),
-///   builder: ...
-/// )
-/// ```
 String? Function(BuildContext, dynamic) subscriptionRouteGuard({
   required Ref ref,
   required int requiredTier,
@@ -352,35 +198,13 @@ String? Function(BuildContext, dynamic) subscriptionRouteGuard({
   };
 }
 
-/// Check tier access for use in route redirect
-///
-/// Convenience provider for checking tier in GoRouter redirects.
-/// Returns true if user has required tier.
 @riverpod
 bool hasTierAccess(Ref ref, int requiredTier) {
   final guard = ref.watch(subscriptionGuardProvider);
   return guard.hasTier(requiredTier);
 }
 
-// ============== Widget Protection ==============
-
-/// A widget that gates content based on subscription tier.
-///
-/// Proactively checks cached subscription state before rendering.
-/// If the user is not subscribed, renders an [UpgradePrompt] immediately
-/// without triggering an API call or showing an error flash.
-///
-/// Accepts an optional [feature] for contextual upgrade messaging and
-/// a [compact] flag to control the prompt size.
-///
-/// Usage:
-/// ```dart
-/// SubscriptionGatedWidget(
-///   requiredTier: SubscriptionTiers.basic,
-///   feature: SubscriptionFeature.coachRoutines,
-///   child: CoachRoutinesWidget(),
-/// )
-/// ```
+/// Legacy gating widget — will be replaced by AccessGated in Session 2.
 class SubscriptionGatedWidget extends ConsumerWidget {
   const SubscriptionGatedWidget({
     super.key,
@@ -392,49 +216,30 @@ class SubscriptionGatedWidget extends ConsumerWidget {
     this.showLockedOverlay = false,
   });
 
-  /// The minimum tier required to view the child
   final int requiredTier;
-
-  /// Widget to show when user has access
   final Widget child;
-
-  /// Widget to show when user doesn't have access.
-  /// If null, a default [UpgradePrompt] is shown (or the child is hidden
-  /// completely when no [feature] is set).
   final Widget? fallback;
-
-  /// The subscription feature for contextual UpgradePrompt messaging.
   final SubscriptionFeature? feature;
-
-  /// If true, the fallback upgrade prompt renders in compact mode.
   final bool compact;
-
-  /// If true, shows the child with a locked overlay instead of fallback
   final bool showLockedOverlay;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final subState = ref.watch(subscriptionProvider);
 
-    // Loading: show a small shimmer placeholder while resolving
     if (subState is SubscriptionInitial || subState is SubscriptionLoading) {
       return _buildLoadingSkeleton(context);
     }
 
-    // Error or not-loaded: allow through so offline users aren't blocked.
-    // The server remains authoritative when reachable; offline access is
-    // optimistic so previously-synced data stays usable.
     if (subState is! SubscriptionLoaded) {
       return child;
     }
 
-    final currentTier = subState.status.tierLevel;
-
-    if (currentTier >= requiredTier) {
+    final guard = ref.read(subscriptionGuardProvider);
+    if (guard.hasTier(requiredTier)) {
       return child;
     }
 
-    // Determine current subscription status for PAST_DUE/PENDING handling
     final subscriptionStatus = subState.status.subscription?.status;
 
     return _buildFallback(context, subscriptionStatus: subscriptionStatus);
@@ -446,7 +251,6 @@ class SubscriptionGatedWidget extends ConsumerWidget {
   }) {
     if (fallback != null) return fallback!;
 
-    // If a feature is provided, show an UpgradePrompt
     if (feature != null) {
       return UpgradePrompt(
         feature: feature,
@@ -456,7 +260,6 @@ class SubscriptionGatedWidget extends ConsumerWidget {
       );
     }
 
-    // No fallback and no feature — hide content
     return const SizedBox.shrink();
   }
 
@@ -473,18 +276,6 @@ class SubscriptionGatedWidget extends ConsumerWidget {
   }
 }
 
-/// A function guard that can be used with async operations
-///
-/// Usage:
-/// ```dart
-/// // In a provider or widget
-/// final result = await withSubscriptionGuard(
-///   ref: ref,
-///   requiredTier: SubscriptionTiers.premium,
-///   onDenied: () => showUpgradeDialog(context),
-///   action: () => api.fetchPremiumData(),
-/// );
-/// ```
 Future<T?> withSubscriptionGuard<T>({
   required Ref ref,
   required int requiredTier,

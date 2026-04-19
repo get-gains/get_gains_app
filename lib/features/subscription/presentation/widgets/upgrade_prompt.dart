@@ -86,10 +86,10 @@ class UpgradePrompt extends StatelessWidget {
   /// Effective title derived from [title], status, or default.
   String _effectiveTitle(String tierName) {
     if (title != null) return title!;
-    if (subscriptionStatus == SubscriptionStatus.pastDue) {
+    if (subscriptionStatus == SubscriptionStatus.gracePeriod) {
       return 'Payment Update Required';
     }
-    if (subscriptionStatus == SubscriptionStatus.pending) {
+    if (subscriptionStatus == SubscriptionStatus.trialing) {
       return 'Subscription Processing';
     }
     return 'Upgrade to $tierName';
@@ -100,16 +100,16 @@ class UpgradePrompt extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final displayTierName = tierName ?? 'Subscription';
 
-    // PAST_DUE: billing resolution CTA
-    if (subscriptionStatus == SubscriptionStatus.pastDue) {
+    // GRACE_PERIOD: billing resolution CTA
+    if (subscriptionStatus == SubscriptionStatus.gracePeriod) {
       if (compact) {
         return _buildCompactPastDue(context, isDark);
       }
       return _buildFullPastDue(context, isDark);
     }
 
-    // PENDING: informational only
-    if (subscriptionStatus == SubscriptionStatus.pending) {
+    // TRIALING: informational only
+    if (subscriptionStatus == SubscriptionStatus.trialing) {
       if (compact) {
         return _buildCompactPending(context, isDark);
       }
