@@ -51,6 +51,9 @@ abstract class CoachClientModel with _$CoachClientModel {
     /// When the client's platform subscription expires (ML-4).
     DateTime? subscriptionExpiresAt,
 
+    /// Days of the week the client is available for training.
+    @Default([]) List<String> activeWeekdays,
+
     /// Programs currently assigned to this client.
     @Default([]) List<ClientAssignedProgram> assignedPrograms,
 

@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text_styles.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../profile/data/models/user_profile_model.dart';
 import '../../data/models/program_model.dart';
+import '../providers/client_profile_provider.dart';
 import '../providers/coach_assignment_provider.dart';
 import 'assign_program_sheet.dart';
 
@@ -68,7 +71,7 @@ class _ClientAssignmentsScreenState
   }
 
   Widget _buildBody(ClientAssignmentsState state, bool isDark) {
-    return switch (state) {
+    final content = switch (state) {
       ClientAssignmentsInitial() || ClientAssignmentsLoading() => const Center(
         child: CircularProgressIndicator(),
       ),
@@ -96,6 +99,13 @@ class _ClientAssignmentsScreenState
       ClientAssignmentsLoaded(:final assignments) =>
         assignments.isEmpty ? _buildEmpty() : _buildList(assignments, isDark),
     };
+
+    return Column(
+      children: [
+        _ClientAvailabilityBar(userId: widget.userId),
+        Expanded(child: content),
+      ],
+    );
   }
 
   Widget _buildEmpty() {
@@ -321,5 +331,113 @@ class _AssignmentCard extends StatelessWidget {
 
   String _formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+}
+
+// ──────────────────────────────────────────────────────────
+// Client Availability Bar
+// ──────────────────────────────────────────────────────────
+
+/// Compact bar showing the client's active weekdays.
+///
+/// Fetches the client profile via [clientProfileNotifierProvider] and
+/// displays day chips so the coach knows the client's availability.
+class _ClientAvailabilityBar extends ConsumerWidget {
+  const _ClientAvailabilityBar({required this.userId});
+
+  final String userId;
+
+  static const _dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  static const _dayValues = DayOfWeek.values;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profileAsync = ref.watch(clientProfileProvider(userId));
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return profileAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (profile) {
+        if (profile == null) return const SizedBox.shrink();
+        final activeDays = profile.activeWeekdays;
+        if (activeDays.isEmpty) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Available Days',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: isDark
+                      ? AppColors.foregroundDark
+                      : AppColors.foregroundLight,
+                  fontFamily: AppTextStyles.fontFamilySans,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: List.generate(_dayValues.length, (i) {
+                  final isActive = activeDays.contains(_dayValues[i]);
+                  return _DayChip(
+                    label: _dayLabels[i],
+                    isActive: isActive,
+                    isDark: isDark,
+                  );
+                }),
+              ),
+              const SizedBox(height: 8),
+              Divider(
+                color: isDark ? AppColors.borderDark : AppColors.borderLight,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DayChip extends StatelessWidget {
+  const _DayChip({
+    required this.label,
+    required this.isActive,
+    required this.isDark,
+  });
+
+  final String label;
+  final bool isActive;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 40,
+      height: 32,
+      decoration: BoxDecoration(
+        color: isActive
+            ? AppColors.primaryDark
+            : (isDark ? AppColors.surface2Dark : AppColors.surface2Light),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+          color: isActive
+              ? Colors.white
+              : (isDark
+                    ? AppColors.textSecondaryDark
+                    : AppColors.textSecondaryLight),
+          fontFamily: AppTextStyles.fontFamilySans,
+        ),
+      ),
+    );
   }
 }
