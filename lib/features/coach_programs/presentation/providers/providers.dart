@@ -8,3 +8,4 @@ export 'coach_client_list_provider.dart';
 export 'coach_program_provider.dart';
 export 'coach_roster_provider.dart';
 export 'coach_routine_provider.dart';
+export 'program_builder_provider.dart';
