@@ -36,14 +36,11 @@ class EditProfileFormState {
     this.bio,
     this.heightCm,
     this.weightKg,
-    this.unitPreference,
     this.sex,
     this.dateOfBirth,
     this.equipment = const [],
     this.injuryHistory,
     this.experienceLevel,
-    this.daysAvailable = 3,
-    this.sessionDurationMinutes = 60,
     this.avatarFilePath,
     this.removeAvatar = false,
     this.existingAvatarUrl,
@@ -54,14 +51,11 @@ class EditProfileFormState {
   final String? bio;
   final double? heightCm;
   final double? weightKg;
-  final String? unitPreference;
   final Sex? sex;
   final DateTime? dateOfBirth;
   final List<String> equipment;
   final String? injuryHistory;
   final ExperienceLevel? experienceLevel;
-  final int daysAvailable;
-  final int sessionDurationMinutes;
 
   /// Local path to a newly picked avatar (not yet uploaded).
   final String? avatarFilePath;
@@ -85,14 +79,11 @@ class EditProfileFormState {
     String? bio,
     double? heightCm,
     double? weightKg,
-    String? unitPreference,
     Sex? sex,
     DateTime? dateOfBirth,
     List<String>? equipment,
     String? injuryHistory,
     ExperienceLevel? experienceLevel,
-    int? daysAvailable,
-    int? sessionDurationMinutes,
     String? avatarFilePath,
     bool? removeAvatar,
     String? existingAvatarUrl,
@@ -102,7 +93,6 @@ class EditProfileFormState {
     bool clearBio = false,
     bool clearHeightCm = false,
     bool clearWeightKg = false,
-    bool clearUnitPreference = false,
     bool clearSex = false,
     bool clearDateOfBirth = false,
     bool clearInjuryHistory = false,
@@ -115,9 +105,6 @@ class EditProfileFormState {
       bio: clearBio ? null : (bio ?? this.bio),
       heightCm: clearHeightCm ? null : (heightCm ?? this.heightCm),
       weightKg: clearWeightKg ? null : (weightKg ?? this.weightKg),
-      unitPreference: clearUnitPreference
-          ? null
-          : (unitPreference ?? this.unitPreference),
       sex: clearSex ? null : (sex ?? this.sex),
       dateOfBirth: clearDateOfBirth ? null : (dateOfBirth ?? this.dateOfBirth),
       equipment: equipment ?? this.equipment,
@@ -127,9 +114,6 @@ class EditProfileFormState {
       experienceLevel: clearExperienceLevel
           ? null
           : (experienceLevel ?? this.experienceLevel),
-      daysAvailable: daysAvailable ?? this.daysAvailable,
-      sessionDurationMinutes:
-          sessionDurationMinutes ?? this.sessionDurationMinutes,
       avatarFilePath: clearAvatarFilePath
           ? null
           : (avatarFilePath ?? this.avatarFilePath),
@@ -150,14 +134,11 @@ class EditProfileFormState {
       bio: bio,
       heightCm: heightCm,
       weightKg: weightKg,
-      unitPreference: unitPreference,
       sex: sex,
       dateOfBirth: dateOfBirth,
       equipment: equipment,
       injuryHistory: injuryHistory,
       experienceLevel: experienceLevel,
-      daysAvailable: daysAvailable,
-      sessionDurationMinutes: sessionDurationMinutes,
       avatarFilePath: avatarFilePath,
       removeAvatar: removeAvatar,
     );
@@ -187,14 +168,11 @@ class EditProfileNotifier extends _$EditProfileNotifier {
         bio: profile.bio,
         heightCm: profile.heightCm,
         weightKg: profile.weightKg,
-        unitPreference: profile.unitPreference,
         sex: profile.sex,
         dateOfBirth: profile.dateOfBirth,
         equipment: profile.equipment,
         injuryHistory: profile.injuryHistory,
         experienceLevel: profile.experienceLevel,
-        daysAvailable: profile.daysAvailable,
-        sessionDurationMinutes: profile.sessionDurationMinutes,
         existingAvatarUrl: profile.avatarUrl,
       );
     }
@@ -212,11 +190,6 @@ class EditProfileNotifier extends _$EditProfileNotifier {
 
   void updateWeightKg(double? value) =>
       state = state.copyWith(weightKg: value, clearWeightKg: value == null);
-
-  void updateUnitPreference(String? value) => state = state.copyWith(
-    unitPreference: value,
-    clearUnitPreference: value == null,
-  );
 
   void updateSex(Sex? value) =>
       state = state.copyWith(sex: value, clearSex: value == null);
@@ -238,12 +211,6 @@ class EditProfileNotifier extends _$EditProfileNotifier {
     experienceLevel: value,
     clearExperienceLevel: value == null,
   );
-
-  void updateDaysAvailable(int value) =>
-      state = state.copyWith(daysAvailable: value);
-
-  void updateSessionDuration(int value) =>
-      state = state.copyWith(sessionDurationMinutes: value);
 
   /// Sets a newly picked avatar file path and clears `removeAvatar`.
   void pickAvatar(String filePath) {

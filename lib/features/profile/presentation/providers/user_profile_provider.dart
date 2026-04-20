@@ -155,9 +155,11 @@ class UserProfileNotifier extends _$UserProfileNotifier {
 
 /// Whether the authenticated user still needs to complete onboarding.
 ///
-/// Returns `true` when the profile has been fetched successfully and is
-/// `null`.  Returns `false` while loading or on error (to avoid false
-/// positives that would flash the onboarding screen).
+/// Returns `true` when the profile has been fetched successfully and
+/// `isOnboarded` is `false` (i.e. none of the optional profile fields
+/// like bio, height, weight, sex, etc. have been filled in yet).
+/// Returns `false` while loading or on error (to avoid false positives
+/// that would flash the onboarding screen).
 ///
 /// Usage in the home screen or a route guard:
 /// ```dart
@@ -171,7 +173,7 @@ bool needsOnboarding(Ref ref) {
   final profileAsync = ref.watch(userProfileProvider);
 
   return profileAsync.when(
-    data: (profile) => profile == null,
+    data: (profile) => profile == null || !profile.isOnboarded,
     loading: () => false,
     error: (e, st) => false,
   );

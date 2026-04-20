@@ -21,12 +21,32 @@ enum ExperienceLevel {
   advanced,
 }
 
+/// Enum matching the server's DayOfWeek enum.
+///
+/// Values match the Prisma DayOfWeek enum and DAY_NAMES on the server.
+enum DayOfWeek {
+  @JsonValue('SUNDAY')
+  sunday,
+  @JsonValue('MONDAY')
+  monday,
+  @JsonValue('TUESDAY')
+  tuesday,
+  @JsonValue('WEDNESDAY')
+  wednesday,
+  @JsonValue('THURSDAY')
+  thursday,
+  @JsonValue('FRIDAY')
+  friday,
+  @JsonValue('SATURDAY')
+  saturday,
+}
+
 /// User fitness profile returned from GET /api/profile.
 ///
-/// Maps 1:1 to the server's `profileSelect` shape.
-/// `daysAvailable` and `sessionDurationMinutes` are required on the server
-/// during creation but the full profile response always includes them, so
-/// they are non-nullable here.
+/// Maps 1:1 to the server's `toProfileDto` shape.
+/// The server always returns a profile (the user row exists since
+/// registration). [isOnboarded] is derived server-side from whether
+/// any optional profile fields have been filled in.
 @freezed
 abstract class UserProfileModel with _$UserProfileModel {
   const factory UserProfileModel({
@@ -38,16 +58,15 @@ abstract class UserProfileModel with _$UserProfileModel {
     // Personal Data
     double? heightCm,
     double? weightKg,
-    String? unitPreference,
     Sex? sex,
     DateTime? dateOfBirth,
     @Default([]) List<String> equipment,
     String? injuryHistory,
     ExperienceLevel? experienceLevel,
+    @Default([]) List<DayOfWeek> activeWeekdays,
 
-    // Availability
-    required int daysAvailable,
-    required int sessionDurationMinutes,
+    // Onboarding status (derived server-side)
+    @Default(false) bool isOnboarded,
 
     // Timestamps
     DateTime? createdAt,

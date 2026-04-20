@@ -242,8 +242,13 @@ class UserProfileRepository {
       if (entry.value != null) {
         final value = entry.value;
         if (value is List) {
-          // Encode lists as JSON strings (e.g. equipment)
-          map[entry.key] = jsonEncode(value);
+          // Encode lists as JSON strings (e.g. equipment, activeWeekdays).
+          // Convert enum values to their uppercase server representation.
+          final encoded = value.map((item) {
+            if (item is DayOfWeek) return item.name.toUpperCase();
+            return item;
+          }).toList();
+          map[entry.key] = jsonEncode(encoded);
         } else if (value is DateTime) {
           map[entry.key] = value.toIso8601String();
         } else if (value is Sex) {
@@ -274,19 +279,17 @@ class UserProfileRepository {
     CreateUserProfileRequest request,
   ) {
     return {
-      'daysAvailable': request.daysAvailable,
-      'sessionDurationMinutes': request.sessionDurationMinutes,
       if (request.bio != null) 'bio': request.bio,
       if (request.heightCm != null) 'heightCm': request.heightCm,
       if (request.weightKg != null) 'weightKg': request.weightKg,
-      if (request.unitPreference != null)
-        'unitPreference': request.unitPreference,
       if (request.sex != null) 'sex': request.sex,
       if (request.dateOfBirth != null) 'dateOfBirth': request.dateOfBirth,
       if (request.equipment.isNotEmpty) 'equipment': request.equipment,
       if (request.injuryHistory != null) 'injuryHistory': request.injuryHistory,
       if (request.experienceLevel != null)
         'experienceLevel': request.experienceLevel,
+      if (request.activeWeekdays.isNotEmpty)
+        'activeWeekdays': request.activeWeekdays,
     };
   }
 
@@ -298,17 +301,14 @@ class UserProfileRepository {
       if (request.bio != null) 'bio': request.bio,
       if (request.heightCm != null) 'heightCm': request.heightCm,
       if (request.weightKg != null) 'weightKg': request.weightKg,
-      if (request.unitPreference != null)
-        'unitPreference': request.unitPreference,
       if (request.sex != null) 'sex': request.sex,
       if (request.dateOfBirth != null) 'dateOfBirth': request.dateOfBirth,
       if (request.equipment != null) 'equipment': request.equipment,
       if (request.injuryHistory != null) 'injuryHistory': request.injuryHistory,
       if (request.experienceLevel != null)
         'experienceLevel': request.experienceLevel,
-      if (request.daysAvailable != null) 'daysAvailable': request.daysAvailable,
-      if (request.sessionDurationMinutes != null)
-        'sessionDurationMinutes': request.sessionDurationMinutes,
+      if (request.activeWeekdays != null)
+        'activeWeekdays': request.activeWeekdays,
     };
   }
 
