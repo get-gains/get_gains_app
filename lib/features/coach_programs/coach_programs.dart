@@ -1,8 +1,7 @@
 /// Coach Programs Feature
 ///
-/// Handles the entire coach program flow: creating programs & routines,
-/// assigning exercises to routines, assigning routines to program day-slots,
-/// and managing client program assignments.
+/// Handles per-client program building (wizard), routine template library,
+/// exercise management, and client roster.
 library;
 
 // Data

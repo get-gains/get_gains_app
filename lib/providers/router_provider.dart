@@ -84,10 +84,6 @@ class AppRoutes {
   static const String clientCompareForm = '/client/exercise/:id/compare';
   static const String clientUnityRecord = '/client/exercise/:id/unity-record';
   // Coach Program routes
-  static const String coachPrograms = '/coach/programs';
-  static const String coachCreateProgram = '/coach/programs/create';
-  static const String coachEditProgram = '/coach/programs/:id/edit';
-  static const String coachProgramDetail = '/coach/programs/:id';
   static const String coachRoutines = '/coach/routines';
   static const String coachCreateRoutine = '/coach/routines/create';
   static const String coachEditRoutine = '/coach/routines/:id/edit';
@@ -451,29 +447,7 @@ GoRouter router(Ref ref) {
         },
       ),
 
-      // Coach Program Routes
-      GoRoute(
-        path: AppRoutes.coachPrograms,
-        builder: (context, state) => const CoachProgramsScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.coachCreateProgram,
-        builder: (context, state) => const CoachProgramFormScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.coachProgramDetail,
-        builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          return CoachProgramDetailScreen(programId: id);
-        },
-      ),
-      GoRoute(
-        path: AppRoutes.coachEditProgram,
-        builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          return CoachProgramFormScreen(programId: id);
-        },
-      ),
+      // Coach Routine Routes
       GoRoute(
         path: AppRoutes.coachRoutines,
         builder: (context, state) => const CoachRoutinesScreen(),
