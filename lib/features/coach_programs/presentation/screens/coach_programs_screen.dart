@@ -51,15 +51,17 @@ class _CoachProgramsScreenState extends ConsumerState<CoachProgramsScreen> {
         ],
       ),
       body: _buildBody(state, isDark),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push(AppRoutes.coachCreateProgram),
-        backgroundColor: isDark
-            ? AppColors.primaryDark
-            : AppColors.primaryLight,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('New Program'),
-      ),
+      floatingActionButton: state is CoachProgramsLoaded && state.programs.isNotEmpty
+          ? FloatingActionButton.extended(
+              onPressed: () => context.push(AppRoutes.coachCreateProgram),
+              backgroundColor: isDark
+                  ? AppColors.primaryDark
+                  : AppColors.primaryLight,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add),
+              label: const Text('New Program'),
+            )
+          : null,
     );
   }
 
@@ -277,12 +279,6 @@ class _ProgramCard extends StatelessWidget {
               _InfoChip(
                 icon: Icons.fitness_center,
                 label: '${program.routineCount} routines',
-                isDark: isDark,
-              ),
-              const SizedBox(width: 12),
-              _InfoChip(
-                icon: Icons.people_outline,
-                label: '${program.assignedClientCount} clients',
                 isDark: isDark,
               ),
             ],

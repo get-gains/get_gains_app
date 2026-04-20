@@ -81,9 +81,105 @@ class CoachProgramRepository {
           'Failed to fetch program $programId',
           tag: 'CoachProgramRepo',
         );
-        return Failure(error);
+
+        // Temporary fallback for environments where detail endpoint
+        // returns 500 but list endpoint is still healthy.
+        return _buildProgramDetailFallback(programId).then((fallback) {
+          if (fallback != null) {
+            AppLogger.warning(
+              'Program detail fallback used for $programId',
+              tag: 'CoachProgramRepo',
+            );
+            return Success(fallback);
+          }
+          return Failure(error);
+        });
       },
     );
+  }
+
+  Future<ProgramDetailModel?> _buildProgramDetailFallback(
+    String programId,
+  ) async {
+    // Some deployed backends validate `limit <= 100` and will return 400
+    // for larger values. Use a safe limit first, then try default params.
+    final primaryListResult = await _apiClient.get<Map<String, dynamic>>(
+      '/coach/programs',
+      queryParameters: {'limit': 100, 'offset': 0},
+    );
+
+    Result<Map<String, dynamic>, AppError> listResult = primaryListResult;
+    if (primaryListResult is Failure<Map<String, dynamic>, AppError>) {
+      listResult = await _apiClient.get<Map<String, dynamic>>('/coach/programs');
+    }
+
+    return listResult.when(
+      success: (data) {
+        final rawPrograms = data['programs'];
+        if (rawPrograms is! List<dynamic>) {
+          return null;
+        }
+
+        final rawProgram = rawPrograms
+            .whereType<Map<String, dynamic>>()
+            .firstWhere(
+              (p) => (p['id']?.toString() ?? '') == programId,
+              orElse: () => <String, dynamic>{},
+            );
+
+        if (rawProgram.isEmpty) {
+          return null;
+        }
+
+        final name = _pickString(rawProgram, ['name']) ?? 'Program';
+        final description = _pickString(rawProgram, ['description']) ?? '';
+        final coachId =
+            _pickString(rawProgram, [
+              'coachId',
+              'coach_id',
+              'userId',
+              'user_id',
+            ]) ??
+            'unknown';
+
+        return ProgramDetailModel(
+          id: programId,
+          name: name,
+          description: description,
+          coachId: coachId,
+          routines: const [],
+          createdAt: _pickDateTime(rawProgram, ['createdAt', 'created_at']),
+          updatedAt: _pickDateTime(rawProgram, ['updatedAt', 'updated_at']),
+        );
+      },
+      failure: (_) => null,
+    );
+  }
+
+  static String? _pickString(Map<String, dynamic> json, List<String> keys) {
+    for (final key in keys) {
+      final value = json[key];
+      if (value is String && value.isNotEmpty) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  static DateTime? _pickDateTime(Map<String, dynamic> json, List<String> keys) {
+    for (final key in keys) {
+      final value = json[key];
+      if (value is DateTime) {
+        return value;
+      }
+      if (value is String && value.isNotEmpty) {
+        final parsed = DateTime.tryParse(value);
+        if (parsed != null) {
+          return parsed;
+        }
+      }
+    }
+    return null;
   }
 
   /// Create a new training program.
@@ -217,9 +313,21 @@ class CoachProgramRepository {
   Future<Result<RoutineModel, AppError>> createRoutine(
     CreateRoutineRequest request,
   ) async {
+    final payload = <String, dynamic>{
+      'name': request.name,
+      'description': request.description,
+      'estimated_duration_minutes': request.estimatedDurationMinutes,
+    };
+
+    if (request.muscleGroupsTargeted.isNotEmpty) {
+      payload['muscle_groups_targeted'] = request.muscleGroupsTargeted
+          .map((group) => group.name.toUpperCase())
+          .toList(growable: false);
+    }
+
     final result = await _apiClient.post<Map<String, dynamic>>(
       '/coach/routines',
-      data: request.toJson(),
+      data: payload,
     );
 
     return result.when(
@@ -241,9 +349,20 @@ class CoachProgramRepository {
     String routineId,
     UpdateRoutineRequest request,
   ) async {
+    final payload = <String, dynamic>{
+      if (request.name != null) 'name': request.name,
+      if (request.description != null) 'description': request.description,
+      if (request.estimatedDurationMinutes != null)
+        'estimated_duration_minutes': request.estimatedDurationMinutes,
+      if (request.muscleGroupsTargeted != null)
+        'muscle_groups_targeted': request.muscleGroupsTargeted!
+            .map((group) => group.name.toUpperCase())
+            .toList(growable: false),
+    };
+
     final result = await _apiClient.patch<Map<String, dynamic>>(
       '/coach/routines/$routineId',
-      data: request.toJson(),
+      data: payload,
     );
 
     return result.when(
@@ -290,9 +409,14 @@ class CoachProgramRepository {
     String programId,
     AssignRoutineRequest request,
   ) async {
+    final payload = <String, dynamic>{
+      'routine_id': request.routineId,
+      'day_of_week': request.dayOfWeek.name.toUpperCase(),
+    };
+
     final result = await _apiClient.post<Map<String, dynamic>>(
       '/coach/programs/$programId/routines',
-      data: request.toJson(),
+      data: payload,
     );
 
     return result.when(
@@ -318,9 +442,13 @@ class CoachProgramRepository {
     String programRoutineId,
     UpdateProgramRoutineRequest request,
   ) async {
+    final payload = <String, dynamic>{
+      'day_of_week': request.dayOfWeek.name.toUpperCase(),
+    };
+
     final result = await _apiClient.patch<Map<String, dynamic>>(
       '/coach/programs/$programId/routines/$programRoutineId',
-      data: request.toJson(),
+      data: payload,
     );
 
     return result.when(
@@ -370,9 +498,19 @@ class CoachProgramRepository {
     String routineId,
     AddRoutineExerciseRequest request,
   ) async {
+    final payload = <String, dynamic>{
+      'exercise_id': request.exerciseId,
+      'sets': request.sets,
+      'reps_min': request.repsMin,
+      'reps_max': request.repsMax,
+      'rest_seconds': request.restSeconds,
+      'order_in_routine': request.orderInRoutine,
+      if (request.notes != null) 'notes': request.notes,
+    };
+
     final result = await _apiClient.post<Map<String, dynamic>>(
       '/coach/programs/routines/$routineId/exercises',
-      data: request.toJson(),
+      data: payload,
     );
 
     return result.when(
@@ -398,9 +536,19 @@ class CoachProgramRepository {
     String routineExerciseId,
     UpdateRoutineExerciseRequest request,
   ) async {
+    final payload = <String, dynamic>{
+      if (request.sets != null) 'sets': request.sets,
+      if (request.repsMin != null) 'reps_min': request.repsMin,
+      if (request.repsMax != null) 'reps_max': request.repsMax,
+      if (request.restSeconds != null) 'rest_seconds': request.restSeconds,
+      if (request.orderInRoutine != null)
+        'order_in_routine': request.orderInRoutine,
+      if (request.notes != null) 'notes': request.notes,
+    };
+
     final result = await _apiClient.patch<Map<String, dynamic>>(
       '/coach/programs/routines/$routineId/exercises/$routineExerciseId',
-      data: request.toJson(),
+      data: payload,
     );
 
     return result.when(

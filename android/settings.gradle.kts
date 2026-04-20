@@ -31,12 +31,12 @@ val unityLibraryFlat = file("unityLibrary/build.gradle")
 val unityLibraryNested = file("unityLibrary/unityLibrary/build.gradle")
 val unityLibraryNestedKts = file("unityLibrary/unityLibrary/build.gradle.kts")
 when {
-    unityLibraryFlat.exists() -> {
-        include(":unityLibrary")
-        project(":unityLibrary").projectDir = file("unityLibrary")
-    }
     unityLibraryNested.exists() || unityLibraryNestedKts.exists() -> {
         include(":unityLibrary")
         project(":unityLibrary").projectDir = file("unityLibrary/unityLibrary")
+    }
+    unityLibraryFlat.exists() -> {
+        include(":unityLibrary")
+        project(":unityLibrary").projectDir = file("unityLibrary")
     }
 }

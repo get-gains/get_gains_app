@@ -26,7 +26,13 @@ abstract class TodaySubscriptionInfo with _$TodaySubscriptionInfo {
 @freezed
 abstract class TodayStatusModel with _$TodayStatusModel {
   const factory TodayStatusModel({
+    /// True when the current user account is a coach.
+    @Default(false) bool isCoach,
+
     required bool isSubscribed,
+
+    /// True when the current user has an active coach relationship
+    /// as a client (`subscribed_coach.ended_at IS NULL`).
     required bool hasCoach,
     TodaySubscriptionInfo? subscription,
     TodayWorkoutDetails? coachToday,
@@ -43,6 +49,7 @@ abstract class TodayWorkoutDetails with _$TodayWorkoutDetails {
   const factory TodayWorkoutDetails({
     required bool isRestDay,
     String? programRoutineId,
+    String? dayOfWeek,
     int? dayNumber,
     String? programName,
     String? routineName,
@@ -60,11 +67,14 @@ extension TodayWorkoutDetailsX on TodayWorkoutDetails {
     if (isRestDay || programRoutineId == null) {
       return const TodayRoutineModel(isRestDay: true);
     }
+
+    final resolvedDayOfWeek = _resolveDayOfWeek(dayOfWeek, dayNumber);
+
     return TodayRoutineModel(
       isRestDay: false,
       today: TodayRoutineDetails(
         programRoutineId: programRoutineId!,
-        dayNumber: dayNumber ?? 1,
+        dayOfWeek: resolvedDayOfWeek,
         assignedProgramId: '',
         programName: programName ?? '',
         routine: RoutineModel(
@@ -77,4 +87,30 @@ extension TodayWorkoutDetailsX on TodayWorkoutDetails {
       ),
     );
   }
+}
+
+String _resolveDayOfWeek(String? dayOfWeek, int? dayNumber) {
+  final normalizedDayOfWeek = dayOfWeek?.trim().toUpperCase();
+  if (normalizedDayOfWeek != null && normalizedDayOfWeek.isNotEmpty) {
+    return normalizedDayOfWeek;
+  }
+
+  const weekdayOrder = [
+    'MONDAY',
+    'TUESDAY',
+    'WEDNESDAY',
+    'THURSDAY',
+    'FRIDAY',
+    'SATURDAY',
+    'SUNDAY',
+  ];
+
+  if (dayNumber == null) {
+    return weekdayOrder[DateTime.now().weekday - 1];
+  }
+
+  final normalizedIndex =
+      ((dayNumber - 1) % weekdayOrder.length + weekdayOrder.length) %
+      weekdayOrder.length;
+  return weekdayOrder[normalizedIndex];
 }

@@ -11,6 +11,7 @@ import '../../../services/api/api_client.dart';
 import '../../../services/database/app_database.dart';
 import 'models/models.dart';
 import '../../home/data/models/today_status_model.dart';
+import '../../subscription/data/models/subscription_model.dart';
 
 part 'workout_repository.g.dart';
 
@@ -1018,7 +1019,7 @@ class WorkoutRepository {
       try {
         final model = TodayStatusModel.fromJson(result.value);
         AppLogger.info(
-          'Today status: subscribed=${model.isSubscribed} hasCoach=${model.hasCoach}',
+          'Today status: isCoach=${model.isCoach} subscribed=${model.isSubscribed} hasSubscribedCoach=${model.hasCoach}',
           tag: 'WorkoutRepo',
         );
         return Success(model);
@@ -1029,8 +1030,233 @@ class WorkoutRepository {
     }
 
     final failure = result as Failure<Map<String, dynamic>, AppError>;
+
+    if (_shouldFallbackToLegacyTodayStatus(failure.error)) {
+      AppLogger.warning(
+        'GET /today unavailable (404), using legacy today endpoints fallback',
+        tag: 'WorkoutRepo',
+      );
+
+      final legacyStatus = await _buildLegacyTodayStatus();
+      if (legacyStatus != null) {
+        AppLogger.info('Loaded today status via legacy fallback', tag: 'WorkoutRepo');
+        return Success(legacyStatus);
+      }
+    }
+
     AppLogger.error('Failed to fetch today status', tag: 'WorkoutRepo', error: failure.error);
     return Failure(failure.error);
+  }
+
+  bool _shouldFallbackToLegacyTodayStatus(AppError error) {
+    return error is NetworkError && error.statusCode == 404;
+  }
+
+  Future<TodayStatusModel?> _buildLegacyTodayStatus() async {
+    try {
+      bool isSubscribed = false;
+      TodaySubscriptionInfo? subscription;
+
+      final subscriptionResult = await _apiClient.get<Map<String, dynamic>>(
+        ApiConstants.subscriptionStatus,
+      );
+      if (subscriptionResult is Success<Map<String, dynamic>, AppError>) {
+        final data = subscriptionResult.value;
+        isSubscribed = _asBool(data['isSubscribed']) ?? false;
+        subscription = _parseLegacySubscriptionInfo(data['subscription']);
+      }
+
+      bool hasCoach = false;
+      final subscribedCoachesResult = await _apiClient.get<Map<String, dynamic>>(
+        ApiConstants.subscribedCoaches,
+      );
+      if (subscribedCoachesResult is Success<Map<String, dynamic>, AppError>) {
+        final data = subscribedCoachesResult.value;
+        final coaches = data['coaches'];
+        hasCoach = coaches is List && coaches.isNotEmpty;
+      }
+
+      TodayWorkoutDetails? coachToday;
+      if (isSubscribed) {
+        final coachTodayResult = await _apiClient.get<Map<String, dynamic>>(
+          ApiConstants.todayWorkout,
+        );
+        if (coachTodayResult is Success<Map<String, dynamic>, AppError>) {
+          coachToday = _parseLegacyTodayDetails(coachTodayResult.value);
+          hasCoach = hasCoach || coachToday != null;
+        }
+      }
+
+      // NOTE:
+      // Do not call legacy `/standalone/today` here. Some deployed backend
+      // versions return 500 for that endpoint, which creates noisy retry/error
+      // logs on every Home refresh. Keep this fallback resilient by returning
+      // coach/subscription state only when unified `/today` is unavailable.
+      final TodayWorkoutDetails? standaloneToday = null;
+
+      return TodayStatusModel(
+        isSubscribed: isSubscribed,
+        hasCoach: hasCoach,
+        subscription: subscription,
+        coachToday: coachToday,
+        standaloneToday: standaloneToday,
+      );
+    } catch (e) {
+      AppLogger.error(
+        'Legacy today fallback failed',
+        tag: 'WorkoutRepo',
+        error: e,
+      );
+      return null;
+    }
+  }
+
+  TodaySubscriptionInfo? _parseLegacySubscriptionInfo(dynamic rawSubscription) {
+    final sub = _asMap(rawSubscription);
+    if (sub == null) return null;
+
+    final id = _asString(sub['id']);
+    final status = _parseSubscriptionStatus(sub['status']);
+    final currentPeriodEnd = _parseDateTime(sub['currentPeriodEnd']);
+
+    final plan = _asMap(sub['plan']);
+    final tierLevel =
+        _asInt(sub['tierLevel']) ?? _asInt(plan?['tierLevel']) ?? 0;
+
+    if (id == null || status == null || currentPeriodEnd == null) {
+      return null;
+    }
+
+    return TodaySubscriptionInfo(
+      id: id,
+      status: status,
+      tierLevel: tierLevel,
+      currentPeriodEnd: currentPeriodEnd,
+    );
+  }
+
+  SubscriptionStatus? _parseSubscriptionStatus(dynamic rawStatus) {
+    final value = _asString(rawStatus)?.toUpperCase();
+    return switch (value) {
+      'PENDING' => SubscriptionStatus.pending,
+      'ACTIVE' => SubscriptionStatus.active,
+      'PAST_DUE' => SubscriptionStatus.pastDue,
+      'CANCELED' => SubscriptionStatus.canceled,
+      'EXPIRED' => SubscriptionStatus.expired,
+      'REVOKED' => SubscriptionStatus.revoked,
+      _ => null,
+    };
+  }
+
+  TodayWorkoutDetails? _parseLegacyTodayDetails(Map<String, dynamic> payload) {
+    final isRestDay =
+        _asBool(payload['isRestDay']) ?? _asBool(payload['is_rest_day']) ?? false;
+
+    final todayNode = payload['today'];
+    if (todayNode == null) {
+      return isRestDay ? const TodayWorkoutDetails(isRestDay: true) : null;
+    }
+
+    final todayMap = _asMap(todayNode);
+    if (todayMap != null) {
+      return _toTodayWorkoutDetails(todayMap, isRestDay: isRestDay);
+    }
+
+    if (todayNode is List && todayNode.isNotEmpty) {
+      final first = _asMap(todayNode.first);
+      if (first != null) {
+        return _toTodayWorkoutDetails(first, isRestDay: isRestDay);
+      }
+    }
+
+    return isRestDay ? const TodayWorkoutDetails(isRestDay: true) : null;
+  }
+
+  TodayWorkoutDetails _toTodayWorkoutDetails(
+    Map<String, dynamic> data, {
+    required bool isRestDay,
+  }) {
+    final routine = _asMap(data['routine']);
+
+    final dayOfWeek =
+        _asString(data['dayOfWeek']) ?? _extractFirstDayName(data['daysOfWeek']) ?? _extractFirstDayName(data['days_of_week']);
+
+    final exerciseCount =
+        _asInt(data['exerciseCount']) ??
+        _asInt(data['exercise_count']) ??
+        (routine?['exercises'] is List
+            ? (routine!['exercises'] as List).length
+            : null) ??
+        (data['assigned_program_routine_exercises'] is List
+            ? (data['assigned_program_routine_exercises'] as List).length
+            : null) ??
+        0;
+
+    final estimatedMinutes =
+        _asInt(data['estimatedMinutes']) ??
+        _asInt(data['estimated_duration_minutes']) ??
+        _asInt(routine?['estimatedDurationMinutes']) ??
+        _asInt(routine?['estimated_duration_minutes']) ??
+        0;
+
+    return TodayWorkoutDetails(
+      isRestDay: isRestDay,
+      programRoutineId:
+          _asString(data['programRoutineId']) ??
+          _asString(data['assignedProgramRoutineId']) ??
+          _asString(data['id']),
+      dayOfWeek: dayOfWeek,
+      dayNumber: _asInt(data['dayNumber']),
+      programName: _asString(data['programName']) ?? _asString(data['program_name']),
+      routineName: _asString(data['routineName']) ?? _asString(routine?['name']),
+      exerciseCount: exerciseCount,
+      estimatedMinutes: estimatedMinutes,
+    );
+  }
+
+  String? _extractFirstDayName(dynamic rawDays) {
+    if (rawDays is! List || rawDays.isEmpty) return null;
+    return _asString(rawDays.first);
+  }
+
+  Map<String, dynamic>? _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      return value.map(
+        (key, val) => MapEntry(key.toString(), val),
+      );
+    }
+    return null;
+  }
+
+  String? _asString(dynamic value) {
+    if (value is! String) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  int? _asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  bool? _asBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final normalized = value.trim().toLowerCase();
+      if (normalized == 'true') return true;
+      if (normalized == 'false') return false;
+    }
+    return null;
+  }
+
+  DateTime? _parseDateTime(dynamic value) {
+    final raw = _asString(value);
+    if (raw == null) return null;
+    return DateTime.tryParse(raw);
   }
 
   /// Fetch aggregated weekly workout statistics from the server.
