@@ -93,6 +93,7 @@ class AppRoutes {
   static const String coachEditRoutine = '/coach/routines/:id/edit';
   static const String coachRoutineDetail = '/coach/routines/:id';
   static const String clientAssignments = '/coach/clients/:userId/programs';
+  static const String programBuilder = '/coach/clients/:userId/program-builder';
   static const String coachRoster = '/coach/roster';
   static const String coachSettings = '/coach/settings';
 
@@ -501,6 +502,19 @@ GoRouter router(Ref ref) {
           final userId = state.pathParameters['userId']!;
           final userName = state.uri.queryParameters['name'];
           return ClientAssignmentsScreen(userId: userId, userName: userName);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.programBuilder,
+        builder: (context, state) {
+          final userId = state.pathParameters['userId']!;
+          final programId = state.uri.queryParameters['programId'];
+          final clientName = state.uri.queryParameters['name'];
+          return ProgramBuilderScreen(
+            clientId: userId,
+            programId: programId,
+            clientName: clientName,
+          );
         },
       ),
       GoRoute(

@@ -4,11 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../data/models/program_model.dart';
 import '../providers/client_profile_provider.dart';
 import '../providers/coach_assignment_provider.dart';
-import '../providers/program_builder_provider.dart';
 
 /// Client Assignments Screen
 ///
@@ -110,7 +110,7 @@ class _ClientAssignmentsScreenState
       title: 'No Active Program',
       description: 'Build a program for this client to get them started.',
       actionLabel: 'Build a Program',
-      onAction: () => _createProgram(isDark),
+      onAction: () => _navigateToBuilder(),
     );
   }
 
@@ -172,7 +172,7 @@ class _ClientAssignmentsScreenState
           AppButton.outline(
             label: 'Edit Program',
             icon: Icons.edit_outlined,
-            onPressed: () => _editProgram(program.id),
+            onPressed: () => _navigateToBuilder(programId: program.id),
             isFullWidth: true,
           ),
           const SizedBox(height: 16),
@@ -196,37 +196,19 @@ class _ClientAssignmentsScreenState
     );
   }
 
-  Future<void> _createProgram(bool isDark) async {
-    // Phase 3 will replace this with a navigation to the wizard.
-    // For now, use the program builder provider to create an empty program.
-    final notifier = ref.read(programBuilderProvider(widget.userId).notifier);
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-    final success = await notifier.createProgram(
-      name: '${widget.userName ?? "Client"}\'s Program',
+  Future<void> _navigateToBuilder({String? programId}) async {
+    final uri = Uri(
+      path: AppRoutes.programBuilder.replaceFirst(':userId', widget.userId),
+      queryParameters: {
+        if (programId != null) 'programId': programId,
+        if (widget.userName != null) 'name': widget.userName!,
+      },
     );
-
+    await context.push(uri.toString());
+    // Refresh assignments after returning from the wizard
     if (mounted) {
-      if (success) {
-        // Refresh the assignment view
-        ref.read(clientAssignmentsProvider(widget.userId).notifier).load();
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(content: Text('Program created')),
-        );
-      } else {
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(content: Text('Failed to create program')),
-        );
-      }
+      ref.read(clientAssignmentsProvider(widget.userId).notifier).load();
     }
-  }
-
-  void _editProgram(String programId) {
-    // Phase 3 will navigate to the program builder wizard.
-    // For now, just reload to show current state.
-    ref
-        .read(programBuilderProvider(widget.userId).notifier)
-        .loadExistingProgram(programId);
   }
 }
 
