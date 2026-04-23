@@ -2,23 +2,16 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:purchases_flutter/purchases_flutter.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/auth_state_provider.dart';
 import '../../../../widgets/widgets.dart';
-import '../../data/models/models.dart';
 import '../providers/subscription_provider.dart';
 import 'plan_card.dart';
 import 'subscription_status_card.dart';
 
-/// Profile bottom sheet showing user info and subscription
-///
-/// Opened by tapping the avatar in the home screen.
-/// Shows:
-/// - User avatar and name
-/// - Current subscription status
-/// - Available plans for upgrade
-/// - Logout option
+/// Profile bottom sheet showing user info and subscription.
 class ProfileSheet extends ConsumerStatefulWidget {
   const ProfileSheet({super.key});
 
@@ -45,26 +38,20 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // User info
             _buildUserInfo(context, userName, email, isDark),
             const SizedBox(height: 24),
 
-            // Subscription status
             if (subscriptionState is SubscriptionLoaded) ...[
-              // Show status card for subscribed users, or upgrade prompt for free users
               if (isSubscribed) ...[
                 SubscriptionStatusCard(
                   onTap: () => setState(() => _showPlans = !_showPlans),
                 ),
                 const SizedBox(height: 16),
-
-                // Plans section (for managing subscription)
                 if (_showPlans) ...[
                   _buildPlansSection(context, subscriptionState, isDark),
                   const SizedBox(height: 16),
                 ],
               ] else ...[
-                // Free user - show upgrade button prominently
                 _buildFreeUserSection(context, subscriptionState, isDark),
                 const SizedBox(height: 16),
               ],
@@ -76,7 +63,6 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
               const SizedBox(height: 16),
             ],
 
-            // Menu items
             _buildMenuItems(context, isDark),
           ],
         ),
@@ -120,18 +106,21 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
     );
   }
 
+  List<Package> _getPackages(SubscriptionLoaded state) {
+    return state.currentOffering?.availablePackages ?? [];
+  }
+
   Widget _buildFreeUserSection(
     BuildContext context,
     SubscriptionLoaded state,
     bool isDark,
   ) {
-    final plans = state.plans;
-    final hasPlans = plans.isNotEmpty;
+    final packages = _getPackages(state);
+    final hasPackages = packages.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Free tier badge
         AppCard(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -188,25 +177,20 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
             ),
           ),
         ),
-
         const SizedBox(height: 16),
 
-        // Upgrade button
-        if (hasPlans) ...[
+        if (hasPackages) ...[
           AppButton.primary(
             label: 'Upgrade to Premium',
             icon: Icons.workspace_premium,
             isFullWidth: true,
             onPressed: () => setState(() => _showPlans = true),
           ),
-
-          // Show plans if expanded
           if (_showPlans) ...[
             const SizedBox(height: 16),
             _buildPlansSection(context, state, isDark),
           ],
         ] else ...[
-          // No plans available
           AppCard(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -243,10 +227,9 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
     SubscriptionLoaded state,
     bool isDark,
   ) {
-    final plans = state.plans;
-    final currentPlanId = state.status.subscription?.plan.id;
+    final packages = _getPackages(state);
 
-    if (plans.isEmpty) {
+    if (packages.isEmpty) {
       return const AppEmptyState(
         icon: Icons.shopping_bag_outlined,
         title: 'No Plans Available',
@@ -264,15 +247,13 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
           ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 12),
-        ...plans.map(
-          (plan) => Padding(
+        ...packages.map(
+          (package) => Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: PlanCard(
-              plan: plan,
-              isCurrentPlan: plan.id == currentPlanId,
-              isRecommended: plan.tierLevel == 2, // Premium is recommended
+              package: package,
               isLoading: state.purchaseInProgress,
-              onPurchase: () => _handlePurchase(plan),
+              onPurchase: () => _handlePurchase(package),
             ),
           ),
         ),
@@ -341,15 +322,12 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
           title: 'Settings',
           onTap: () {
             Navigator.of(context).pop();
-            // Navigate to settings
           },
         ),
         AppListTile(
           leading: const Icon(Icons.help_outline),
           title: 'Help & Support',
-          onTap: () {
-            // Show help
-          },
+          onTap: () {},
         ),
         const Divider(),
         AppListTile(
@@ -362,14 +340,8 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
     );
   }
 
-  Future<void> _handlePurchase(PlanModel plan) async {
-    final success = await ref
-        .read(subscriptionProvider.notifier)
-        .purchase(plan.productId);
-
-    if (success && mounted) {
-      AppToast.success(context, 'Purchase initiated');
-    }
+  Future<void> _handlePurchase(Package package) async {
+    await ref.read(subscriptionProvider.notifier).purchase(package);
   }
 
   Future<void> _handleLogout(BuildContext context) async {
@@ -390,9 +362,7 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
   }
 }
 
-/// Shows the profile sheet
-///
-/// Call this when the user taps their avatar in the home screen.
+/// Shows the profile sheet.
 Future<void> showProfileSheet(BuildContext context) {
   return showAppBottomSheet(
     context: context,

@@ -12,6 +12,8 @@ import '../../../../widgets/widgets.dart';
 import '../../../gains_coins/presentation/widgets/coin_balance_widget.dart';
 import '../../../guidance/guidance.dart';
 import '../../../profile/profile.dart';
+import '../../../../core/access/access_gated.dart';
+import '../../../../core/access/access_guard.dart';
 import '../../../subscription/subscription.dart';
 import '../../../workout/data/models/models.dart';
 import '../providers/home_providers.dart';
@@ -425,8 +427,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             case HomeStatus.noSubscription:
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 24),
-                                child: SubscriptionGatedWidget(
-                                  requiredTier: SubscriptionTiers.basic,
+                                child: AccessGated(
+                                  requires: const AccessRequirement(
+                                    requireTier: SubscriptionTier.premium,
+                                  ),
                                   feature: SubscriptionFeature.coachWorkout,
                                   compact:
                                       false, // Prominent: first gated section

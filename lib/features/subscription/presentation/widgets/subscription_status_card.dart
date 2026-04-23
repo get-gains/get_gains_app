@@ -8,30 +8,28 @@ import '../../../../widgets/widgets.dart';
 import '../../data/models/models.dart';
 import '../providers/subscription_provider.dart';
 
-/// Displays the current subscription status
-///
-/// Shows:
-/// - Whether user is subscribed
-/// - Plan name and tier
-/// - Expiration date
-/// - Renewal status
+/// Displays the current subscription status.
 class SubscriptionStatusCard extends ConsumerWidget {
   const SubscriptionStatusCard({super.key, this.onTap});
 
-  /// Called when the card is tapped (e.g., to show upgrade options)
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final subscription = ref.watch(currentSubscriptionProvider);
+    final subState = ref.watch(subscriptionProvider);
     final isSubscribed = ref.watch(isSubscribedProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    if (!isSubscribed || subscription == null) {
+    if (!isSubscribed || subState is! SubscriptionLoaded) {
       return _buildFreeCard(context, isDark);
     }
 
-    return _buildSubscribedCard(context, subscription, isDark);
+    final detail = subState.status.subscription;
+    if (detail == null) {
+      return _buildFreeCard(context, isDark);
+    }
+
+    return _buildSubscribedCard(context, detail, isDark);
   }
 
   Widget _buildFreeCard(BuildContext context, bool isDark) {
@@ -94,7 +92,7 @@ class SubscriptionStatusCard extends ConsumerWidget {
 
   Widget _buildSubscribedCard(
     BuildContext context,
-    SubscriptionModel subscription,
+    SubscriptionDetail subscription,
     bool isDark,
   ) {
     final daysRemaining = subscription.daysRemaining;
@@ -131,7 +129,7 @@ class SubscriptionStatusCard extends ConsumerWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          _formatPlanName(subscription.plan.name),
+                          'Premium',
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w600),
                           overflow: TextOverflow.ellipsis,
@@ -170,13 +168,5 @@ class SubscriptionStatusCard extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  String _formatPlanName(String name) {
-    // Convert snake_case to Title Case
-    return name
-        .split('_')
-        .map((word) => word[0].toUpperCase() + word.substring(1))
-        .join(' ');
   }
 }

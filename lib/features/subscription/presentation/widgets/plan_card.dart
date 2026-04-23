@@ -1,34 +1,32 @@
 // lib/features/subscription/presentation/widgets/plan_card.dart
+//
+// LEGACY — will be rewritten in Session 2 to use RC Package.
+// Temporarily adapted to use Package from purchases_flutter.
 
 import 'package:flutter/material.dart';
+import 'package:purchases_flutter/purchases_flutter.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../widgets/widgets.dart';
-import '../../data/models/models.dart';
 
-/// Displays a subscription plan for purchase
-///
-/// Shows:
-/// - Plan name and description
-/// - Price and billing cycle
-/// - Features list
-/// - Trial period (if available)
-/// - Purchase button
+/// Displays a subscription plan (RC Package) for purchase.
 class PlanCard extends StatelessWidget {
   const PlanCard({
     super.key,
-    required this.plan,
+    required this.package,
     required this.onPurchase,
     this.isLoading = false,
     this.isCurrentPlan = false,
     this.isRecommended = false,
   });
 
-  final PlanModel plan;
+  final Package package;
   final VoidCallback onPurchase;
   final bool isLoading;
   final bool isCurrentPlan;
   final bool isRecommended;
+
+  StoreProduct get _product => package.storeProduct;
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +44,7 @@ class PlanCard extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      _formatPlanName(plan.name),
+                      _product.title,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -64,7 +62,7 @@ class PlanCard extends StatelessWidget {
 
                 // Description
                 Text(
-                  plan.description,
+                  _product.description,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: isDark
                         ? AppColors.mutedForegroundDark
@@ -78,7 +76,7 @@ class PlanCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      plan.formattedPrice,
+                      _product.priceString,
                       style: Theme.of(context).textTheme.headlineMedium
                           ?.copyWith(
                             fontWeight: FontWeight.bold,
@@ -91,7 +89,7 @@ class PlanCard extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 4),
                       child: Text(
-                        '/${plan.billingCycleDisplay}',
+                        '/${_periodLabel()}',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: isDark
                               ? AppColors.mutedForegroundDark
@@ -102,8 +100,8 @@ class PlanCard extends StatelessWidget {
                   ],
                 ),
 
-                // Trial period
-                if (plan.trialPeriodDays != null) ...[
+                // Trial badge
+                if (_product.introductoryPrice != null) ...[
                   const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -119,7 +117,7 @@ class PlanCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      '${plan.trialPeriodDays}-day free trial',
+                      'Free trial available',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         color: isDark
                             ? AppColors.accentDark
@@ -132,34 +130,6 @@ class PlanCard extends StatelessWidget {
 
                 const SizedBox(height: 16),
 
-                // Features
-                if (plan.features.isNotEmpty) ...[
-                  ...plan.features.map(
-                    (feature) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.check_circle,
-                            size: 18,
-                            color: isDark
-                                ? AppColors.accentDark
-                                : AppColors.accentLight,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              feature,
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-
                 // Purchase button
                 SizedBox(
                   width: double.infinity,
@@ -169,7 +139,7 @@ class PlanCard extends StatelessWidget {
                           onPressed: null,
                         )
                       : AppButton.primary(
-                          label: plan.trialPeriodDays != null
+                          label: _product.introductoryPrice != null
                               ? 'Start Free Trial'
                               : 'Subscribe',
                           onPressed: isLoading ? null : onPurchase,
@@ -208,10 +178,14 @@ class PlanCard extends StatelessWidget {
     );
   }
 
-  String _formatPlanName(String name) {
-    return name
-        .split('_')
-        .map((word) => word[0].toUpperCase() + word.substring(1))
-        .join(' ');
+  String _periodLabel() {
+    final period = _product.subscriptionPeriod;
+    if (period == null) return 'purchase';
+    // RC period format: PnY, PnM, PnW, PnD
+    if (period.contains('Y')) return 'year';
+    if (period.contains('M')) return 'month';
+    if (period.contains('W')) return 'week';
+    if (period.contains('D')) return 'day';
+    return 'month';
   }
 }

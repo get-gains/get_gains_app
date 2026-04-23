@@ -272,7 +272,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 return 'Email is required';
               }
               if (!RegExp(
-                r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                r'^[\w-\.+]+@([\w-]+\.)+[\w-]{2,4}$',
               ).hasMatch(value)) {
                 return 'Enter a valid email';
               }

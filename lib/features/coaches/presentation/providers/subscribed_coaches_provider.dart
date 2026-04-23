@@ -120,7 +120,8 @@ class SubscribedCoachesNotifier extends _$SubscribedCoachesNotifier {
 
     return result.when(
       success: (subscribedCoach) {
-        // Prepend to the current list if loaded
+        // Optimistically prepend if the list is loaded; otherwise
+        // trigger a full load so isSubscribedToCoach reflects the new state.
         final current = state;
         if (current is SubscribedCoachesLoaded) {
           state = SubscribedCoachesLoaded(
@@ -129,6 +130,10 @@ class SubscribedCoachesNotifier extends _$SubscribedCoachesNotifier {
               total: current.pagination.total + 1,
             ),
           );
+        } else {
+          // State is Initial/Loading/Error — do a full load so the derived
+          // providers pick up the new subscription immediately.
+          loadCoaches();
         }
         return true;
       },

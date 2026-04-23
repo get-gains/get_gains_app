@@ -16,9 +16,9 @@ extension StringExtensions on String {
     return split(' ').map((word) => word.capitalize()).join(' ');
   }
 
-  /// Check if string is a valid email
+  /// Check if string is a valid email (supports + aliases like user+tag@example.com)
   bool get isValidEmail {
-    return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(this);
+    return RegExp(r'^[\w-\.+]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(this);
   }
 
   /// Check if string is null or empty
