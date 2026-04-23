@@ -87,12 +87,12 @@ class CoachHubScreen extends ConsumerWidget {
                     icon: Icons.calendar_today_outlined,
                     activeIcon: Icons.calendar_today,
                     title: 'Programs',
-                    subtitle: 'Create and manage training programs',
+                    subtitle: 'Build per-client training programs',
                     color: isDark
                         ? AppColors.accentDark
                         : const Color(0xFF22C55E),
                     isDark: isDark,
-                    onTap: () => context.push(AppRoutes.coachPrograms),
+                    onTap: () => context.push(AppRoutes.coachRoster),
                   ),
                   const SizedBox(height: 12),
                   _HubTile(

@@ -1,162 +1,192 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:json_annotation/json_annotation.dart';
 
-import '../../../workout/data/models/exercise_model.dart';
-import 'program_model.dart' show DayOfWeek;
+import 'program_model.dart';
 
 part 'program_request_models.freezed.dart';
 part 'program_request_models.g.dart';
 
 // ──────────────────────────────────────────────────────────
-// Program Requests
+// Client Program Requests
 // ──────────────────────────────────────────────────────────
 
-/// Body for `POST /api/coach/programs`.
+/// Body for `POST /api/coach/clients/:clientId/programs`.
 @freezed
-abstract class CreateProgramRequest with _$CreateProgramRequest {
-  const factory CreateProgramRequest({
+abstract class CreateClientProgramRequest with _$CreateClientProgramRequest {
+  @JsonSerializable(includeIfNull: false)
+  const factory CreateClientProgramRequest({
     required String name,
-    required String description,
-  }) = _CreateProgramRequest;
+    @Default('') String description,
+    String? notes,
+    @JsonKey(name: 'start_date') String? startDate,
+    @JsonKey(name: 'end_date') String? endDate,
+  }) = _CreateClientProgramRequest;
 
-  factory CreateProgramRequest.fromJson(Map<String, dynamic> json) =>
-      _$CreateProgramRequestFromJson(json);
+  factory CreateClientProgramRequest.fromJson(Map<String, dynamic> json) =>
+      _$CreateClientProgramRequestFromJson(json);
 }
 
 /// Body for `PATCH /api/coach/programs/:programId`.
 @freezed
-abstract class UpdateProgramRequest with _$UpdateProgramRequest {
-  const factory UpdateProgramRequest({String? name, String? description}) =
-      _UpdateProgramRequest;
-
-  factory UpdateProgramRequest.fromJson(Map<String, dynamic> json) =>
-      _$UpdateProgramRequestFromJson(json);
-}
-
-// ──────────────────────────────────────────────────────────
-// Routine Requests
-// ──────────────────────────────────────────────────────────
-
-/// Body for `POST /api/coach/routines`.
-@freezed
-abstract class CreateRoutineRequest with _$CreateRoutineRequest {
-  const factory CreateRoutineRequest({
-    required String name,
-    required String description,
-    required int estimatedDurationMinutes,
-    @Default([]) List<MuscleGroup> muscleGroupsTargeted,
-  }) = _CreateRoutineRequest;
-
-  factory CreateRoutineRequest.fromJson(Map<String, dynamic> json) =>
-      _$CreateRoutineRequestFromJson(json);
-}
-
-/// Body for `PATCH /api/coach/routines/:routineId`.
-@freezed
-abstract class UpdateRoutineRequest with _$UpdateRoutineRequest {
-  const factory UpdateRoutineRequest({
+abstract class UpdateClientProgramRequest with _$UpdateClientProgramRequest {
+  @JsonSerializable(includeIfNull: false)
+  const factory UpdateClientProgramRequest({
     String? name,
     String? description,
-    int? estimatedDurationMinutes,
-    List<MuscleGroup>? muscleGroupsTargeted,
-  }) = _UpdateRoutineRequest;
+    String? notes,
+    @JsonKey(name: 'is_active') bool? isActive,
+    @JsonKey(name: 'start_date') String? startDate,
+    @JsonKey(name: 'end_date') String? endDate,
+  }) = _UpdateClientProgramRequest;
 
-  factory UpdateRoutineRequest.fromJson(Map<String, dynamic> json) =>
-      _$UpdateRoutineRequestFromJson(json);
+  factory UpdateClientProgramRequest.fromJson(Map<String, dynamic> json) =>
+      _$UpdateClientProgramRequestFromJson(json);
 }
 
 // ──────────────────────────────────────────────────────────
-// ProgramRoutine Junction Requests
+// Program Routine Requests
 // ──────────────────────────────────────────────────────────
 
-/// Body for `POST /api/coach/programs/:programId/routines`.
+/// Body for `POST /api/coach/programs/:programId/routines` (template mode).
+///
+/// Copies an existing routine template into the client's program.
 @freezed
-abstract class AssignRoutineRequest with _$AssignRoutineRequest {
-  const factory AssignRoutineRequest({
-    required String routineId,
-    required DayOfWeek dayOfWeek,
-  }) = _AssignRoutineRequest;
+abstract class AddProgramRoutineTemplateRequest
+    with _$AddProgramRoutineTemplateRequest {
+  const factory AddProgramRoutineTemplateRequest({
+    @Default('template') String mode,
+    @JsonKey(name: 'source_routine_id') required String sourceRoutineId,
+    @JsonKey(name: 'days_of_week') required List<DayOfWeek> daysOfWeek,
+    @JsonKey(name: 'order_in_program') required int orderInProgram,
+  }) = _AddProgramRoutineTemplateRequest;
 
-  factory AssignRoutineRequest.fromJson(Map<String, dynamic> json) =>
-      _$AssignRoutineRequestFromJson(json);
+  factory AddProgramRoutineTemplateRequest.fromJson(
+    Map<String, dynamic> json,
+  ) => _$AddProgramRoutineTemplateRequestFromJson(json);
 }
 
-/// Body for `PATCH /api/coach/programs/:programId/routines/:programRoutineId`.
+/// Body for `POST /api/coach/programs/:programId/routines` (inline mode).
+///
+/// Creates a new routine directly within the client's program.
+@freezed
+abstract class AddProgramRoutineInlineRequest
+    with _$AddProgramRoutineInlineRequest {
+  const factory AddProgramRoutineInlineRequest({
+    @Default('inline') String mode,
+    required String name,
+    @Default('') String description,
+    @JsonKey(name: 'estimated_duration_minutes')
+    required int estimatedDurationMinutes,
+    @JsonKey(name: 'days_of_week') required List<DayOfWeek> daysOfWeek,
+    @JsonKey(name: 'order_in_program') required int orderInProgram,
+    @Default([]) List<InlineExerciseRequest> exercises,
+  }) = _AddProgramRoutineInlineRequest;
+
+  factory AddProgramRoutineInlineRequest.fromJson(Map<String, dynamic> json) =>
+      _$AddProgramRoutineInlineRequestFromJson(json);
+}
+
+/// Exercise entry within an inline routine creation request.
+@freezed
+abstract class InlineExerciseRequest with _$InlineExerciseRequest {
+  const factory InlineExerciseRequest({
+    @JsonKey(name: 'exercise_id') required String exerciseId,
+    required int sets,
+    @JsonKey(name: 'reps_min') required int repsMin,
+    @JsonKey(name: 'reps_max') required int repsMax,
+    @JsonKey(name: 'rest_seconds') required int restSeconds,
+    @JsonKey(name: 'order_in_routine') required int orderInRoutine,
+  }) = _InlineExerciseRequest;
+
+  factory InlineExerciseRequest.fromJson(Map<String, dynamic> json) =>
+      _$InlineExerciseRequestFromJson(json);
+}
+
+/// Body for `PATCH /api/coach/programs/:programId/routines/:aprId`.
 @freezed
 abstract class UpdateProgramRoutineRequest with _$UpdateProgramRoutineRequest {
-  const factory UpdateProgramRoutineRequest({required DayOfWeek dayOfWeek}) =
-      _UpdateProgramRoutineRequest;
+  @JsonSerializable(includeIfNull: false)
+  const factory UpdateProgramRoutineRequest({
+    String? name,
+    String? description,
+    @JsonKey(name: 'estimated_duration_minutes') int? estimatedDurationMinutes,
+    @JsonKey(name: 'days_of_week') List<DayOfWeek>? daysOfWeek,
+    @JsonKey(name: 'order_in_program') int? orderInProgram,
+  }) = _UpdateProgramRoutineRequest;
 
   factory UpdateProgramRoutineRequest.fromJson(Map<String, dynamic> json) =>
       _$UpdateProgramRoutineRequestFromJson(json);
 }
 
 // ──────────────────────────────────────────────────────────
-// RoutineExercise Junction Requests
+// Program Routine Exercise Requests
 // ──────────────────────────────────────────────────────────
 
-/// Body for `POST /api/coach/programs/routines/:routineId/exercises`.
+/// Body for `POST /api/coach/programs/:programId/routines/:aprId/exercises`.
 @freezed
-abstract class AddRoutineExerciseRequest with _$AddRoutineExerciseRequest {
-  const factory AddRoutineExerciseRequest({
-    required String exerciseId,
+abstract class AddProgramRoutineExerciseRequest
+    with _$AddProgramRoutineExerciseRequest {
+  const factory AddProgramRoutineExerciseRequest({
+    @JsonKey(name: 'exercise_id') required String exerciseId,
     required int sets,
-    required int repsMin,
-    required int repsMax,
-    required int restSeconds,
-    required int orderInRoutine,
-    String? notes,
-  }) = _AddRoutineExerciseRequest;
+    @JsonKey(name: 'reps_min') required int repsMin,
+    @JsonKey(name: 'reps_max') required int repsMax,
+    @JsonKey(name: 'rest_seconds') required int restSeconds,
+    @JsonKey(name: 'order_in_routine') required int orderInRoutine,
+  }) = _AddProgramRoutineExerciseRequest;
 
-  factory AddRoutineExerciseRequest.fromJson(Map<String, dynamic> json) =>
-      _$AddRoutineExerciseRequestFromJson(json);
+  factory AddProgramRoutineExerciseRequest.fromJson(
+    Map<String, dynamic> json,
+  ) => _$AddProgramRoutineExerciseRequestFromJson(json);
 }
 
-/// Body for `PATCH /api/coach/programs/routines/:routineId/exercises/:routineExerciseId`.
+/// Body for `PATCH .../exercises/:apreId`.
 @freezed
-abstract class UpdateRoutineExerciseRequest
-    with _$UpdateRoutineExerciseRequest {
-  const factory UpdateRoutineExerciseRequest({
+abstract class UpdateProgramRoutineExerciseRequest
+    with _$UpdateProgramRoutineExerciseRequest {
+  @JsonSerializable(includeIfNull: false)
+  const factory UpdateProgramRoutineExerciseRequest({
+    @JsonKey(name: 'exercise_id') String? exerciseId,
     int? sets,
-    int? repsMin,
-    int? repsMax,
-    int? restSeconds,
-    int? orderInRoutine,
-    String? notes,
-  }) = _UpdateRoutineExerciseRequest;
+    @JsonKey(name: 'reps_min') int? repsMin,
+    @JsonKey(name: 'reps_max') int? repsMax,
+    @JsonKey(name: 'rest_seconds') int? restSeconds,
+    @JsonKey(name: 'order_in_routine') int? orderInRoutine,
+  }) = _UpdateProgramRoutineExerciseRequest;
 
-  factory UpdateRoutineExerciseRequest.fromJson(Map<String, dynamic> json) =>
-      _$UpdateRoutineExerciseRequestFromJson(json);
+  factory UpdateProgramRoutineExerciseRequest.fromJson(
+    Map<String, dynamic> json,
+  ) => _$UpdateProgramRoutineExerciseRequestFromJson(json);
 }
 
 // ──────────────────────────────────────────────────────────
-// Assignment Requests
+// Routine Template Requests (kept from old schema)
 // ──────────────────────────────────────────────────────────
 
-/// Body for `POST /api/coach/assign-program`.
+/// Body for `POST /api/coach/routine-templates`.
 @freezed
-abstract class AssignProgramRequest with _$AssignProgramRequest {
-  const factory AssignProgramRequest({
-    required String userId,
-    required String programId,
-    required String startDate,
-    @JsonKey(includeIfNull: false) String? endDate,
-    @JsonKey(includeIfNull: false) String? notes,
-  }) = _AssignProgramRequest;
+abstract class CreateRoutineRequest with _$CreateRoutineRequest {
+  const factory CreateRoutineRequest({
+    required String name,
+    required String description,
+    @JsonKey(name: 'estimated_duration_minutes')
+    required int estimatedDurationMinutes,
+  }) = _CreateRoutineRequest;
 
-  factory AssignProgramRequest.fromJson(Map<String, dynamic> json) =>
-      _$AssignProgramRequestFromJson(json);
+  factory CreateRoutineRequest.fromJson(Map<String, dynamic> json) =>
+      _$CreateRoutineRequestFromJson(json);
 }
 
-/// Body for `PATCH /api/coach/assign-program/:assignmentId`.
+/// Body for `PATCH /api/coach/routine-templates/:routineId`.
 @freezed
-abstract class UpdateAssignmentRequest with _$UpdateAssignmentRequest {
-  const factory UpdateAssignmentRequest({
-    String? startDate,
-    String? endDate,
-    String? notes,
-    bool? isActive,
-  }) = _UpdateAssignmentRequest;
+abstract class UpdateRoutineRequest with _$UpdateRoutineRequest {
+  @JsonSerializable(includeIfNull: false)
+  const factory UpdateRoutineRequest({
+    String? name,
+    String? description,
+    @JsonKey(name: 'estimated_duration_minutes') int? estimatedDurationMinutes,
+  }) = _UpdateRoutineRequest;
 
-  factory UpdateAssignmentRequest.fromJson(Map<String, dynamic> json) =>
-      _$UpdateAssignmentRequestFromJson(json);
+  factory UpdateRoutineRequest.fromJson(Map<String, dynamic> json) =>
+      _$UpdateRoutineRequestFromJson(json);
 }

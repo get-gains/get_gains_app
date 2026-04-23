@@ -1,9 +1,11 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
-import '../../../coach_programs/data/models/program_model.dart' show DayOfWeek;
+import '../../../coach_programs/data/models/program_model.dart'
+    show DayOfWeek, DayOfWeekX;
 import '../../../workout/data/models/routine_model.dart';
 
-export '../../../coach_programs/data/models/program_model.dart' show DayOfWeek;
+export '../../../coach_programs/data/models/program_model.dart'
+    show DayOfWeek, DayOfWeekX;
 
 part 'standalone_program_model.freezed.dart';
 part 'standalone_program_model.g.dart';
@@ -75,8 +77,7 @@ abstract class StandaloneProgramRoutineSlotModel
   const factory StandaloneProgramRoutineSlotModel({
     required String id,
     required DayOfWeek dayOfWeek,
-    @RoutineModelConverter()
-    required RoutineModel routine,
+    @RoutineModelConverter() required RoutineModel routine,
   }) = _StandaloneProgramRoutineSlotModel;
 
   factory StandaloneProgramRoutineSlotModel.fromJson(

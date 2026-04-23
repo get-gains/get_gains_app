@@ -216,7 +216,7 @@ class _StandaloneProgramDetailScreenState
       context: context,
       title: 'Remove Routine',
       message:
-          'Remove "${slot.routine.name}" from ${slot.dayOfWeek.label}? The routine itself will not be deleted.',
+          'Remove "${slot.routine.name}" from ${slot.dayOfWeek.displayName}? The routine itself will not be deleted.',
       confirmLabel: 'Remove',
       isDestructive: true,
       icon: Icons.remove_circle_outline,
@@ -377,7 +377,7 @@ class _DaySlotCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  slot.dayOfWeek.label,
+                  slot.dayOfWeek.displayName,
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: isDark
                         ? AppColors.primaryDark
@@ -522,7 +522,7 @@ class _RestDayCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              day.label,
+              day.displayName,
               style: theme.textTheme.labelLarge?.copyWith(
                 fontWeight: FontWeight.w600,
               ),

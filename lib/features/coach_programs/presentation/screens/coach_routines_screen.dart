@@ -43,7 +43,8 @@ class _CoachRoutinesScreenState extends ConsumerState<CoachRoutinesScreen> {
         ),
       ),
       body: _buildBody(state, isDark),
-      floatingActionButton: state is CoachRoutinesLoaded && state.routines.isNotEmpty
+      floatingActionButton:
+          state is CoachRoutinesLoaded && state.routines.isNotEmpty
           ? FloatingActionButton.extended(
               onPressed: () => context.push(AppRoutes.coachCreateRoutine),
               backgroundColor: isDark
@@ -263,36 +264,12 @@ class _RoutineCard extends StatelessWidget {
           Row(
             children: [
               _InfoChip(
-                icon: Icons.fitness_center,
-                label: '${routine.exerciseCount} exercises',
-                isDark: isDark,
-              ),
-              const SizedBox(width: 12),
-              _InfoChip(
                 icon: Icons.timer_outlined,
                 label: '${routine.estimatedDurationMinutes} min',
                 isDark: isDark,
               ),
             ],
           ),
-
-          // Muscle group chips
-          if (routine.muscleGroupsTargeted.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: routine.muscleGroupsTargeted
-                  .map(
-                    (mg) => AppBadge(
-                      label: mg.displayName,
-                      variant: AppBadgeVariant.secondary,
-                      size: AppBadgeSize.sm,
-                    ),
-                  )
-                  .toList(),
-            ),
-          ],
         ],
       ),
     );

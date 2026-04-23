@@ -1024,8 +1024,17 @@ class WorkoutRepository {
         );
         return Success(model);
       } catch (e) {
-        AppLogger.error('Failed to parse today status', tag: 'WorkoutRepo', error: e);
-        return Failure(UnknownError(message: 'Failed to parse today status: $e', originalError: e));
+        AppLogger.error(
+          'Failed to parse today status',
+          tag: 'WorkoutRepo',
+          error: e,
+        );
+        return Failure(
+          UnknownError(
+            message: 'Failed to parse today status: $e',
+            originalError: e,
+          ),
+        );
       }
     }
 
@@ -1039,12 +1048,19 @@ class WorkoutRepository {
 
       final legacyStatus = await _buildLegacyTodayStatus();
       if (legacyStatus != null) {
-        AppLogger.info('Loaded today status via legacy fallback', tag: 'WorkoutRepo');
+        AppLogger.info(
+          'Loaded today status via legacy fallback',
+          tag: 'WorkoutRepo',
+        );
         return Success(legacyStatus);
       }
     }
 
-    AppLogger.error('Failed to fetch today status', tag: 'WorkoutRepo', error: failure.error);
+    AppLogger.error(
+      'Failed to fetch today status',
+      tag: 'WorkoutRepo',
+      error: failure.error,
+    );
     return Failure(failure.error);
   }
 
@@ -1067,9 +1083,8 @@ class WorkoutRepository {
       }
 
       bool hasCoach = false;
-      final subscribedCoachesResult = await _apiClient.get<Map<String, dynamic>>(
-        ApiConstants.subscribedCoaches,
-      );
+      final subscribedCoachesResult = await _apiClient
+          .get<Map<String, dynamic>>(ApiConstants.subscribedCoaches);
       if (subscribedCoachesResult is Success<Map<String, dynamic>, AppError>) {
         final data = subscribedCoachesResult.value;
         final coaches = data['coaches'];
@@ -1138,19 +1153,21 @@ class WorkoutRepository {
   SubscriptionStatus? _parseSubscriptionStatus(dynamic rawStatus) {
     final value = _asString(rawStatus)?.toUpperCase();
     return switch (value) {
-      'PENDING' => SubscriptionStatus.pending,
       'ACTIVE' => SubscriptionStatus.active,
-      'PAST_DUE' => SubscriptionStatus.pastDue,
-      'CANCELED' => SubscriptionStatus.canceled,
-      'EXPIRED' => SubscriptionStatus.expired,
-      'REVOKED' => SubscriptionStatus.revoked,
+      'TRIALING' => SubscriptionStatus.trialing,
+      'GRACE_PERIOD' || 'PAST_DUE' => SubscriptionStatus.gracePeriod,
+      'PAUSED' => SubscriptionStatus.paused,
+      'CANCELLED' || 'CANCELED' => SubscriptionStatus.cancelled,
+      'EXPIRED' || 'REVOKED' => SubscriptionStatus.expired,
       _ => null,
     };
   }
 
   TodayWorkoutDetails? _parseLegacyTodayDetails(Map<String, dynamic> payload) {
     final isRestDay =
-        _asBool(payload['isRestDay']) ?? _asBool(payload['is_rest_day']) ?? false;
+        _asBool(payload['isRestDay']) ??
+        _asBool(payload['is_rest_day']) ??
+        false;
 
     final todayNode = payload['today'];
     if (todayNode == null) {
@@ -1179,7 +1196,9 @@ class WorkoutRepository {
     final routine = _asMap(data['routine']);
 
     final dayOfWeek =
-        _asString(data['dayOfWeek']) ?? _extractFirstDayName(data['daysOfWeek']) ?? _extractFirstDayName(data['days_of_week']);
+        _asString(data['dayOfWeek']) ??
+        _extractFirstDayName(data['daysOfWeek']) ??
+        _extractFirstDayName(data['days_of_week']);
 
     final exerciseCount =
         _asInt(data['exerciseCount']) ??
@@ -1207,8 +1226,10 @@ class WorkoutRepository {
           _asString(data['id']),
       dayOfWeek: dayOfWeek,
       dayNumber: _asInt(data['dayNumber']),
-      programName: _asString(data['programName']) ?? _asString(data['program_name']),
-      routineName: _asString(data['routineName']) ?? _asString(routine?['name']),
+      programName:
+          _asString(data['programName']) ?? _asString(data['program_name']),
+      routineName:
+          _asString(data['routineName']) ?? _asString(routine?['name']),
       exerciseCount: exerciseCount,
       estimatedMinutes: estimatedMinutes,
     );
@@ -1222,9 +1243,7 @@ class WorkoutRepository {
   Map<String, dynamic>? _asMap(dynamic value) {
     if (value is Map<String, dynamic>) return value;
     if (value is Map) {
-      return value.map(
-        (key, val) => MapEntry(key.toString(), val),
-      );
+      return value.map((key, val) => MapEntry(key.toString(), val));
     }
     return null;
   }

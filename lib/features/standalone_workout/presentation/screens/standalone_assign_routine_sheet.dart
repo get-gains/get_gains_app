@@ -166,7 +166,7 @@ class _AssignRoutineSheetContentState
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  day.shortLabel,
+                  day.shortName,
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: isSelected
                         ? theme.colorScheme.onPrimary
@@ -293,7 +293,7 @@ class _AssignRoutineSheetContentState
         if (success) {
           AppToast.success(
             context,
-            'Routine assigned to ${_selectedDay!.label}',
+            'Routine assigned to ${_selectedDay!.displayName}',
           );
           Navigator.of(context).pop(true);
         } else {

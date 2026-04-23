@@ -2,64 +2,75 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text_styles.dart';
 import '../../../../widgets/widgets.dart';
-import '../../../workout/data/models/exercise_model.dart';
-import '../../data/models/program_request_models.dart';
-import '../providers/coach_routine_provider.dart';
+import '../../data/models/program_model.dart';
+import '../providers/program_builder_provider.dart';
 
-/// Shows a bottom sheet to edit an exercise's prescription within a routine.
+/// Shows a bottom sheet to edit an exercise's prescription within a program routine.
 ///
-/// Returns `true` if the exercise was successfully updated, `false`/`null` otherwise.
+/// Pre-fills with the current values from [exercise] and saves via the
+/// [ProgramBuilderNotifier.updateExercise] method.
+///
+/// Returns `true` if the exercise was updated, `null`/`false` otherwise.
 Future<bool?> showEditExerciseSheet({
   required BuildContext context,
-  required String routineId,
-  required RoutineExerciseModel exercise,
+  required String clientId,
+  required String programId,
+  required String aprId,
+  required ProgramRoutineExerciseModel exercise,
 }) async {
   return showAppBottomSheet<bool>(
     context: context,
-    isScrollControlled: true,
-    builder: (context) =>
-        _EditExerciseSheetContent(routineId: routineId, exercise: exercise),
+    builder: (ctx) => _EditExerciseSheet(
+      clientId: clientId,
+      programId: programId,
+      aprId: aprId,
+      exercise: exercise,
+    ),
   );
 }
 
-class _EditExerciseSheetContent extends ConsumerStatefulWidget {
-  const _EditExerciseSheetContent({
-    required this.routineId,
+class _EditExerciseSheet extends ConsumerStatefulWidget {
+  const _EditExerciseSheet({
+    required this.clientId,
+    required this.programId,
+    required this.aprId,
     required this.exercise,
   });
 
-  final String routineId;
-  final RoutineExerciseModel exercise;
+  final String clientId;
+  final String programId;
+  final String aprId;
+  final ProgramRoutineExerciseModel exercise;
 
   @override
-  ConsumerState<_EditExerciseSheetContent> createState() =>
-      _EditExerciseSheetContentState();
+  ConsumerState<_EditExerciseSheet> createState() => _EditExerciseSheetState();
 }
 
-class _EditExerciseSheetContentState
-    extends ConsumerState<_EditExerciseSheetContent> {
+class _EditExerciseSheetState extends ConsumerState<_EditExerciseSheet> {
   late final TextEditingController _setsController;
   late final TextEditingController _repsMinController;
   late final TextEditingController _repsMaxController;
   late final TextEditingController _restController;
-  late final TextEditingController _notesController;
-  bool _isLoading = false;
+
+  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    _setsController = TextEditingController(text: '${widget.exercise.sets}');
+    _setsController = TextEditingController(
+      text: widget.exercise.sets.toString(),
+    );
     _repsMinController = TextEditingController(
-      text: '${widget.exercise.repsMin}',
+      text: widget.exercise.repsMin.toString(),
     );
     _repsMaxController = TextEditingController(
-      text: '${widget.exercise.repsMax}',
+      text: widget.exercise.repsMax.toString(),
     );
     _restController = TextEditingController(
-      text: '${widget.exercise.restSeconds}',
+      text: widget.exercise.restSeconds.toString(),
     );
-    _notesController = TextEditingController(text: widget.exercise.notes ?? '');
   }
 
   @override
@@ -68,166 +79,134 @@ class _EditExerciseSheetContentState
     _repsMinController.dispose();
     _repsMaxController.dispose();
     _restController.dispose();
-    _notesController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final theme = Theme.of(context);
     final exerciseName = widget.exercise.exercise?.name ?? 'Exercise';
 
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Edit Exercise', style: theme.textTheme.headlineSmall),
-            const SizedBox(height: 4),
-            Text(
-              exerciseName,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: isDark
-                    ? AppColors.mutedForegroundDark
-                    : AppColors.mutedForegroundLight,
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Prescription row: Sets / Min Reps / Max Reps
-            Row(
+    return AppBottomSheetContent(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AppBottomSheetHeader(
+            title: 'Edit Exercise',
+            onClose: () => Navigator.of(context).pop(),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: AppTextField(
-                    controller: _setsController,
-                    label: 'Sets',
-                    keyboardType: TextInputType.number,
+                // Exercise name preview
+                AppCard.elevated(
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.fitness_center,
+                        color: isDark
+                            ? AppColors.primaryDark
+                            : AppColors.primaryLight,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          exerciseName,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: AppTextField(
-                    controller: _repsMinController,
-                    label: 'Min Reps',
-                    keyboardType: TextInputType.number,
+                const SizedBox(height: 20),
+
+                Text(
+                  'Prescription',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontFamily: AppTextStyles.fontFamilySans,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: AppTextField(
-                    controller: _repsMaxController,
-                    label: 'Max Reps',
-                    keyboardType: TextInputType.number,
-                  ),
+                const SizedBox(height: 12),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppTextField(
+                        controller: _setsController,
+                        label: 'Sets',
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: AppTextField(
+                        controller: _repsMinController,
+                        label: 'Reps Min',
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: AppTextField(
+                        controller: _repsMaxController,
+                        label: 'Reps Max',
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                AppTextField(
+                  controller: _restController,
+                  label: 'Rest (seconds)',
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 24),
+                AppButton(
+                  label: 'Save Changes',
+                  icon: Icons.check,
+                  isFullWidth: true,
+                  isLoading: _isSaving,
+                  onPressed: _isSaving ? null : _save,
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-
-            // Rest seconds
-            AppTextField(
-              controller: _restController,
-              label: 'Rest (seconds)',
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 12),
-
-            // Notes
-            AppTextField(
-              controller: _notesController,
-              label: 'Notes (optional)',
-              hint: 'e.g. Squeeze at top, slow eccentric',
-              maxLines: 2,
-              minLines: 1,
-            ),
-            const SizedBox(height: 24),
-
-            Row(
-              children: [
-                Expanded(
-                  child: AppButton.outline(
-                    label: 'Cancel',
-                    onPressed: () => Navigator.of(context).pop(false),
-                    isFullWidth: true,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: AppButton.primary(
-                    label: 'Save',
-                    onPressed: _isLoading ? null : _submit,
-                    isLoading: _isLoading,
-                    isFullWidth: true,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Future<void> _submit() async {
+  Future<void> _save() async {
     final sets = int.tryParse(_setsController.text.trim());
     final repsMin = int.tryParse(_repsMinController.text.trim());
     final repsMax = int.tryParse(_repsMaxController.text.trim());
     final rest = int.tryParse(_restController.text.trim());
 
-    if (sets == null || sets < 1) {
-      AppToast.warning(context, 'Enter valid sets');
-      return;
-    }
-    if (repsMin == null || repsMin < 1) {
-      AppToast.warning(context, 'Enter valid min reps');
-      return;
-    }
-    if (repsMax == null || repsMax < repsMin) {
-      AppToast.warning(context, 'Max reps must be ≥ min reps');
-      return;
-    }
-    if (rest == null || rest < 0) {
-      AppToast.warning(context, 'Enter valid rest seconds');
-      return;
-    }
+    setState(() => _isSaving = true);
 
-    setState(() => _isLoading = true);
+    final success = await ref
+        .read(programBuilderProvider(widget.clientId).notifier)
+        .updateExercise(
+          widget.aprId,
+          widget.exercise.id,
+          sets: sets,
+          repsMin: repsMin,
+          repsMax: repsMax,
+          restSeconds: rest,
+        );
 
-    try {
-      final success = await ref
-          .read(routineDetailProvider(widget.routineId).notifier)
-          .updateExercise(
-            widget.exercise.id,
-            UpdateRoutineExerciseRequest(
-              sets: sets,
-              repsMin: repsMin,
-              repsMax: repsMax,
-              restSeconds: rest,
-              notes: _notesController.text.trim().isEmpty
-                  ? null
-                  : _notesController.text.trim(),
-            ),
-          );
-
-      if (mounted) {
-        if (success) {
-          AppToast.success(context, 'Exercise updated');
-          Navigator.of(context).pop(true);
-        } else {
-          AppToast.error(context, 'Failed to update exercise');
-        }
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
+    if (mounted) {
+      setState(() => _isSaving = false);
+      if (success) {
+        Navigator.of(context).pop(true);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to update exercise')),
+        );
       }
     }
   }
