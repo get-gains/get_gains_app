@@ -1,6 +1,11 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../coach_programs/data/models/program_model.dart'
+    show DayOfWeek, DayOfWeekX;
 import '../../../workout/data/models/routine_model.dart';
+
+export '../../../coach_programs/data/models/program_model.dart'
+    show DayOfWeek, DayOfWeekX;
 
 part 'standalone_program_model.freezed.dart';
 part 'standalone_program_model.g.dart';
@@ -57,11 +62,6 @@ abstract class StandaloneProgramDetailModel
 extension StandaloneProgramDetailModelX on StandaloneProgramDetailModel {
   /// Total number of day-slots in this program.
   int get totalDays => routines.length;
-
-  /// Max day number — defines the cycle length for day-cycling.
-  int get cycleLengthDays => routines.isEmpty
-      ? 0
-      : routines.map((r) => r.dayNumber).reduce((a, b) => a > b ? a : b);
 }
 
 // ──────────────────────────────────────────────────────────
@@ -76,8 +76,8 @@ abstract class StandaloneProgramRoutineSlotModel
     with _$StandaloneProgramRoutineSlotModel {
   const factory StandaloneProgramRoutineSlotModel({
     required String id,
-    required int dayNumber,
-    required RoutineModel routine,
+    required DayOfWeek dayOfWeek,
+    @RoutineModelConverter() required RoutineModel routine,
   }) = _StandaloneProgramRoutineSlotModel;
 
   factory StandaloneProgramRoutineSlotModel.fromJson(
@@ -93,7 +93,7 @@ abstract class StandaloneProgramRoutineModel
     required String id,
     required String programId,
     required String routineId,
-    required int dayNumber,
+    required DayOfWeek dayOfWeek,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) = _StandaloneProgramRoutineModel;

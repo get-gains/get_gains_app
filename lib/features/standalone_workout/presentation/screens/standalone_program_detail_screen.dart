@@ -31,18 +31,14 @@ class _StandaloneProgramDetailScreenState
     super.initState();
     Future.microtask(
       () => ref
-          .read(
-            standaloneProgramDetailProvider(widget.programId).notifier,
-          )
+          .read(standaloneProgramDetailProvider(widget.programId).notifier)
           .load(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(
-      standaloneProgramDetailProvider(widget.programId),
-    );
+    final state = ref.watch(standaloneProgramDetailProvider(widget.programId));
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -108,9 +104,7 @@ class _StandaloneProgramDetailScreenState
               label: 'Retry',
               onPressed: () => ref
                   .read(
-                    standaloneProgramDetailProvider(
-                      widget.programId,
-                    ).notifier,
+                    standaloneProgramDetailProvider(widget.programId).notifier,
                   )
                   .load(),
             ),
@@ -126,14 +120,13 @@ class _StandaloneProgramDetailScreenState
 
   Widget _buildDetail(StandaloneProgramDetailModel program, bool isDark) {
     final theme = Theme.of(context);
-    final sortedRoutines = [...program.routines]
-      ..sort((a, b) => a.dayNumber.compareTo(b.dayNumber));
+    final routinesByDay = {
+      for (final slot in program.routines) slot.dayOfWeek: slot,
+    };
 
     return RefreshIndicator(
       onRefresh: () => ref
-          .read(
-            standaloneProgramDetailProvider(widget.programId).notifier,
-          )
+          .read(standaloneProgramDetailProvider(widget.programId).notifier)
           .load(),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
@@ -155,12 +148,12 @@ class _StandaloneProgramDetailScreenState
           Row(
             children: [
               AppBadge(
-                label: '${program.totalDays} days',
+                label: '${DayOfWeek.values.length} days/week',
                 variant: AppBadgeVariant.primary,
               ),
               const SizedBox(width: 8),
               AppBadge(
-                label: '${program.routines.length} routines',
+                label: '${program.routines.length} assigned',
                 variant: AppBadgeVariant.info,
               ),
             ],
@@ -172,44 +165,44 @@ class _StandaloneProgramDetailScreenState
           const SizedBox(height: 20),
 
           // Day-slot list
-          if (sortedRoutines.isEmpty)
-            AppEmptyState.compact(
-              icon: Icons.calendar_today,
-              title: 'No Routines Assigned',
-              description:
-                  'Tap "Add Routine" to assign a routine to a day in this program.',
-            )
-          else
-            ...sortedRoutines.map(
-              (slot) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _DaySlotCard(
-                  slot: slot,
-                  isDark: isDark,
-                  programId: widget.programId,
-                  onRemove: () => _confirmRemoveRoutine(slot),
-                ),
-              ),
-            ),
+          ...DayOfWeek.values.map((day) {
+            final slot = routinesByDay[day];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: slot != null
+                  ? _DaySlotCard(
+                      slot: slot,
+                      isDark: isDark,
+                      programId: widget.programId,
+                      onRemove: () => _confirmRemoveRoutine(slot),
+                    )
+                  : _RestDayCard(
+                      day: day,
+                      isDark: isDark,
+                      onAssign: () =>
+                          _showAssignRoutineSheet(program, preferredDay: day),
+                    ),
+            );
+          }),
         ],
       ),
     );
   }
 
   Future<void> _showAssignRoutineSheet(
-    StandaloneProgramDetailModel program,
-  ) async {
+    StandaloneProgramDetailModel program, {
+    DayOfWeek? preferredDay,
+  }) async {
     final result = await showStandaloneAssignRoutineSheet(
       context: context,
       programId: widget.programId,
-      existingDayNumbers: program.routines.map((r) => r.dayNumber).toList(),
+      assignedDays: program.routines.map((r) => r.dayOfWeek).toList(),
+      initialDay: preferredDay,
     );
 
     if (result == true && mounted) {
       ref
-          .read(
-            standaloneProgramDetailProvider(widget.programId).notifier,
-          )
+          .read(standaloneProgramDetailProvider(widget.programId).notifier)
           .load();
       // Also refresh the programs list to update routine counts
       ref.read(standaloneProgramsProvider.notifier).loadPrograms();
@@ -223,7 +216,7 @@ class _StandaloneProgramDetailScreenState
       context: context,
       title: 'Remove Routine',
       message:
-          'Remove "${slot.routine.name}" from Day ${slot.dayNumber}? The routine itself will not be deleted.',
+          'Remove "${slot.routine.name}" from ${slot.dayOfWeek.displayName}? The routine itself will not be deleted.',
       confirmLabel: 'Remove',
       isDestructive: true,
       icon: Icons.remove_circle_outline,
@@ -231,9 +224,7 @@ class _StandaloneProgramDetailScreenState
 
     if (confirmed == true && mounted) {
       final success = await ref
-          .read(
-            standaloneProgramDetailProvider(widget.programId).notifier,
-          )
+          .read(standaloneProgramDetailProvider(widget.programId).notifier)
           .removeProgramRoutine(slot.id);
       if (mounted) {
         if (success) {
@@ -298,9 +289,7 @@ class _ActivateButtonState extends ConsumerState<_ActivateButton> {
     setState(() => _isLoading = true);
     try {
       final success = await ref
-          .read(
-            standaloneProgramDetailProvider(widget.programId).notifier,
-          )
+          .read(standaloneProgramDetailProvider(widget.programId).notifier)
           .activateProgram();
       if (mounted) {
         if (success) {
@@ -331,9 +320,7 @@ class _ActivateButtonState extends ConsumerState<_ActivateButton> {
     setState(() => _isLoading = true);
     try {
       final success = await ref
-          .read(
-            standaloneProgramDetailProvider(widget.programId).notifier,
-          )
+          .read(standaloneProgramDetailProvider(widget.programId).notifier)
           .deactivateProgram();
       if (mounted) {
         if (success) {
@@ -390,7 +377,7 @@ class _DaySlotCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  'Day ${slot.dayNumber}',
+                  slot.dayOfWeek.displayName,
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: isDark
                         ? AppColors.primaryDark
@@ -504,6 +491,59 @@ class _DaySlotCard extends StatelessWidget {
                 ),
               ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RestDayCard extends StatelessWidget {
+  const _RestDayCard({
+    required this.day,
+    required this.isDark,
+    required this.onAssign,
+  });
+
+  final DayOfWeek day;
+  final bool isDark;
+  final VoidCallback onAssign;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return AppCard.elevated(
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.surface1Dark : AppColors.mutedLight,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              day.displayName,
+              style: theme.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Rest Day',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: isDark
+                    ? AppColors.mutedForegroundDark
+                    : AppColors.mutedForegroundLight,
+              ),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: onAssign,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Assign'),
+          ),
         ],
       ),
     );

@@ -1,10 +1,69 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../workout/data/models/exercise_model.dart'
+    show normalizeMuscleGroupApiList;
 export '../../../workout/data/models/exercise_model.dart'
     show MuscleGroup, MuscleGroupX;
 
 part 'program_model.freezed.dart';
 part 'program_model.g.dart';
+
+Map<String, dynamic> _normalizeProgramDetailModelJson(
+  Map<String, dynamic> json,
+) {
+  final normalizedJson = Map<String, dynamic>.from(json);
+
+  normalizedJson['coachId'] ??=
+      normalizedJson['coach_id'] ??
+      normalizedJson['userId'] ??
+      normalizedJson['user_id'];
+  normalizedJson['createdAt'] ??= normalizedJson['created_at'];
+  normalizedJson['updatedAt'] ??= normalizedJson['updated_at'];
+  normalizedJson['description'] ??= '';
+  normalizedJson['routines'] ??= const [];
+
+  return normalizedJson;
+}
+
+Map<String, dynamic> _normalizeProgramSummaryModelJson(
+  Map<String, dynamic> json,
+) {
+  final normalizedJson = Map<String, dynamic>.from(json);
+
+  normalizedJson['routineCount'] ??= normalizedJson['routine_count'] ?? 0;
+  normalizedJson['assignedClientCount'] ??=
+      normalizedJson['assigned_client_count'] ?? 0;
+  normalizedJson['createdAt'] ??= normalizedJson['created_at'];
+  normalizedJson['updatedAt'] ??= normalizedJson['updated_at'];
+  normalizedJson['description'] ??= '';
+
+  return normalizedJson;
+}
+
+Map<String, dynamic> _normalizeRoutineSummaryModelJson(
+  Map<String, dynamic> json,
+) {
+  final normalizedJson = Map<String, dynamic>.from(json);
+
+  normalizedJson['coachId'] ??=
+      normalizedJson['coach_id'] ??
+      normalizedJson['userId'] ??
+      normalizedJson['user_id'] ??
+      'unknown';
+  normalizedJson['estimatedDurationMinutes'] ??=
+      normalizedJson['estimated_duration_minutes'] ?? 0;
+  normalizedJson['muscleGroupsTargeted'] = normalizeMuscleGroupApiList(
+    normalizedJson['muscleGroupsTargeted'] ??
+        normalizedJson['muscle_groups_targeted'],
+  );
+  normalizedJson['exerciseCount'] ??= normalizedJson['exercise_count'] ?? 0;
+  normalizedJson['programCount'] ??= normalizedJson['program_count'] ?? 0;
+  normalizedJson['createdAt'] ??= normalizedJson['created_at'];
+  normalizedJson['updatedAt'] ??= normalizedJson['updated_at'];
+  normalizedJson['description'] ??= '';
+
+  return normalizedJson;
+}
 
 // ──────────────────────────────────────────────────────────
 // Day of Week
@@ -202,7 +261,7 @@ abstract class RoutineSummaryModel with _$RoutineSummaryModel {
   }) = _RoutineSummaryModel;
 
   factory RoutineSummaryModel.fromJson(Map<String, dynamic> json) =>
-      _$RoutineSummaryModelFromJson(json);
+      _$RoutineSummaryModelFromJson(_normalizeRoutineSummaryModelJson(json));
 }
 
 // ──────────────────────────────────────────────────────────

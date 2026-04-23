@@ -43,15 +43,18 @@ class _CoachRoutinesScreenState extends ConsumerState<CoachRoutinesScreen> {
         ),
       ),
       body: _buildBody(state, isDark),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push(AppRoutes.coachCreateRoutine),
-        backgroundColor: isDark
-            ? AppColors.primaryDark
-            : AppColors.primaryLight,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('New Routine'),
-      ),
+      floatingActionButton:
+          state is CoachRoutinesLoaded && state.routines.isNotEmpty
+          ? FloatingActionButton.extended(
+              onPressed: () => context.push(AppRoutes.coachCreateRoutine),
+              backgroundColor: isDark
+                  ? AppColors.primaryDark
+                  : AppColors.primaryLight,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add),
+              label: const Text('New Routine'),
+            )
+          : null,
     );
   }
 

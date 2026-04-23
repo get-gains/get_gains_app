@@ -17,6 +17,11 @@ migrate_working_dir/
 .env
 !.env.example
 
+# Agents and skills
+.agents/
+skills-lock.json
+
+
 # IntelliJ related
 *.iml
 *.ipr
@@ -61,3 +66,6 @@ app.*.map.json
 # Unity export: large generated native libs + assets — add via export from Unity (see docs/unity/SETUP.md)
 /android/unityLibrary
 android/google-services.json
+
+
+

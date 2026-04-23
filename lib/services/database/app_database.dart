@@ -145,7 +145,7 @@ class StandalonePrograms extends Table {
 }
 
 /// Standalone ProgramRoutines table - Day-slot junction linking
-/// a routine to a standalone program on a specific day number.
+/// a routine to a standalone program on a specific day of the week.
 class StandaloneProgramRoutines extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get remoteId => text().nullable()();
@@ -156,7 +156,8 @@ class StandaloneProgramRoutines extends Table {
   )();
   IntColumn get routineId =>
       integer().references(Routines, #id, onDelete: KeyAction.cascade)();
-  IntColumn get dayNumber => integer()();
+  /// Day of week as a string (MONDAY, TUESDAY, ..., SUNDAY).
+  TextColumn get dayOfWeek => text()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   BoolColumn get isSynced => boolean().withDefault(const Constant(false))();
@@ -334,7 +335,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Database schema version - increment when changing tables
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   /// Handle migrations when schema version changes
   @override
@@ -371,6 +372,12 @@ class AppDatabase extends _$AppDatabase {
           await m.createTable(cosmeticsTable);
           await m.createTable(userCosmeticsTable);
           await m.createTable(equippedCosmeticsTable);
+        }
+        if (from < 6) {
+          // v6: Replace dayNumber (int) with dayOfWeek (text) in standalone program routines
+          // Drop and recreate the table (safe since it's a local cache)
+          await m.drop(standaloneProgramRoutines);
+          await m.createTable(standaloneProgramRoutines);
         }
       },
       beforeOpen: (details) async {
@@ -822,7 +829,7 @@ class AppDatabase extends _$AppDatabase {
   ) {
     return (select(standaloneProgramRoutines)
           ..where((pr) => pr.programId.equals(programId))
-          ..orderBy([(pr) => OrderingTerm.asc(pr.dayNumber)]))
+          ..orderBy([(pr) => OrderingTerm.asc(pr.dayOfWeek)]))
         .get();
   }
 
