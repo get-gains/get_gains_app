@@ -260,14 +260,14 @@ class InventoryNotifier extends _$InventoryNotifier {
     );
   }
 
-  /// Unequip a cosmetic from a category slot
-  Future<bool> unequip(String category) async {
+  /// Unequip a cosmetic by its ID
+  Future<bool> unequip(String cosmeticId) async {
     final currentState = state;
     if (currentState is! InventoryLoaded) return false;
 
     state = currentState.copyWith(isProcessing: true, actionError: () => null);
 
-    final result = await _repository.unequipCosmetic(category);
+    final result = await _repository.unequipCosmetic(cosmeticId);
 
     return result.when(
       success: (response) {
@@ -301,7 +301,7 @@ class InventoryNotifier extends _$InventoryNotifier {
         ref.read(coinBalanceProvider.notifier).refresh();
 
         AppLogger.info(
-          'Unequipped category: $category',
+          'Unequipped cosmetic: $cosmeticId',
           tag: 'InventoryProvider',
         );
         return true;

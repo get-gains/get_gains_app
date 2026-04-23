@@ -1,26 +1,19 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_embed_unity/flutter_embed_unity.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../unity/data/unity_message_contract.dart';
 import '../../data/models/equipped_cosmetic_model.dart';
 
-/// CosmeticPreview Widget
-///
-/// Renders cosmetics on the Unity character via the Flutter-Unity bridge.
-/// Handles preview, clear, and load equipped cosmetics messages.
-///
-/// Usage:
-/// ```dart
-/// CosmeticPreview(
-///   equippedCosmetics: equippedList,
-///   onCosmeticsLoaded: () => print('loaded'),
-///   onPreviewReady: () => print('preview applied'),
-/// )
-/// ```
+/// How long to wait for Unity's scene_loaded before assuming it's already ready.
+const _kUnityReadyTimeout = Duration(seconds: 10);
+
 class CosmeticPreview extends ConsumerStatefulWidget {
   const CosmeticPreview({
     super.key,
@@ -31,19 +24,10 @@ class CosmeticPreview extends ConsumerStatefulWidget {
     this.showControls = false,
   });
 
-  /// Currently equipped cosmetics to load on init
   final List<EquippedCosmeticModel> equippedCosmetics;
-
-  /// Called when Unity confirms cosmetics have been loaded
   final VoidCallback? onCosmeticsLoaded;
-
-  /// Called when Unity confirms a preview has been applied
   final VoidCallback? onPreviewReady;
-
-  /// Height of the Unity widget
   final double height;
-
-  /// Whether to show rotation/camera controls
   final bool showControls;
 
   @override
@@ -53,6 +37,50 @@ class CosmeticPreview extends ConsumerStatefulWidget {
 class _CosmeticPreviewState extends ConsumerState<CosmeticPreview> {
   bool _isUnityLoaded = false;
   bool _areCosmeticsLoaded = false;
+  Timer? _timeoutTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // If Unity already fired scene_loaded before this widget was mounted
+    // (common when returning to the wardrobe), fall back after a timeout.
+    _timeoutTimer = Timer(_kUnityReadyTimeout, () {
+      if (mounted && !_isUnityLoaded) {
+        AppLogger.warning(
+          'Unity scene_loaded not received within timeout — assuming ready',
+          tag: 'CosmeticPreview',
+        );
+        setState(() => _isUnityLoaded = true);
+        _loadEquippedCosmetics();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(CosmeticPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_isUnityLoaded) return;
+
+    // Reload Unity cosmetics only when the equipped set actually changes.
+    // Compare by cosmeticId to avoid false positives from DateTime.now() in
+    // InventoryLoaded.equippedCosmetics getter.
+    final oldIds =
+        oldWidget.equippedCosmetics.map((e) => e.cosmeticId).toSet();
+    final newIds = widget.equippedCosmetics.map((e) => e.cosmeticId).toSet();
+    if (!setEquals(oldIds, newIds)) {
+      AppLogger.debug(
+        'Equipped cosmetics changed — reloading Unity preview',
+        tag: 'CosmeticPreview',
+      );
+      reloadEquipped(widget.equippedCosmetics);
+    }
+  }
+
+  @override
+  void dispose() {
+    _timeoutTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,70 +100,85 @@ class _CosmeticPreviewState extends ConsumerState<CosmeticPreview> {
           ),
           child: Stack(
             children: [
-              // Unity embed widget
+              // Unity is always in the tree so it can receive scene_loaded
+              // even if the message arrives before the timeout fires.
+              // RepaintBoundary isolates the platform view from Flutter repaints.
               Positioned.fill(
-                child: _isUnityLoaded
-                    ? EmbedUnity(onMessageFromUnity: _onMessageFromUnity)
-                    : Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(
-                              color: isDark
-                                  ? AppColors.primaryDark
-                                  : AppColors.primaryLight,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Loading character...',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isDark
-                                    ? AppColors.mutedForegroundDark
-                                    : AppColors.mutedForegroundLight,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                child: RepaintBoundary(
+                  child: EmbedUnity(onMessageFromUnity: _onMessageFromUnity),
+                ),
               ),
 
-              // Loading indicator for cosmetics (after Unity is ready)
+              // Opaque loading overlay — hidden once Unity is ready
+              if (!_isUnityLoaded)
+                Positioned.fill(
+                  child: Container(
+                    color:
+                        isDark ? AppColors.surface1Dark : AppColors.surface1Light,
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            color: isDark
+                                ? AppColors.primaryDark
+                                : AppColors.primaryLight,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Loading character...',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark
+                                  ? AppColors.mutedForegroundDark
+                                  : AppColors.mutedForegroundLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+              // Cosmetics-applying indicator — IgnorePointer so the banner
+              // never eats touch events destined for the orbit controller.
               if (_isUnityLoaded && !_areCosmeticsLoaded)
                 Positioned(
                   bottom: 8,
                   left: 0,
                   right: 0,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white70,
+                  child: IgnorePointer(
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white70,
+                              ),
                             ),
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'Applying cosmetics...',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
+                            SizedBox(width: 8),
+                            Text(
+                              'Applying cosmetics...',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -149,10 +192,14 @@ class _CosmeticPreviewState extends ConsumerState<CosmeticPreview> {
 
   void _onMessageFromUnity(String message) {
     if (!mounted) return;
+    AppLogger.debug(
+      'Unity → CosmeticPreview: "$message"',
+      tag: 'CosmeticPreview',
+    );
 
     if (message == UnityMessageContract.unityEventSceneLoaded) {
+      _timeoutTimer?.cancel();
       setState(() => _isUnityLoaded = true);
-      // Scene loaded — now send equipped cosmetics
       _loadEquippedCosmetics();
     } else if (message == UnityMessageContract.unityEventCosmeticsLoaded) {
       setState(() => _areCosmeticsLoaded = true);
@@ -162,13 +209,22 @@ class _CosmeticPreviewState extends ConsumerState<CosmeticPreview> {
     }
   }
 
-  /// Send equipped cosmetics to Unity
   void _loadEquippedCosmetics() {
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodSetCameraViewMode,
+      'COSMETIC',
+    );
+
     final cosmetics = widget.equippedCosmetics
         .map((ec) => {'category': ec.category, 'assetRef': ec.unityAssetRef})
         .toList();
 
     final payload = jsonEncode({'cosmetics': cosmetics});
+    AppLogger.debug(
+      'Wardrobe → Unity LoadEquippedCosmetics: $payload',
+      tag: 'CosmeticPreview',
+    );
 
     sendToUnity(
       UnityMessageContract.gameObjectName,
@@ -177,7 +233,6 @@ class _CosmeticPreviewState extends ConsumerState<CosmeticPreview> {
     );
   }
 
-  /// Preview a cosmetic item (non-persistent, for shop/inventory browsing)
   void previewCosmetic({
     required String category,
     required String assetRef,
@@ -198,7 +253,6 @@ class _CosmeticPreviewState extends ConsumerState<CosmeticPreview> {
     );
   }
 
-  /// Clear preview and revert to equipped state
   void clearPreview() {
     if (!_isUnityLoaded) return;
 
@@ -209,7 +263,16 @@ class _CosmeticPreviewState extends ConsumerState<CosmeticPreview> {
     );
   }
 
-  /// Reload equipped cosmetics (e.g., after equip/unequip)
+  /// Re-applies Cosmetic framing in Unity (restores close-up after user pans away).
+  void resetView() {
+    if (!_isUnityLoaded) return;
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodResetCosmeticView,
+      '',
+    );
+  }
+
   void reloadEquipped(List<EquippedCosmeticModel> cosmetics) {
     if (!_isUnityLoaded) return;
 

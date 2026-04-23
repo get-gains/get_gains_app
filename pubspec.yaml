@@ -59,7 +59,6 @@ dependencies:
   intl: ^0.20.2
   google_sign_in: ^6.2.2
   in_app_purchase: ^3.2.3
-  sentry_flutter: ^9.11.0
   wakelock_plus: ^1.4.0
   app_links: ^6.3.3
   connectivity_plus: ^7.0.0

@@ -34,56 +34,28 @@
 
 ## Documentation Structure
 
-| Document                                                                     | Purpose                                                               |
-| ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| [CONTEXT.md](CONTEXT.md)                                                     | Core infrastructure, patterns, conventions                            |
-| [FEATURE_INDEX.md](FEATURE_INDEX.md)                                         | This file - navigation hub                                            |
-| [features/REGISTER.md](features/REGISTER.md)                                 | Registration feature documentation                                    |
-| [features/HOME.md](features/HOME.md)                                         | Home dashboard screen & widgets                                       |
-| [features/POSE_DETECTION.md](features/POSE_DETECTION.md)                     | Pose detection, form analysis, on-device ML                           |
-| [features/PROFILE.md](features/PROFILE.md)                                   | Profile viewing and management documentation                          |
-| [features/PROGRAM.md](features/PROGRAM.md)                                   | Coach programs, routines, exercises, assignments                      |
-| [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md)       | Coach discovery, settings & missing links data layer                  |
-| [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md)         | Coaches & Subscription presentation layer (screens, routes)           |
-| [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md)       | Coach client progress — sessions, stats, forms, presentation          |
-| [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md)             | Standalone workout — exercises, routines, programs, sessions          |
-| [features/SUBSCRIPTION_DEFINITIONS.md](features/SUBSCRIPTION_DEFINITIONS.md) | Subscription-aware stats, session history, upgrade prompts, UI gating |
-
-### Recent Changes (specs/002-fix-client-flow)
-
-| Change                    | Files Affected                                      | Description                                                                                |
-| ------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Segment score aggregation | `form_comparison_service.dart`, `body_segment.dart` | Angle-level DTW scores aggregated into body-segment keys matching server `BodySegmentEnum` |
-| Frame trimming            | `client_recording_provider.dart`                    | Client recording frames trimmed to reference length before DTW comparison                  |
-| DTW defensive guard       | `form_comparison_service.dart`                      | Defensive trim inside `compare()` if client frames exceed reference                        |
-| View Form removed         | `routine_detail_screen.dart`                        | Standalone "View Form" button removed from exercise cards                                  |
-| Log Set above fold        | `client_unity_recording_screen.dart`                | Set logger moved above segment breakdown in results view                                   |
-| Persistent Start Workout  | `routine_detail_screen.dart`                        | Start Workout button moved to `Scaffold.bottomNavigationBar`                               |
-| Nullable assign-program   | `program_request_models.dart`                       | `endDate`/`notes` omitted from JSON when null via `@JsonKey(includeIfNull: false)`         |
-
-### Recent Changes (form comparison & post-processing loading)
-
-| Change | Files Affected | Description |
-| --- | --- | --- |
-| Post-processing loading (client) | `client_recording_provider.dart`, `client_recording_screen.dart`, `client_unity_recording_screen.dart` | `ClientRecordingProcessing` now has `progress` (0–1) and `message`; UI shows full-screen overlay with percentage and step message (e.g. "Detecting pose...", "Comparing to reference...") |
-| Post-processing loading (coach) | `form_recording_provider.dart`, `form_recording_screen.dart` | `FormRecordingState.processingMessage` added; `_ProcessingOverlay` shows step message and prominent percentage during processing/upload |
-| Comparison improvements | `landmark_preprocessor.dart`, `client_recording_provider.dart`, `form_comparison_service.dart` | Torso alignment (`normalizeForComparison`), best-offset temporal alignment, reference pipeline consistency (`processBatch` with `skipSmooth`), scoring curve 60° |
-| Client recording pipeline | `client_recording_provider.dart`, client screens | Capture-only during recording (no live MLKit/rep counter); REC elapsed timer; rep badge removed; results show "Form analyzed" |
-
-### Recent Changes (offline-first-recording)
-
-| Change | Files Affected | Description |
-| --- | --- | --- |
-| Subscription gate offline fix | `subscription_guard.dart` | Gate shows `child` when subscription state is not loaded (offline optimistic access) |
-| Retry interceptor offline fix | `interceptors.dart` | `connectionError` excluded from retry — no 42 s delay when offline |
-| Form download caching | `client_pose_repository.dart`, `app_database.dart` | `CachedExerciseForms` Drift table; `downloadExerciseForm()` caches on success, falls back on failure |
-| Proactive form pre-caching | `routine_detail_screen.dart`, `client_unity_recording_screen.dart` | All routine forms pre-cached when workout starts |
-| Pose result queuing | `client_pose_repository.dart`, `workout_sync_service.dart` | `submitResult()` queues to SyncQueue offline; `_syncPendingPoseResults()` uploads on reconnect |
-| History offline cache | `client_pose_repository.dart` | `getHistory()` caches first page in `CachedApiResponses`; served from cache when offline |
-| API response cache table | `app_database.dart` | `CachedApiResponses` Drift table (schema v4) for generic key-value response caching |
-| Today's routine + stats caching | `workout_repository.dart` | `getTodayRoutine()` / `getUnifiedWeeklyStats()` cached in `CachedApiResponses` |
-| Recent activity local fallback | `home_providers.dart` | `recentActivityProvider` falls back to local Drift session history when offline |
-| Profile offline cache | `profile_provider.dart` | `profileProvider` reads Hive cache when server unreachable |
+| Document                                                                                   | Purpose                                                               |
+| ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| [CONTEXT.md](CONTEXT.md)                                                                   | Core infrastructure, patterns, conventions                            |
+| [FEATURE_INDEX.md](FEATURE_INDEX.md)                                                       | This file - navigation hub                                            |
+| [features/AUTH_PRESENTATION.md](features/AUTH_PRESENTATION.md)                             | Auth screens (login, register, complete-profile)                      |
+| [features/REGISTER.md](features/REGISTER.md)                                               | Registration data layer & flows                                       |
+| [features/VERIFY_RESET_FLOW.md](features/VERIFY_RESET_FLOW.md)                             | Email verification & password reset deep-link flows                   |
+| [features/HOME.md](features/HOME.md)                                                       | Home dashboard screen & widgets                                       |
+| [features/PROFILE.md](features/PROFILE.md)                                                 | Profile viewing and management documentation                          |
+| [features/PROGRAM.md](features/PROGRAM.md)                                                 | Coach programs, routines, exercises, assignments                      |
+| [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md)                           | Standalone workout — exercises, routines, programs, sessions          |
+| [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)                                 | Workout session flow, set logging, record-first workflow              |
+| [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md)                       | Coach exercise list, create exercise, record reference form           |
+| [features/CLIENT_POSE.md](features/CLIENT_POSE.md)                                         | Client form recording, DTW comparison, offline cache                  |
+| [features/POSE_DETECTION.md](features/POSE_DETECTION.md)                                   | Pose detection pipeline (MLKit, landmarks, DTW)                       |
+| [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md)                     | Coach discovery, settings & missing links data layer                  |
+| [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md)                       | Coaches & Subscription presentation layer (screens, routes)           |
+| [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md)                     | Coach client progress — sessions, stats, forms, presentation          |
+| [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                                       | In-app purchases, subscription management, access control             |
+| [features/SUBSCRIPTION_DEFINITIONS.md](features/SUBSCRIPTION_DEFINITIONS.md)               | Subscription-aware stats, session history, upgrade prompts, UI gating |
+| [features/GAINS_COINS.md](features/GAINS_COINS.md)                                         | Gains Coins economy, cosmetics shop, inventory, leaderboard           |
+| [features/GUIDANCE.md](features/GUIDANCE.md)                                               | In-app spotlight tours, contextual help, onboarding                   |
 
 ---
 
@@ -126,15 +98,16 @@
 
 ### Authentication & User Management
 
-| Feature              | Description                                               | Status                       | Documentation                                |
-| -------------------- | --------------------------------------------------------- | ---------------------------- | -------------------------------------------- |
-| Registration         | Email/password + Google sign-up                           | ✅ Data/Services             | [features/REGISTER.md](features/REGISTER.md) |
-| Login                | Email/password + Google login                             | 🔮 Not Implemented           | -                                            |
-| Password Reset       | Recovery via email                                        | ⚠️ Partial (send email only) | [features/REGISTER.md](features/REGISTER.md) |
-| Profile Management   | View profile, stats, achievements, sign out               | ✅ View + Edit               | [features/PROFILE.md](features/PROFILE.md)   |
-| Profile Data Layer   | Fitness profile CRUD, avatar upload, offline cache        | ✅ Complete                  | [features/PROFILE.md](features/PROFILE.md)   |
-| Profile Editing UI   | Edit avatar, bio, body metrics, training prefs, equipment | ✅ Complete                  | [features/PROFILE.md](features/PROFILE.md)   |
-| Connectivity Service | Network status monitoring for offline-first               | ✅ Complete                  | [features/PROFILE.md](features/PROFILE.md)   |
+| Feature              | Description                                               | Status      | Documentation                                                    |
+| -------------------- | --------------------------------------------------------- | ----------- | ---------------------------------------------------------------- |
+| Registration         | Email/password + Google sign-up                           | ✅ Complete | [features/REGISTER.md](features/REGISTER.md)                     |
+| Login                | Email/password + Google login screens                     | ✅ Complete | [features/AUTH_PRESENTATION.md](features/AUTH_PRESENTATION.md)   |
+| Password Reset       | Forgot password → email → deep link → reset form          | ✅ Complete | [features/VERIFY_RESET_FLOW.md](features/VERIFY_RESET_FLOW.md)   |
+| Email Verification   | Check email screen + verified deep-link screen            | ✅ Complete | [features/VERIFY_RESET_FLOW.md](features/VERIFY_RESET_FLOW.md)   |
+| Profile Management   | View profile, stats, achievements, sign out               | ✅ Complete | [features/PROFILE.md](features/PROFILE.md)                       |
+| Profile Data Layer   | Fitness profile CRUD, avatar upload, offline cache        | ✅ Complete | [features/PROFILE.md](features/PROFILE.md)                       |
+| Profile Editing UI   | Edit avatar, bio, body metrics, training prefs, equipment | ✅ Complete | [features/PROFILE.md](features/PROFILE.md)                       |
+| Connectivity Service | Network status monitoring for offline-first               | ✅ Complete | [features/PROFILE.md](features/PROFILE.md)                       |
 
 **Primary Files:**
 
@@ -145,31 +118,49 @@
 - `/lib/features/auth/presentation/providers/register_provider.dart` - Registration state
 - `/lib/providers/auth_state_provider.dart` - App-wide auth state
 - `/lib/providers/router_provider.dart` - Route guards
+- `/lib/providers/deep_link_provider.dart` - Incoming deep link handling
 - `/lib/features/profile/profile.dart` - Profile feature export
 - `/lib/features/profile/data/user_profile_repository.dart` - Fitness profile CRUD + multipart upload + caching
-- `/lib/features/profile/data/models/user_profile_model.dart` - Fitness profile model
-- `/lib/features/profile/data/models/profile_request_models.dart` - Create/Update request models
 - `/lib/features/profile/presentation/providers/profile_provider.dart` - Account-level profile fetching
-- `/lib/features/profile/presentation/providers/user_profile_provider.dart` - Fitness profile notifier + derived providers
-- `/lib/features/profile/presentation/providers/edit_profile_provider.dart` - Edit form state + save logic
 - `/lib/features/profile/presentation/screens/profile_screen.dart` - Profile display UI (offline-ready)
-- `/lib/features/profile/presentation/screens/edit_profile_screen.dart` - Edit profile form (online-only)
+- `/lib/features/profile/presentation/screens/edit_profile_screen.dart` - Edit profile form
 - `/lib/services/connectivity/connectivity_service.dart` - Connectivity monitoring + isOnlineProvider
+
+### Workout Session
+
+| Feature              | Description                                                          | Status      | Documentation                                                |
+| -------------------- | -------------------------------------------------------------------- | ----------- | ------------------------------------------------------------ |
+| Routine List         | Browse assigned routines                                             | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)   |
+| Workout Session      | Start session, navigate exercises, log sets, complete               | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)   |
+| Record-First Flow    | Record form → compare → log set → next exercise                     | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)   |
+| Set Logging          | Auto-detected reps + weight input with +/- controls                 | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)   |
+| Workout History      | Paginated completed session list                                     | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)   |
+| Progress / Stats     | Weekly stats, summary grid, recent workouts                         | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)   |
+| Workout Sync         | Auto-sync sessions/sets on connectivity restore                     | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)   |
+
+**Primary Files:**
+
+- `/lib/features/workout/data/workout_repository.dart` - All workout API methods + offline-first patterns
+- `/lib/features/workout/presentation/providers/workout_session_provider.dart` - Manages workout session state
+- `/lib/features/workout/presentation/providers/exercise_log_provider.dart` - Per-exercise set logging
+- `/lib/features/workout/presentation/screens/routine_list_screen.dart` - Available routines
+- `/lib/features/workout/presentation/screens/workout_session_screen.dart` - Active workout UI
+- `/lib/services/sync/workout_sync_service.dart` - Dedicated workout sync
 
 ### Client Pose & Form Comparison
 
-| Feature               | Description                                                          | Status      | Documentation                                      |
-| --------------------- | -------------------------------------------------------------------- | ----------- | -------------------------------------------------- |
-| View Reference Form   | Animated 2D skeleton playback of coach's form                        | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
-| Unity 3D Recording    | Record + compare with 3D Unity avatar skeleton                       | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
-| 2D Recording (legacy) | Camera + 2D skeleton recording + compare                             | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
-| Capture-only recording | Raw frame capture during recording; no live MLKit or rep counter   | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
-| Post-processing loading | Full-screen overlay with percentage and step message (client)     | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
-| DTW Comparison        | On-device similarity scoring; torso alignment, temporal best-offset  | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
-| Score + Corrections   | Result display with segment breakdown                                | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
-| Offline Form Cache    | Forms cached in Drift; proactively pre-cached on workout start       | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
-| Offline Result Queue  | Results queued in SyncQueue when offline; synced on reconnect        | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
-| Offline History Cache | First-page history cached in CachedApiResponses for offline browsing | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Feature                 | Description                                                          | Status      | Documentation                                      |
+| ----------------------- | -------------------------------------------------------------------- | ----------- | -------------------------------------------------- |
+| View Reference Form     | Animated 2D skeleton playback of coach's form                        | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Unity 3D Recording      | Record + compare with 3D Unity avatar skeleton                       | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| 2D Recording (legacy)   | Camera + 2D skeleton recording + compare                             | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Capture-only recording  | Raw frame capture during recording; no live MLKit or rep counter     | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Post-processing loading | Full-screen overlay with percentage and step message                 | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| DTW Comparison          | On-device similarity scoring; torso alignment, temporal best-offset  | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Score + Corrections     | Result display with segment breakdown                                | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Offline Form Cache      | Forms cached in Drift; proactively pre-cached on workout start       | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Offline Result Queue    | Results queued in SyncQueue when offline; synced on reconnect        | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| Offline History Cache   | First-page history cached in CachedApiResponses for offline browsing | ✅ Complete | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
 
 **Primary Files:**
 
@@ -180,56 +171,49 @@
 - `/lib/features/client_pose/presentation/screens/view_form_screen.dart` - Reference form viewer
 - `/lib/features/client_pose/presentation/screens/client_recording_screen.dart` - Legacy 2D screen
 
-### Pose Detection & Form Analysis _(Documented in [features/POSE_DETECTION.md](features/POSE_DETECTION.md))_
+### Coach Pose Recording _(Documented in [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md))_
 
-| Feature               | Description                           | Status             | Documentation                                            |
-| --------------------- | ------------------------------------- | ------------------ | -------------------------------------------------------- |
-| Camera Setup Guidance | Lighting, distance, angle validation  | 🔮 Not Implemented | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) |
-| MLKit Pose Detection  | On-device landmark extraction         | 🔮 Not Implemented | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) |
-| Limb Isolation        | Per-exercise body segment filtering   | 🔮 Not Implemented | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) |
-| DTW Comparison        | On-device form similarity scoring     | 🔮 Not Implemented | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) |
-| Correction Generation | Angle-specific feedback messages      | 🔮 Not Implemented | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) |
-| Offline Form Caching  | Download & cache coach forms in Drift | 🔮 Not Implemented | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) |
-| Result Upload         | Persist comparison results to server  | 🔮 Not Implemented | [features/POSE_DETECTION.md](features/POSE_DETECTION.md) |
+| Feature                | Description                                                    | Status         | Documentation                                                          |
+| ---------------------- | -------------------------------------------------------------- | -------------- | ---------------------------------------------------------------------- |
+| Exercise Library       | Browse/search/filter coach exercises                           | ✅ Complete    | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md)  |
+| Create Exercise        | Add new exercises with muscles & equipment                     | ✅ Complete    | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md)  |
+| Record Reference Form  | Camera + MLKit to capture pose landmarks                       | ✅ Complete    | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md)  |
+| Exercise Detail        | View exercise info, active forms, form history                 | ✅ Complete    | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md)  |
+| View / 3D Preview Form | Coach can review recorded reference forms in 2D and 3D        | ✅ Complete    | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md)  |
 
-**Primary Files (To Be Created):**
+**Primary Files:**
 
-- `/lib/features/pose_detection/` - Feature root
-- `/lib/features/pose_detection/data/` - Models, repository
-- `/lib/features/pose_detection/services/` - MLKit, DTW, feature extraction
-- `/lib/features/pose_detection/presentation/` - Screens, providers, widgets
+- `/lib/features/coach_pose/coach_pose.dart` - Feature barrel export
+- `/lib/features/coach_pose/data/` - Models, repository
+- `/lib/features/coach_pose/presentation/` - Screens, providers, services
 
 ### Coach Programs _(Documented in [features/PROGRAM.md](features/PROGRAM.md))_
 
-| Feature                   | Description                                    | Status           | Documentation                                                          |
-| ------------------------- | ---------------------------------------------- | ---------------- | ---------------------------------------------------------------------- |
-| Programs CRUD             | Create, list, update, delete programs          | ✅ Data/Services | [features/PROGRAM.md](features/PROGRAM.md)                             |
-| Routines CRUD             | Create, list, update, delete routines          | ✅ Data/Services | [features/PROGRAM.md](features/PROGRAM.md)                             |
-| ProgramRoutine Junctions  | Assign/reorder/remove routines in programs     | ✅ Data/Services | [features/PROGRAM.md](features/PROGRAM.md)                             |
-| RoutineExercise Junctions | Add/update/remove exercises in routines        | ✅ Data/Services | [features/PROGRAM.md](features/PROGRAM.md)                             |
-| Program Assignments       | Assign programs to clients, manage assignments | ✅ Data/Services | [features/PROGRAM.md](features/PROGRAM.md)                             |
-| Class Roster (ML-4)       | Coach roster with client subscription expiry   | ✅ Complete      | [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md)   |
-| Client List (ML-4)        | Full client list with assignments + expiry     | ✅ Data/Services | [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md) |
+| Feature                   | Description                                    | Status      | Documentation                                                          |
+| ------------------------- | ---------------------------------------------- | ----------- | ---------------------------------------------------------------------- |
+| Programs CRUD             | Create, list, update, delete programs          | ✅ Complete | [features/PROGRAM.md](features/PROGRAM.md)                             |
+| Routines CRUD             | Create, list, update, delete routines          | ✅ Complete | [features/PROGRAM.md](features/PROGRAM.md)                             |
+| ProgramRoutine Junctions  | Assign/reorder/remove routines in programs     | ✅ Complete | [features/PROGRAM.md](features/PROGRAM.md)                             |
+| RoutineExercise Junctions | Add/update/remove exercises in routines        | ✅ Complete | [features/PROGRAM.md](features/PROGRAM.md)                             |
+| Program Assignments       | Assign programs to clients, manage assignments | ✅ Complete | [features/PROGRAM.md](features/PROGRAM.md)                             |
+| Class Roster              | Coach roster with client subscription expiry   | ✅ Complete | [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md)   |
+| Client List               | Full client list with assignments + expiry     | ✅ Complete | [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md) |
 
 **Primary Files:**
 
 - `/lib/features/coach_programs/coach_programs.dart` - Feature barrel export
 - `/lib/features/coach_programs/data/coach_program_repository.dart` - All API calls
-- `/lib/features/coach_programs/data/models/program_model.dart` - Program, routine summary, assignment models
-- `/lib/features/coach_programs/data/models/coach_client_model.dart` - Roster/client models with subscription expiry (ML-4)
-- `/lib/features/coach_programs/data/models/program_request_models.dart` - Request models
 - `/lib/features/coach_programs/presentation/providers/coach_program_provider.dart` - Programs list + detail
 - `/lib/features/coach_programs/presentation/providers/coach_routine_provider.dart` - Routines list + detail
 - `/lib/features/coach_programs/presentation/providers/coach_assignment_provider.dart` - Client assignments
-- `/lib/features/coach_programs/presentation/providers/coach_roster_provider.dart` - Class roster with expiry (ML-4)
-- `/lib/features/coach_programs/presentation/providers/coach_client_list_provider.dart` - Full client list (ML-4)
+- `/lib/features/coach_programs/presentation/providers/coach_roster_provider.dart` - Class roster
 
 ### Coach Discovery & Subscription _(Documented in [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md))_
 
 | Feature               | Description                           | Status      | Documentation                                                        |
 | --------------------- | ------------------------------------- | ----------- | -------------------------------------------------------------------- |
 | Coach Discovery       | Browse/search public coaches          | ✅ Complete | [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md) |
-| Coach Profile (ML-1)  | Single coach detail with social links | ✅ Complete | [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md) |
+| Coach Profile         | Single coach detail with social links | ✅ Complete | [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md) |
 | Subscribed Coaches    | List user's subscribed coaches        | ✅ Complete | [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md) |
 | Subscribe/Unsubscribe | Coach subscription management         | ✅ Complete | [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md) |
 
@@ -237,31 +221,22 @@
 
 - `/lib/features/coaches/coaches.dart` - Feature barrel export
 - `/lib/features/coaches/data/coach_repository.dart` - Discovery, profile, subscribe API calls
-- `/lib/features/coaches/data/models/coach_model.dart` - CoachSummaryModel, CoachDetailModel
-- `/lib/features/coaches/presentation/providers/coach_discovery_provider.dart` - Discover coaches
-- `/lib/features/coaches/presentation/providers/coach_profile_provider.dart` - Single coach detail (ML-1)
-- `/lib/features/coaches/presentation/providers/subscribed_coaches_provider.dart` - Subscribed coaches list
 - `/lib/features/coaches/presentation/screens/coach_discovery_screen.dart` - Browse/search screen
-- `/lib/features/coaches/presentation/screens/coach_profile_screen.dart` - Full profile screen (ML-1)
+- `/lib/features/coaches/presentation/screens/coach_profile_screen.dart` - Full profile screen
 - `/lib/features/coaches/presentation/screens/subscribed_coaches_screen.dart` - My coaches screen
 
 ### Coach Settings _(Documented in [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md))_
 
-| Feature                    | Description                                    | Status      | Documentation                                                        |
-| -------------------------- | ---------------------------------------------- | ----------- | -------------------------------------------------------------------- |
-| Coach Settings CRUD (ML-5) | Max clients, accepting toggle, discoverability | ✅ Complete | [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md) |
+| Feature              | Description                                    | Status      | Documentation                                                        |
+| -------------------- | ---------------------------------------------- | ----------- | -------------------------------------------------------------------- |
+| Coach Settings CRUD  | Max clients, accepting toggle, discoverability | ✅ Complete | [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md) |
 
 **Primary Files:**
 
-- `/lib/features/coach_settings/coach_settings.dart` - Feature barrel export
 - `/lib/features/coach_settings/data/coach_settings_repository.dart` - GET/PATCH settings
-- `/lib/features/coach_settings/data/models/coach_settings_model.dart` - Settings model + update request
-- `/lib/features/coach_settings/presentation/providers/coach_settings_provider.dart` - Settings state + toggles
-- `/lib/features/coach_settings/presentation/screens/coach_settings_screen.dart` - Settings UI screen (ML-5)
+- `/lib/features/coach_settings/presentation/screens/coach_settings_screen.dart` - Settings UI
 
 ### Coach Client Progress _(Documented in [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md))_
-
-Coach-facing endpoints for viewing client workout data, progress metrics, and form analysis:
 
 | Feature                     | Description                                                 | Status      | Documentation                                                          |
 | --------------------------- | ----------------------------------------------------------- | ----------- | ---------------------------------------------------------------------- |
@@ -271,60 +246,97 @@ Coach-facing endpoints for viewing client workout data, progress metrics, and fo
 | Client Exercise History     | Per-exercise progress over time (best set, volume)          | ✅ Complete | [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md) |
 | Detailed Performance Report | All-clients report with volume, adherence, session duration | ✅ Complete | [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md) |
 | Client Form Results         | Form comparison history with segment scores and corrections | ✅ Complete | [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md) |
-| Presentation Layer          | 5 screens, routes, Coach Hub + Roster integration           | ✅ Complete | [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md) |
 
 **Primary Files:**
 
 - `/lib/features/coach_client_progress/coach_client_progress.dart` - Feature barrel export
-- `/lib/features/coach_client_progress/data/coach_client_progress_repository.dart` - All 6 API calls + provider
-- `/lib/features/coach_client_progress/data/models/client_session_model.dart` - Session summary + detail + sets
-- `/lib/features/coach_client_progress/data/models/weekly_stats_model.dart` - Weekly stats + delta
-- `/lib/features/coach_client_progress/data/models/exercise_history_model.dart` - Exercise history + summary
-- `/lib/features/coach_client_progress/data/models/detailed_performance_model.dart` - Performance entry + summary
-- `/lib/features/coach_client_progress/data/models/form_result_model.dart` - Form result + corrections
+- `/lib/features/coach_client_progress/data/coach_client_progress_repository.dart` - All 6 API calls
 - `/lib/features/coach_client_progress/presentation/providers/client_progress_providers.dart` - All 6 notifiers
 - `/lib/features/coach_client_progress/presentation/screens/client_progress_screen.dart` - Tabbed client detail
-- `/lib/features/coach_client_progress/presentation/screens/session_detail_screen.dart` - Session breakdown
-- `/lib/features/coach_client_progress/presentation/screens/exercise_history_screen.dart` - Exercise progress timeline
 - `/lib/features/coach_client_progress/presentation/screens/performance_dashboard_screen.dart` - All-client report
-- `/lib/features/coach_client_progress/presentation/screens/form_review_screen.dart` - Form result detail
 
 ### Standalone Workout _(Documented in [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md))_
 
-| Feature            | Description                                                     | Status             | Documentation                                                    |
-| ------------------ | --------------------------------------------------------------- | ------------------ | ---------------------------------------------------------------- |
-| Exercise CRUD      | Create/update/delete personal exercises + browse public library | ✅ Data layer      | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
-| Routine CRUD       | Build custom routines from any exercises                        | ✅ Data layer      | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
-| Program CRUD       | Organise routines into a day-cycling program                    | ✅ Data layer      | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
-| Self-assignment    | Activate / deactivate a standalone program                      | ✅ Data layer      | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
-| Today's Routine    | Server day-cycling resolution (`GET /standalone/today`)         | ✅ Data layer      | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
-| Session Lifecycle  | Start / complete sessions, view history                         | ✅ Data layer      | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
-| Weekly Stats       | Aggregated weekly stats (`GET /standalone/stats/weekly`)        | ✅ Data layer      | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
-| Presentation Layer | Providers, screens, routes                                      | 🔮 Not Implemented | —                                                                |
+| Feature            | Description                                                     | Status        | Documentation                                                    |
+| ------------------ | --------------------------------------------------------------- | ------------- | ---------------------------------------------------------------- |
+| Exercise CRUD      | Create/update/delete personal exercises + browse public library | ✅ Complete   | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Routine CRUD       | Build custom routines from any exercises                        | ✅ Complete   | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Program CRUD       | Organise routines into a day-cycling program                    | ✅ Complete   | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Self-assignment    | Activate / deactivate a standalone program                      | ✅ Complete   | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Today's Routine    | Server day-cycling resolution (`GET /standalone/today`)         | ✅ Complete   | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Session Lifecycle  | Start / complete sessions, view history                         | ✅ Complete   | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Weekly Stats       | Aggregated weekly stats (`GET /standalone/stats/weekly`)        | ✅ Complete   | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Presentation Layer | Screens, providers, routes for all standalone flows             | ✅ Complete   | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
 
 **Primary Files:**
 
 - `/lib/features/standalone_workout/standalone_workout.dart` - Feature barrel export
-- `/lib/features/standalone_workout/data/standalone_workout_repository.dart` - Offline-first repository + provider
-- `/lib/features/standalone_workout/data/models/standalone_exercise_model.dart` - Exercise + list response
-- `/lib/features/standalone_workout/data/models/standalone_routine_model.dart` - Routine summary + list response
-- `/lib/features/standalone_workout/data/models/standalone_program_model.dart` - Program hierarchy models
-- `/lib/features/standalone_workout/data/models/standalone_today_model.dart` - Day-cycling today model
-- `/lib/features/standalone_workout/data/models/standalone_session_model.dart` - Session summary (re-exports WorkoutSessionModel, WeeklyStatsModel)
-- `/lib/features/standalone_workout/data/models/standalone_request_models.dart` - 12 CRUD request models
+- `/lib/features/standalone_workout/data/standalone_workout_repository.dart` - Offline-first repository
+- `/lib/features/standalone_workout/data/models/` - Exercise, routine, program, session models
+
+### Subscription _(Documented in [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md))_
+
+| Feature                    | Description                                          | Status      | Documentation                                                          |
+| -------------------------- | ---------------------------------------------------- | ----------- | ---------------------------------------------------------------------- |
+| In-App Purchase            | Google Play integration via `in_app_purchase`        | ✅ Complete | [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                  |
+| Subscription State         | Watch subscription tier, status, expiry              | ✅ Complete | [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                  |
+| Subscription Guard         | Access-control widget wrapping gated features        | ✅ Complete | [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                  |
+| Upgrade Prompt             | Contextual CTA when user hits a gated feature        | ✅ Complete | [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                  |
+| Subscription-Aware Stats   | Unified stats separating standalone vs coach source  | ✅ Complete | [features/SUBSCRIPTION_DEFINITIONS.md](features/SUBSCRIPTION_DEFINITIONS.md) |
+| Session History Gating     | History distinguishes workout source                 | ✅ Complete | [features/SUBSCRIPTION_DEFINITIONS.md](features/SUBSCRIPTION_DEFINITIONS.md) |
+
+**Primary Files:**
+
+- `/lib/features/subscription/subscription.dart` - Feature barrel export
+- `/lib/features/subscription/data/subscription_repository.dart` - API repository
+- `/lib/features/subscription/services/in_app_purchase_service.dart` - Flutter IAP wrapper
+- `/lib/features/subscription/presentation/providers/subscription_provider.dart` - Main state notifier
+- `/lib/features/subscription/presentation/providers/subscription_guard.dart` - Access control guards
+- `/lib/features/subscription/presentation/widgets/upgrade_prompt.dart` - Upgrade CTA widget
+
+### Gains Coins & Economy _(Documented in [features/GAINS_COINS.md](features/GAINS_COINS.md))_
+
+| Feature               | Description                                                 | Status      | Documentation                                      |
+| --------------------- | ----------------------------------------------------------- | ----------- | -------------------------------------------------- |
+| Coin Balance          | View current balance, lifetime earned/spent                 | ✅ Complete | [features/GAINS_COINS.md](features/GAINS_COINS.md) |
+| Transaction History   | Paginated list of earn/spend transactions                   | ✅ Complete | [features/GAINS_COINS.md](features/GAINS_COINS.md) |
+| Post-workout Reward   | Animated reward screen after session completion             | ✅ Complete | [features/GAINS_COINS.md](features/GAINS_COINS.md) |
+| Cosmetics Shop        | Browse cosmetics by slot; purchase with coins               | ✅ Complete | [features/GAINS_COINS.md](features/GAINS_COINS.md) |
+| Inventory             | Owned cosmetics + equip to avatar slots                     | ✅ Complete | [features/GAINS_COINS.md](features/GAINS_COINS.md) |
+| Leaderboard           | Global ranking by coin balance                              | ✅ Complete | [features/GAINS_COINS.md](features/GAINS_COINS.md) |
+
+**Primary Files:**
+
+- `/lib/features/gains_coins/gains_coins.dart` - Feature barrel export
+- `/lib/features/gains_coins/data/coins_repository.dart` - Balance + transaction history (offline-first)
+- `/lib/features/gains_coins/data/cosmetics_repository.dart` - Shop catalog, inventory, equip/unequip
+- `/lib/features/gains_coins/data/shop_repository.dart` - Purchase operations
+- `/lib/features/gains_coins/data/leaderboard_repository.dart` - Leaderboard data
+- `/lib/features/gains_coins/presentation/screens/shop_screen.dart` - Cosmetics shop catalog
+- `/lib/features/gains_coins/presentation/screens/inventory_screen.dart` - Owned + equipped cosmetics
+- `/lib/features/gains_coins/presentation/screens/leaderboard_screen.dart` - Global rankings
+
+### Guidance & Onboarding _(Documented in [features/GUIDANCE.md](features/GUIDANCE.md))_
+
+| Feature              | Description                                                           | Status      | Documentation                                  |
+| -------------------- | --------------------------------------------------------------------- | ----------- | ---------------------------------------------- |
+| Spotlight Tours      | Step-by-step coach-mark overlays for first-time users                 | ✅ Complete | [features/GUIDANCE.md](features/GUIDANCE.md)   |
+| Tour Persistence     | Completed tours stored in Hive; not shown again                       | ✅ Complete | [features/GUIDANCE.md](features/GUIDANCE.md)   |
+| Contextual Help      | Per-screen help sheet with metric/component explanations              | ✅ Complete | [features/GUIDANCE.md](features/GUIDANCE.md)   |
+| RPE Scale Reference  | Rate of Perceived Exertion scale in set-logging help                  | ✅ Complete | [features/GUIDANCE.md](features/GUIDANCE.md)   |
+| Segment Explanations | Body-segment score explanations in form results help                  | ✅ Complete | [features/GUIDANCE.md](features/GUIDANCE.md)   |
+
+**Primary Files:**
+
+- `/lib/features/guidance/guidance.dart` - Feature barrel export
+- `/lib/features/guidance/data/guidance_repository.dart` - Hive-backed tour-completion flags
+- `/lib/features/guidance/data/guidance_content.dart` - Static tour steps and help content
+- `/lib/features/guidance/presentation/widgets/tour_orchestrator.dart` - Wraps screens to drive tours
+- `/lib/features/guidance/presentation/widgets/info_icon_button.dart` - Per-screen help icon
 
 ---
 
-### Future Domain Features _(Needs Implementation)_
-
-| Feature                 | Description                                                  | Status        |
-| ----------------------- | ------------------------------------------------------------ | ------------- |
-| Workout History Screen  | Paginated completed session list                             | ✅ Complete   |
-| Progress / Stats Screen | Weekly stats, summary grid, recent workouts                  | ✅ Complete   |
-| Coach Hub Screen        | Central hub for coach tools (programs, routines, exercises)  | ✅ Complete   |
-| Workout Sync            | Dedicated workout sync service (sessions, sets, completions) | ✅ Data layer |
-
-### Workout Data Layer
+## Workout Data Layer
 
 | Feature                 | Description                                                                           | Status      |
 | ----------------------- | ------------------------------------------------------------------------------------- | ----------- |
@@ -348,31 +360,77 @@ Coach-facing endpoints for viewing client workout data, progress metrics, and fo
 
 ## App Routes Summary
 
-| Route                               | Screen             | Auth Required | Notes                                                  |
-| ----------------------------------- | ------------------ | ------------- | ------------------------------------------------------ |
-| `/`                                 | Splash             | No            | Initial loading                                        |
-| `/login`                            | Login              | No            | Public                                                 |
-| `/register`                         | Register           | No            | Public                                                 |
-| `/forgot-password`                  | Forgot Password    | No            | Public                                                 |
-| `/reset-password`                   | Reset Password     | Semi\*        | Has recovery token                                     |
-| `/complete-profile`                 | Complete Profile   | Semi\*        | Has Google tokens                                      |
-| `/home`                             | Home               | Yes           | Main screen — [features/HOME.md](features/HOME.md)     |
-| `/profile`                          | Profile            | Yes           | User profile                                           |
-| `/settings`                         | Settings           | Yes           | App settings                                           |
-| `/routines`                         | Routine List       | Yes           | —                                                      |
-| `/routines/:id`                     | Routine Detail     | Yes           | —                                                      |
-| `/workout-session`                  | Workout Session    | Yes           | —                                                      |
-| `/client/exercise/:id/view-form`    | View Form          | Yes           | See [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
-| `/client/exercise/:id/unity-record` | Unity 3D Record    | Yes           | Primary compare route                                  |
-| `/client/exercise/:id/compare`      | 2D Record (legacy) | Yes           | Legacy compare route                                   |
-| `/coaches/discover`                 | Coach Discovery    | Yes           | Browse/search public coaches                           |
-| `/coaches/:id`                      | Coach Profile      | Yes           | View coach profile, subscribe/unsubscribe              |
-| `/coaches/subscribed`               | Subscribed Coaches | Yes           | User's subscribed coaches list                         |
-| `/coach/roster`                     | Coach Roster       | Yes           | Coach's client roster with expiry info                 |
-| `/coach/settings`                   | Coach Settings     | Yes           | Coach capacity & discoverability settings              |
-| `/coach/hub`                        | Coach Hub          | Yes           | Coach tools hub (programs, routines, exercises)        |
-| `/workout/history`                  | Workout History    | Yes           | Paginated workout session history                      |
-| `/progress`                         | Progress & Stats   | Yes           | Weekly stats, summary, recent workouts                 |
+| Route                                          | Screen                      | Auth Required | Notes                                                        |
+| ---------------------------------------------- | --------------------------- | ------------- | ------------------------------------------------------------ |
+| `/`                                            | Splash                      | No            | Initial loading                                              |
+| `/login`                                       | Login                       | No            | Public                                                       |
+| `/register`                                    | Register                    | No            | Public                                                       |
+| `/check-email`                                 | Check Email                 | No            | Post-registration email prompt                               |
+| `/forgot-password`                             | Forgot Password             | No            | Public                                                       |
+| `/reset-password`                              | Reset Password              | Semi\*        | Has recovery token                                           |
+| `/email-verified`                              | Email Verified              | No            | Deep-link landing after email verification                   |
+| `/complete-profile`                            | Complete Profile            | Semi\*        | Has Google tokens                                            |
+| `/home`                                        | Home                        | Yes           | Main screen — [features/HOME.md](features/HOME.md)           |
+| `/profile`                                     | Profile                     | Yes           | User profile                                                 |
+| `/profile/edit`                                | Edit Profile                | Yes           | Edit avatar, bio, metrics                                    |
+| `/settings`                                    | Settings                    | Yes           | App settings                                                 |
+| `/routines`                                    | Routine List                | Yes           | Coach-assigned routines                                      |
+| `/routines/:id`                                | Routine Detail              | Yes           | Routine with exercises                                       |
+| `/workout-session`                             | Workout Session             | Yes           | Active workout UI                                            |
+| `/programs`                                    | Programs                    | Yes           | User-side program list                                       |
+| `/create-program`                              | Create Program              | Yes           | Create new program                                           |
+| `/program-details`                             | Program Details             | Yes           | Program detail view                                          |
+| `/calendar`                                    | Calendar                    | Yes           | Calendar view                                                |
+| `/coach/hub`                                   | Coach Hub                   | Yes           | Coach tools hub                                              |
+| `/coach/exercises`                             | Coach Exercise Library      | Yes           | Browse/search exercises                                      |
+| `/coach/exercises/create`                      | Create Exercise             | Yes           | New exercise form                                            |
+| `/coach/exercises/:id`                         | Exercise Detail             | Yes           | Exercise info + forms                                        |
+| `/coach/exercises/:id/record`                  | Form Recording              | Yes           | Record reference form (MLKit)                                |
+| `/coach/exercises/:id/forms/:formId/view`      | Coach View Form             | Yes           | 2D skeleton playback of reference form                       |
+| `/coach/exercises/:id/forms/:formId/3d-preview`| Coach 3D Preview            | Yes           | 3D Unity preview of reference form                           |
+| `/coach/programs`                              | Coach Programs              | Yes           | Coach program list                                           |
+| `/coach/programs/create`                       | Create Coach Program        | Yes           | New program                                                  |
+| `/coach/programs/:id`                          | Coach Program Detail        | Yes           | Program detail + routines                                    |
+| `/coach/programs/:id/edit`                     | Edit Coach Program          | Yes           | Edit program                                                 |
+| `/coach/routines`                              | Coach Routines              | Yes           | Coach routine list                                           |
+| `/coach/routines/create`                       | Create Routine              | Yes           | New routine                                                  |
+| `/coach/routines/:id`                          | Coach Routine Detail        | Yes           | Routine detail + exercises                                   |
+| `/coach/routines/:id/edit`                     | Edit Routine                | Yes           | Edit routine                                                 |
+| `/coach/clients/:userId/programs`              | Client Assignments          | Yes           | Assign programs to client                                    |
+| `/coach/roster`                                | Coach Roster                | Yes           | Client roster with expiry info                               |
+| `/coach/settings`                              | Coach Settings              | Yes           | Capacity & discoverability settings                          |
+| `/coach/clients/:userId/progress`              | Client Progress             | Yes           | Tabbed client detail                                         |
+| `/coach/clients/:userId/sessions/:sessionId`   | Client Session Detail       | Yes           | Session breakdown                                            |
+| `/coach/clients/:userId/exercises/:exerciseId/history` | Exercise History    | Yes           | Exercise progress timeline                                   |
+| `/coach/performance`                           | Performance Dashboard       | Yes           | All-clients volume/adherence report                          |
+| `/workout/history`                             | Workout History             | Yes           | Paginated session history                                    |
+| `/progress`                                    | Progress & Stats            | Yes           | Weekly stats, summary, recent workouts                       |
+| `/client/exercise/:id/view-form`               | View Form                   | Yes           | See [features/CLIENT_POSE.md](features/CLIENT_POSE.md)       |
+| `/client/exercise/:id/unity-record`            | Unity 3D Record             | Yes           | Primary compare route                                        |
+| `/client/exercise/:id/3d-preview`              | Client 3D Preview           | Yes           | 3D preview of reference form                                 |
+| `/client/exercise/:id/compare`                 | 2D Record (legacy)          | Yes           | Legacy compare route                                         |
+| `/coaches/discover`                            | Coach Discovery             | Yes           | Browse/search public coaches                                 |
+| `/coaches/:id`                                 | Coach Profile               | Yes           | View coach profile, subscribe/unsubscribe                    |
+| `/coaches/subscribed`                          | Subscribed Coaches          | Yes           | User's subscribed coaches list                               |
+| `/standalone/exercises`                        | Standalone Exercises        | Yes           | Personal exercise library                                    |
+| `/standalone/exercises/create`                 | Create Exercise             | Yes           | New personal exercise                                        |
+| `/standalone/exercises/:id/edit`               | Edit Exercise               | Yes           | Edit personal exercise                                       |
+| `/standalone/routines`                         | Standalone Routines         | Yes           | Personal routine list                                        |
+| `/standalone/routines/create`                  | Create Routine              | Yes           | New routine                                                  |
+| `/standalone/routines/:id`                     | Routine Detail              | Yes           | Routine detail                                               |
+| `/standalone/routines/:id/edit`                | Edit Routine                | Yes           | Edit routine                                                 |
+| `/standalone/programs`                         | Standalone Programs         | Yes           | Personal program list                                        |
+| `/standalone/programs/create`                  | Create Program              | Yes           | New program                                                  |
+| `/standalone/programs/:id`                     | Program Detail              | Yes           | Program detail                                               |
+| `/standalone/programs/:id/edit`                | Edit Program                | Yes           | Edit program                                                 |
+| `/standalone/today`                            | Today's Standalone Routine  | Yes           | Day-cycling today routine                                    |
+| `/standalone/sessions`                         | Standalone Session History  | Yes           | Session history                                              |
+| `/coins/reward`                                | Coin Reward                 | Yes           | Post-workout reward display                                  |
+| `/coins/history`                               | Coin History                | Yes           | Paginated transaction list                                   |
+| `/shop`                                        | Shop                        | Yes           | Cosmetics catalog                                            |
+| `/shop/cosmetic`                               | Cosmetic Detail             | Yes           | Single item detail + buy                                     |
+| `/inventory`                                   | Inventory                   | Yes           | Owned + equipped cosmetics                                   |
+| `/leaderboard`                                 | Leaderboard                 | Yes           | Global coin rankings                                         |
 
 \*Semi-authenticated: Has temporary tokens but not full profile
 
@@ -383,7 +441,7 @@ Coach-facing endpoints for viewing client workout data, progress metrics, and fo
 ### How to Navigate Documentation
 
 1. **New to the codebase?** Start with [CONTEXT.md](CONTEXT.md) for patterns
-2. **Working on auth?** See [features/REGISTER.md](features/REGISTER.md)
+2. **Working on auth?** See [features/AUTH_PRESENTATION.md](features/AUTH_PRESENTATION.md) and [features/REGISTER.md](features/REGISTER.md)
 3. **Adding a new feature?** Follow the folder structure in CONTEXT.md
 
 ### Common Workflows
@@ -398,76 +456,28 @@ Coach-facing endpoints for viewing client workout data, progress metrics, and fo
 6. Add routes in `/lib/providers/router_provider.dart`
 7. Run `dart run build_runner build --delete-conflicting-outputs`
 
-#### Using Auth Repository
-
-```dart
-// Access repository
-final authRepo = ref.read(authRepositoryProvider);
-
-// Email/password registration
-final result = await authRepo.registerWithEmailPassword(
-  email: 'user@example.com',
-  password: 'Password123!',
-  name: 'John Doe',
-  nickname: 'johnd',
-);
-
-// Google sign-up (2 steps)
-final googleResult = await authRepo.signInWithGoogle();
-if (googleResult.isSuccess) {
-  // Show profile completion form
-  final completeResult = await authRepo.completeGoogleSignUp(
-    name: 'John Doe',
-    nickname: 'johnd',
-  );
-}
-```
-
-#### Using Register Provider
-
-```dart
-// Watch registration state
-final state = ref.watch(registerNotifierProvider);
-
-// Handle states
-if (state is RegisterLoading) {
-  // Show loading
-} else if (state is RegisterSuccess) {
-  // Navigate to home
-} else if (state is RegisterGooglePendingProfile) {
-  // Show profile form
-} else if (state is RegisterError) {
-  // Show error
-}
-
-// Trigger registration
-ref.read(registerNotifierProvider.notifier).registerWithEmailPassword(
-  email: email,
-  password: password,
-  name: name,
-  nickname: nickname,
-);
-```
-
 ### Where to Find Information
 
-| Looking for...        | Go to...                                                                    |
-| --------------------- | --------------------------------------------------------------------------- |
-| Project architecture  | [CONTEXT.md](CONTEXT.md)                                                    |
-| Creating providers    | [CONTEXT.md](CONTEXT.md) → Creating Riverpod Providers                      |
-| Data models           | [CONTEXT.md](CONTEXT.md) → Creating Models                                  |
-| API calls             | [CONTEXT.md](CONTEXT.md) → Making API Calls                                 |
-| Error handling        | [CONTEXT.md](CONTEXT.md) → Using Result Type                                |
-| Home dashboard        | [features/HOME.md](features/HOME.md)                                        |
-| Client pose recording | [features/CLIENT_POSE.md](features/CLIENT_POSE.md)                          |
-| Reference form source | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) → Reference Form Source  |
-| Unity 3D skeleton     | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) → Unity Message Contract |
-| Registration flow     | [features/REGISTER.md](features/REGISTER.md)                                |
-| Google sign-in        | [features/REGISTER.md](features/REGISTER.md) → Google Sign-Up Flow          |
-| Route guards          | [features/REGISTER.md](features/REGISTER.md) → Router Guard                 |
-| Profile viewing       | [features/PROFILE.md](features/PROFILE.md)                                  |
-| Profile editing plan  | [features/PROFILE.md](features/PROFILE.md) → Future Enhancements            |
-| Server endpoints      | [Server AUTH.md](../../get-gains-server/docs/features/AUTH.md)              |
+| Looking for...            | Go to...                                                                             |
+| ------------------------- | ------------------------------------------------------------------------------------ |
+| Project architecture      | [CONTEXT.md](CONTEXT.md)                                                             |
+| Creating providers        | [CONTEXT.md](CONTEXT.md) → Creating Riverpod Providers                               |
+| Data models               | [CONTEXT.md](CONTEXT.md) → Creating Models                                           |
+| API calls                 | [CONTEXT.md](CONTEXT.md) → Making API Calls                                          |
+| Error handling            | [CONTEXT.md](CONTEXT.md) → Using Result Type                                         |
+| Home dashboard            | [features/HOME.md](features/HOME.md)                                                 |
+| Client pose recording     | [features/CLIENT_POSE.md](features/CLIENT_POSE.md)                                   |
+| Coach pose recording      | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md)                 |
+| Unity message contract    | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) → Unity Message Contract          |
+| Registration flow         | [features/REGISTER.md](features/REGISTER.md)                                         |
+| Google sign-in            | [features/REGISTER.md](features/REGISTER.md) → Google Sign-Up Flow                   |
+| Email verification        | [features/VERIFY_RESET_FLOW.md](features/VERIFY_RESET_FLOW.md)                       |
+| Route guards              | [features/REGISTER.md](features/REGISTER.md) → Router Guard                          |
+| Profile viewing           | [features/PROFILE.md](features/PROFILE.md)                                           |
+| Subscription gating       | [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                                 |
+| Coins & shop              | [features/GAINS_COINS.md](features/GAINS_COINS.md)                                   |
+| Onboarding tours          | [features/GUIDANCE.md](features/GUIDANCE.md)                                         |
+| Server endpoints          | [Server AUTH.md](../../get-gains-server/docs/features/AUTH.md)                       |
 
 ---
 
@@ -521,31 +531,25 @@ lib/
 │   │   └── result.dart             # Result type
 │   └── theme/                      # Theming
 ├── features/
-│   ├── home/
-│   │   ├── home.dart               # Feature export
-│   │   └── presentation/
-│   │       ├── screens/
-│   │       │   └── home_screen.dart
-│   │       └── widgets/
-│   │           ├── quick_action_card.dart
-│   │           ├── weekly_progress_card.dart
-│   │           └── workout_summary_card.dart
-│   └── auth/
-│       ├── auth.dart               # Feature export
-│       ├── data/
-│       │   ├── auth_repository.dart
-│       │   └── models/
-│       │       ├── auth_request_models.dart
-│       │       ├── auth_response_models.dart
-│       │       └── user_model.dart
-│       ├── presentation/
-│       │   └── providers/
-│       │       └── register_provider.dart
-│       └── services/
-│           ├── google_sign_in_service.dart
-│           └── user_preferences_service.dart
+│   ├── auth/                       # Auth data layer + screens
+│   ├── client_pose/                # Client form recording + comparison
+│   ├── coach_client_progress/      # Coach views of client data
+│   ├── coach_pose/                 # Coach exercise library + form recording
+│   ├── coach_programs/             # Coach programs, routines, assignments
+│   ├── coach_settings/             # Coach capacity & discoverability
+│   ├── coaches/                    # Coach discovery & subscription
+│   ├── gains_coins/                # Coins, shop, inventory, leaderboard
+│   ├── guidance/                   # Spotlight tours + contextual help
+│   ├── home/                       # Dashboard
+│   ├── profile/                    # User profile + editing
+│   ├── programs/                   # User-side program screens (legacy)
+│   ├── standalone_workout/         # Self-managed exercises/routines/programs
+│   ├── subscription/               # IAP, tier gating, upgrade prompts
+│   ├── unity/                      # Unity bridge
+│   └── workout/                    # Coach-assigned workout sessions
 ├── providers/
 │   ├── auth_state_provider.dart    # App-wide auth state
+│   ├── deep_link_provider.dart     # Deep link handling
 │   └── router_provider.dart        # Navigation + guards
 ├── services/
 │   ├── api/
@@ -560,4 +564,4 @@ lib/
 
 ---
 
-_Last updated: March 13, 2026_
+_Last updated: April 19, 2026_

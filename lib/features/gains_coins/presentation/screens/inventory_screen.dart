@@ -9,6 +9,7 @@ import '../../../../widgets/widgets.dart';
 import '../../data/models/user_cosmetic_model.dart';
 import '../providers/inventory_provider.dart';
 import '../widgets/cosmetic_preview.dart';
+import 'cosmetic_fullscreen_screen.dart';
 
 /// Inventory Screen
 ///
@@ -28,6 +29,21 @@ class InventoryScreen extends ConsumerStatefulWidget {
 class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   final GlobalKey<_CosmeticPreviewState> _previewKey = GlobalKey();
 
+  // When fullscreen is active we hide the inline CosmeticPreview so only one
+  // EmbedUnity instance is live at a time.
+  bool _fullscreenActive = false;
+
+  Future<void> _openFullscreen(BuildContext context) async {
+    setState(() => _fullscreenActive = true);
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => const CosmeticFullscreenScreen(),
+      ),
+    );
+    if (mounted) setState(() => _fullscreenActive = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -43,6 +59,14 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        actions: [
+          if (inventoryState is InventoryLoaded)
+            IconButton(
+              icon: const Icon(Icons.fullscreen),
+              tooltip: 'Fullscreen inspect',
+              onPressed: () => _openFullscreen(context),
+            ),
+        ],
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -57,6 +81,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
               state: inventoryState,
               isDark: isDark,
               previewKey: _previewKey,
+              fullscreenActive: _fullscreenActive,
             ),
             InventoryError(:final error) => Center(
               child: AppEmptyState.compact(
@@ -79,11 +104,13 @@ class _InventoryContent extends ConsumerWidget {
     required this.state,
     required this.isDark,
     required this.previewKey,
+    required this.fullscreenActive,
   });
 
   final InventoryLoaded state;
   final bool isDark;
   final GlobalKey previewKey;
+  final bool fullscreenActive;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -101,60 +128,96 @@ class _InventoryContent extends ConsumerWidget {
       );
     }
 
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    // The preview lives ABOVE the ListView in a Column so touches on the Unity
+    // platform view never reach the ListView's scroll recognizer.
+    return Column(
       children: [
-        // Character Preview with Unity widget
-        CosmeticPreview(
-          key: previewKey,
-          equippedCosmetics: state.equippedCosmetics,
-          height: 260,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: fullscreenActive
+              ? const SizedBox(height: 260)
+              : _PreviewWithControls(
+                  previewKey: previewKey,
+                  state: state,
+                  isDark: isDark,
+                ),
         ),
 
-        const SizedBox(height: 16),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            children: [
+              // Equipped Slots Visualization
+              _EquippedSlotsBar(state: state, isDark: isDark),
 
-        // Equipped Slots Visualization
-        _EquippedSlotsBar(state: state, isDark: isDark),
+              const SizedBox(height: 16),
 
-        const SizedBox(height: 16),
+              // Category Filter Chips
+              _CategoryFilterChips(state: state, isDark: isDark),
 
-        // Category Filter Chips
-        _CategoryFilterChips(state: state, isDark: isDark),
+              const SizedBox(height: 12),
 
-        const SizedBox(height: 12),
-
-        // Error banner
-        if (state.actionError != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? AppColors.destructiveDark.withValues(alpha: 0.2)
-                    : Colors.red.shade50,
-                borderRadius: AppTheme.borderRadiusMd,
-                border: Border.all(
-                  color: isDark
-                      ? AppColors.destructiveDark
-                      : Colors.red.shade300,
+              // Error banner
+              if (state.actionError != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? AppColors.destructiveDark.withValues(alpha: 0.2)
+                          : Colors.red.shade50,
+                      borderRadius: AppTheme.borderRadiusMd,
+                      border: Border.all(
+                        color: isDark
+                            ? AppColors.destructiveDark
+                            : Colors.red.shade300,
+                      ),
+                    ),
+                    child: Text(
+                      state.actionError!,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark
+                            ? AppColors.destructiveForegroundDark
+                            : Colors.red.shade700,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              child: Text(
-                state.actionError!,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: isDark
-                      ? AppColors.destructiveForegroundDark
-                      : Colors.red.shade700,
-                ),
-              ),
-            ),
+
+              // Inventory Grid
+              _InventoryGrid(state: state, isDark: isDark),
+            ],
           ),
-
-        // Inventory Grid
-        _InventoryGrid(state: state, isDark: isDark),
+        ),
       ],
+    );
+  }
+}
+
+// ── Preview wrapper ──
+
+class _PreviewWithControls extends StatelessWidget {
+  const _PreviewWithControls({
+    required this.previewKey,
+    required this.state,
+    required this.isDark,
+  });
+
+  final GlobalKey previewKey;
+  final InventoryLoaded state;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return CosmeticPreview(
+      key: previewKey,
+      equippedCosmetics: state.equippedCosmetics,
+      height: 260,
     );
   }
 }
@@ -428,7 +491,7 @@ class _InventoryGrid extends ConsumerWidget {
         crossAxisCount: 2,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
-        childAspectRatio: 0.78,
+        childAspectRatio: 0.74,
       ),
       itemCount: items.length,
       itemBuilder: (context, index) {
@@ -465,7 +528,7 @@ class _InventoryItemCard extends ConsumerWidget {
     final accent = isDark ? AppColors.accentDark : const Color(0xFF22C55E);
 
     return GestureDetector(
-      onTap: isProcessing ? null : () => _toggleEquip(ref),
+      onTap: isProcessing ? null : () => _toggleEquip(ref, context),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
@@ -680,11 +743,24 @@ class _InventoryItemCard extends ConsumerWidget {
     );
   }
 
-  Future<void> _toggleEquip(WidgetRef ref) async {
+  Future<void> _toggleEquip(WidgetRef ref, BuildContext context) async {
+    final bool success;
+    final String message;
     if (isEquipped) {
-      await ref.read(inventoryProvider.notifier).unequip(item.category);
+      success = await ref.read(inventoryProvider.notifier).unequip(item.cosmeticId);
+      message = success ? 'Unequipped ${item.name}' : 'Failed to unequip';
     } else {
-      await ref.read(inventoryProvider.notifier).equip(item.cosmeticId);
+      success = await ref.read(inventoryProvider.notifier).equip(item.cosmeticId);
+      message = success ? 'Equipped ${item.name}!' : 'Failed to equip';
+    }
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 }
