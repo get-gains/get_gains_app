@@ -344,18 +344,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                               .updateExperienceLevel(v),
                         ),
                         const SizedBox(height: 16),
-                        _AvailabilitySelector(
-                          daysAvailable: form.daysAvailable,
-                          sessionDurationMinutes: form.sessionDurationMinutes,
-                          isDark: isDark,
-                          onDaysChanged: (v) => ref
-                              .read(editProfileProvider.notifier)
-                              .updateDaysAvailable(v),
-                          onDurationChanged: (v) => ref
-                              .read(editProfileProvider.notifier)
-                              .updateSessionDuration(v),
-                        ),
-                        const SizedBox(height: 16),
                         _EquipmentSelector(
                           selected: form.equipment,
                           isDark: isDark,
@@ -577,94 +565,6 @@ class _ExperienceLevelSelector extends StatelessWidget {
           }).toList(),
         ),
       ],
-    );
-  }
-}
-
-// ─── Availability selectors ─────────────────────────────────────────────
-
-class _AvailabilitySelector extends StatelessWidget {
-  const _AvailabilitySelector({
-    required this.daysAvailable,
-    required this.sessionDurationMinutes,
-    required this.isDark,
-    required this.onDaysChanged,
-    required this.onDurationChanged,
-  });
-
-  final int daysAvailable;
-  final int sessionDurationMinutes;
-  final bool isDark;
-  final ValueChanged<int> onDaysChanged;
-  final ValueChanged<int> onDurationChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Days per week
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Days per week',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontFamily: AppTextStyles.fontFamilySans,
-                ),
-              ),
-              Text(
-                '$daysAvailable',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primaryDark,
-                  fontFamily: AppTextStyles.fontFamilyMono,
-                ),
-              ),
-            ],
-          ),
-          Slider(
-            value: daysAvailable.toDouble(),
-            min: 1,
-            max: 7,
-            divisions: 6,
-            activeColor: AppColors.primaryDark,
-            onChanged: (v) => onDaysChanged(v.round()),
-          ),
-          const SizedBox(height: 8),
-
-          // Session duration
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Session duration',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontFamily: AppTextStyles.fontFamilySans,
-                ),
-              ),
-              Text(
-                '${sessionDurationMinutes}min',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primaryDark,
-                  fontFamily: AppTextStyles.fontFamilyMono,
-                ),
-              ),
-            ],
-          ),
-          Slider(
-            value: sessionDurationMinutes.toDouble(),
-            min: 15,
-            max: 120,
-            divisions: 7,
-            activeColor: AppColors.primaryDark,
-            onChanged: (v) => onDurationChanged(v.round()),
-          ),
-        ],
-      ),
     );
   }
 }

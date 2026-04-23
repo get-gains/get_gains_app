@@ -98,7 +98,10 @@ class AccessGuard {
         return fn();
       case AccessDeniedUnauthenticated():
         return Failure(
-          AuthError(message: 'Authentication required', code: 'AUTH_REQUIRED'),
+          AuthError(
+            message: 'Authentication required',
+            transportCode: 'AUTH_REQUIRED',
+          ),
         );
       case AccessDeniedTier(:final required):
         AppLogger.info(
@@ -108,14 +111,14 @@ class AccessGuard {
         return Failure(
           AuthError(
             message: 'Subscription required (${required.name})',
-            code: 'SUBSCRIPTION_REQUIRED',
+            transportCode: 'SUBSCRIPTION_REQUIRED',
           ),
         );
       case AccessPending():
         return Failure(
           AuthError(
             message: 'Subscription state pending',
-            code: 'SUBSCRIPTION_PENDING',
+            transportCode: 'SUBSCRIPTION_PENDING',
           ),
         );
     }

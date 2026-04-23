@@ -1,18 +1,41 @@
 import 'package:equatable/equatable.dart';
 
+import '../errors/api_error_codes.dart';
+
 /// Application Error Types
 ///
 /// Centralized error handling with typed errors for different failure scenarios.
 /// Use with `Result<T, AppError>` for consistent error handling across the app.
+///
+/// [code] carries the server's typed [ApiErrorCode] when the error originated
+/// from the API. It is `null` for pure transport / local errors.
+///
+/// [transportCode] carries client-side transport labels like `'NO_CONNECTION'`,
+/// `'TIMEOUT'`, `'CANCELLED'` etc. — these have no server counterpart.
 sealed class AppError extends Equatable {
-  const AppError({required this.message, this.code, this.originalError});
+  const AppError({
+    required this.message,
+    this.code,
+    this.transportCode,
+    this.originalError,
+  });
 
+  /// Human-readable error description (may come from the server or be generated
+  /// locally).
   final String message;
-  final String? code;
+
+  /// Typed server error code parsed from the `{ errors[].code }` envelope.
+  /// `null` when the error is purely local / transport-level.
+  final ApiErrorCode? code;
+
+  /// Client-side transport label (`'NO_CONNECTION'`, `'TIMEOUT'`, etc.).
+  /// `null` when the error came from the server with a typed [code].
+  final String? transportCode;
+
   final Object? originalError;
 
   @override
-  List<Object?> get props => [message, code, originalError];
+  List<Object?> get props => [message, code, transportCode, originalError];
 }
 
 /// Network-related errors (API calls, connectivity)
@@ -20,6 +43,7 @@ final class NetworkError extends AppError {
   const NetworkError({
     required super.message,
     super.code,
+    super.transportCode,
     super.originalError,
     this.statusCode,
   });
@@ -28,37 +52,37 @@ final class NetworkError extends AppError {
 
   factory NetworkError.noConnection() => const NetworkError(
     message: 'No internet connection. Please check your network.',
-    code: 'NO_CONNECTION',
+    transportCode: 'NO_CONNECTION',
   );
 
   factory NetworkError.timeout() => const NetworkError(
     message: 'Request timed out. Please try again.',
-    code: 'TIMEOUT',
+    transportCode: 'TIMEOUT',
   );
 
   factory NetworkError.serverError({int? statusCode, String? serverMessage}) =>
       NetworkError(
         message:
             serverMessage ?? 'Server error occurred. Please try again later.',
-        code: 'SERVER_ERROR',
+        transportCode: 'SERVER_ERROR',
         statusCode: statusCode,
       );
 
   factory NetworkError.unauthorized() => const NetworkError(
     message: 'Session expired. Please login again.',
-    code: 'UNAUTHORIZED',
+    transportCode: 'UNAUTHORIZED',
     statusCode: 401,
   );
 
   factory NetworkError.forbidden() => const NetworkError(
     message: 'You do not have permission to perform this action.',
-    code: 'FORBIDDEN',
+    transportCode: 'FORBIDDEN',
     statusCode: 403,
   );
 
   factory NetworkError.notFound() => const NetworkError(
     message: 'Resource not found.',
-    code: 'NOT_FOUND',
+    transportCode: 'NOT_FOUND',
     statusCode: 404,
   );
 
@@ -71,48 +95,38 @@ final class DatabaseError extends AppError {
   const DatabaseError({
     required super.message,
     super.code,
+    super.transportCode,
     super.originalError,
   });
 
   factory DatabaseError.notFound() => const DatabaseError(
     message: 'Record not found in local database.',
-    code: 'DB_NOT_FOUND',
+    transportCode: 'DB_NOT_FOUND',
   );
 
   factory DatabaseError.constraint() => const DatabaseError(
     message: 'Database constraint violation.',
-    code: 'DB_CONSTRAINT',
+    transportCode: 'DB_CONSTRAINT',
   );
 
   factory DatabaseError.migration() => const DatabaseError(
     message: 'Database migration failed.',
-    code: 'DB_MIGRATION',
+    transportCode: 'DB_MIGRATION',
   );
 }
 
 /// Authentication errors
+///
+/// Prefer constructing with a typed [ApiErrorCode] from the server envelope
+/// rather than hard-coded factories. The legacy factories were removed in
+/// the typed-error-codes migration — use the server code directly.
 final class AuthError extends AppError {
-  const AuthError({required super.message, super.code, super.originalError});
-
-  factory AuthError.invalidCredentials() => const AuthError(
-    message: 'Invalid email or password.',
-    code: 'INVALID_CREDENTIALS',
-  );
-
-  factory AuthError.tokenExpired() => const AuthError(
-    message: 'Your session has expired. Please login again.',
-    code: 'TOKEN_EXPIRED',
-  );
-
-  factory AuthError.tokenRefreshFailed() => const AuthError(
-    message: 'Failed to refresh session. Please login again.',
-    code: 'TOKEN_REFRESH_FAILED',
-  );
-
-  factory AuthError.accountLocked() => const AuthError(
-    message: 'Account locked. Please contact support.',
-    code: 'ACCOUNT_LOCKED',
-  );
+  const AuthError({
+    required super.message,
+    super.code,
+    super.transportCode,
+    super.originalError,
+  });
 }
 
 /// Validation errors (form validation, data validation)
@@ -120,6 +134,7 @@ final class ValidationError extends AppError {
   const ValidationError({
     required super.message,
     super.code,
+    super.transportCode,
     super.originalError,
     this.field,
   });
@@ -128,14 +143,14 @@ final class ValidationError extends AppError {
 
   factory ValidationError.required(String field) => ValidationError(
     message: '$field is required.',
-    code: 'REQUIRED',
+    transportCode: 'REQUIRED',
     field: field,
   );
 
   factory ValidationError.invalid(String field, {String? reason}) =>
       ValidationError(
         message: reason ?? '$field is invalid.',
-        code: 'INVALID',
+        transportCode: 'INVALID',
         field: field,
       );
 
@@ -145,16 +160,21 @@ final class ValidationError extends AppError {
 
 /// Cache/Storage errors
 final class CacheError extends AppError {
-  const CacheError({required super.message, super.code, super.originalError});
+  const CacheError({
+    required super.message,
+    super.code,
+    super.transportCode,
+    super.originalError,
+  });
 
   factory CacheError.readFailed() => const CacheError(
     message: 'Failed to read from cache.',
-    code: 'CACHE_READ',
+    transportCode: 'CACHE_READ',
   );
 
   factory CacheError.writeFailed() => const CacheError(
     message: 'Failed to write to cache.',
-    code: 'CACHE_WRITE',
+    transportCode: 'CACHE_WRITE',
   );
 }
 
@@ -162,7 +182,8 @@ final class CacheError extends AppError {
 final class UnknownError extends AppError {
   const UnknownError({
     super.message = 'An unexpected error occurred.',
-    super.code = 'UNKNOWN',
+    super.code,
+    super.transportCode = 'UNKNOWN',
     super.originalError,
   });
 }
@@ -172,11 +193,15 @@ final class UnknownError extends AppError {
 ///
 /// Catch this specific error to show a subscription upgrade modal instead of
 /// a generic error message. Do not navigate to the gated page if this is thrown.
+///
+/// [code] should be [ApiErrorCode.subscriptionRequired] or
+/// [ApiErrorCode.subscriptionTierInsufficient] depending on the server
+/// response.
 final class SubscriptionRequiredError extends AppError {
   const SubscriptionRequiredError({
     super.message =
         'An active subscription is required to access this feature.',
-    super.code = 'SUBSCRIPTION_REQUIRED',
+    super.code,
     super.originalError,
   });
 }

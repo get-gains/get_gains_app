@@ -667,24 +667,45 @@ class _TrainingPreferencesCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasExperienceLevel = profile.experienceLevel != null;
+    final hasInjuryHistory =
+        profile.injuryHistory != null && profile.injuryHistory!.isNotEmpty;
+
+    if (!hasExperienceLevel && !hasInjuryHistory) {
+      return AppCard(
+        padding: const EdgeInsets.all(20),
+        child: _ProfileRow(
+          icon: Icons.info_outline,
+          label: 'Tip',
+          value: 'Tap the edit button to set your training preferences',
+          isDark: isDark,
+        ),
+      );
+    }
+
     return AppCard(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _ProfileRow(
-            icon: Icons.calendar_view_week_outlined,
-            label: 'Days per week',
-            value: '${profile.daysAvailable}',
-            isDark: isDark,
-          ),
-          const SizedBox(height: 16),
-          _ProfileRow(
-            icon: Icons.timer_outlined,
-            label: 'Session duration',
-            value: '${profile.sessionDurationMinutes} min',
-            isDark: isDark,
-          ),
+          if (hasExperienceLevel)
+            _ProfileRow(
+              icon: Icons.trending_up_outlined,
+              label: 'Experience',
+              value:
+                  profile.experienceLevel!.name[0].toUpperCase() +
+                  profile.experienceLevel!.name.substring(1),
+              isDark: isDark,
+            ),
+          if (hasExperienceLevel && hasInjuryHistory)
+            const SizedBox(height: 16),
+          if (hasInjuryHistory)
+            _ProfileRow(
+              icon: Icons.healing_outlined,
+              label: 'Injuries',
+              value: profile.injuryHistory!,
+              isDark: isDark,
+            ),
         ],
       ),
     );

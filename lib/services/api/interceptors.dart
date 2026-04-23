@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 
 import '../../core/constants/api_constants.dart';
+import '../../core/errors/api_error_codes.dart';
 import '../../core/utils/logger.dart';
 import '../storage/secure_storage_service.dart';
 
@@ -54,6 +55,8 @@ class AuthInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     // Handle 401 Unauthorized
     if (err.response?.statusCode == HttpStatus.unauthorized) {
+      final apiCode = _extractErrorCode(err.response);
+
       // Don't retry if already refreshing or if this is a refresh/recovery request
       if (_isRefreshing ||
           err.requestOptions.path.contains('/auth/refresh') ||
@@ -68,6 +71,20 @@ class AuthInterceptor extends Interceptor {
           tag: 'AuthInterceptor',
         );
         onAuthFailure();
+        handler.next(err);
+        return;
+      }
+
+      // Decide whether a token refresh might help based on the error code.
+      if (!_shouldAttemptRefresh(err.requestOptions, apiCode)) {
+        AppLogger.info(
+          'Unrecoverable 401 (code=${apiCode?.value}), skipping refresh',
+          tag: 'AuthInterceptor',
+        );
+        // Auth endpoints (e.g. login) — just propagate, don't force logout
+        if (!_isAuthEndpoint(err.requestOptions.path)) {
+          onAuthFailure();
+        }
         handler.next(err);
         return;
       }
@@ -106,6 +123,62 @@ class AuthInterceptor extends Interceptor {
 
     handler.next(err);
   }
+
+  /// Extracts the first [ApiErrorCode] from a Dio error response envelope.
+  ///
+  /// Returns `null` when the response body is not a standard JSON envelope
+  /// (e.g. proxy-generated HTML 401 pages).
+  ApiErrorCode? _extractErrorCode(Response<dynamic>? response) {
+    try {
+      final data = response?.data;
+      if (data is Map<String, dynamic>) {
+        final errors = data['errors'] as List<dynamic>?;
+        if (errors != null && errors.isNotEmpty) {
+          final raw = (errors.first as Map<String, dynamic>)['code'] as String?;
+          if (raw != null && raw.isNotEmpty) {
+            return ApiErrorCode.fromString(raw);
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Whether a 401 with the given [code] on [options] should trigger a token
+  /// refresh attempt.
+  ///
+  /// Returns `true` for recoverable codes (`authTokenExpired`,
+  /// `authSessionExpired`) and for `null` (legacy / envelope-less 401s — keep
+  /// the existing behaviour to avoid regressions).
+  ///
+  /// Returns `false` for clearly unrecoverable codes like
+  /// `authInvalidCredentials`, `authTokenInvalid`, etc. — refreshing would
+  /// loop or fail needlessly.
+  bool _shouldAttemptRefresh(RequestOptions options, ApiErrorCode? code) {
+    // No code (legacy server or non-JSON response) — default to refresh
+    if (code == null) return true;
+
+    // Codes where a refresh can recover the session
+    const recoverableCodes = {
+      ApiErrorCode.authTokenExpired,
+      ApiErrorCode.authSessionExpired,
+      // unknown — server sent a code we don't recognise; safest to try refresh
+      ApiErrorCode.unknown,
+    };
+
+    return recoverableCodes.contains(code);
+  }
+
+  /// Whether the request path is an auth endpoint that should not trigger
+  /// automatic logout on failure.
+  bool _isAuthEndpoint(String path) =>
+      path.contains('/auth/login') ||
+      path.contains('/auth/register') ||
+      path.contains('/auth/refresh') ||
+      path.contains('/auth/reset-password') ||
+      path.contains('/auth/send-recovery-email') ||
+      path.contains('/auth/check-email-verified') ||
+      path.contains('/auth/exchange-code');
 }
 
 /// Logging Interceptor
@@ -171,85 +244,6 @@ class LoggingInterceptor extends Interceptor {
       tag: 'HTTP',
     );
     handler.next(err);
-  }
-}
-
-/// Error Interceptor
-///
-/// Transforms Dio errors into more consistent error responses.
-/// Parses the standard API error format: { data: null, errors: [{ field?, message }] }
-class ErrorInterceptor extends Interceptor {
-  @override
-  void onError(DioException err, ErrorInterceptorHandler handler) {
-    // Add more context to errors
-    final enrichedError = DioException(
-      requestOptions: err.requestOptions,
-      response: err.response,
-      type: err.type,
-      error: _getErrorMessage(err),
-      message: _getErrorMessage(err),
-    );
-    handler.next(enrichedError);
-  }
-
-  String _getErrorMessage(DioException err) {
-    switch (err.type) {
-      case DioExceptionType.connectionTimeout:
-        return 'Connection timeout. Please check your internet connection.';
-      case DioExceptionType.sendTimeout:
-        return 'Request timeout. Please try again.';
-      case DioExceptionType.receiveTimeout:
-        return 'Server took too long to respond. Please try again.';
-      case DioExceptionType.badResponse:
-        return _parseServerError(err.response);
-      case DioExceptionType.cancel:
-        return 'Request was cancelled.';
-      case DioExceptionType.connectionError:
-        final uri = err.requestOptions.uri.toString();
-        if (uri.contains('localhost') || uri.contains('127.0.0.1')) {
-          return 'Cannot reach server. Is it running? On a device, run: adb reverse tcp:3000 tcp:3000';
-        }
-        return 'No internet connection. Please check your network.';
-      case DioExceptionType.unknown:
-      default:
-        return err.message ?? 'An unexpected error occurred.';
-    }
-  }
-
-  /// Parse server error from the standard API response format
-  ///
-  /// Expected format: { data: null, errors: [{ field?, message }] }
-  String _parseServerError(Response? response) {
-    if (response == null) return 'Server error occurred.';
-
-    try {
-      final data = response.data;
-      if (data is Map) {
-        // Check for standard API error format: { errors: [...] }
-        final errors = data['errors'] as List<dynamic>?;
-        if (errors != null && errors.isNotEmpty) {
-          // Combine all error messages
-          final messages = errors
-              .map((e) {
-                if (e is Map) {
-                  final field = e['field'] as String?;
-                  final message = e['message'] as String? ?? 'Unknown error';
-                  return field != null ? '$field: $message' : message;
-                }
-                return e.toString();
-              })
-              .join(', ');
-          return messages;
-        }
-
-        // Fallback to legacy formats
-        return data['message'] ??
-            data['error'] ??
-            'Server error: ${response.statusCode}';
-      }
-    } catch (_) {}
-
-    return 'Server error: ${response.statusCode}';
   }
 }
 

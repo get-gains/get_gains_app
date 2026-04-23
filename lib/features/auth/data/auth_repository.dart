@@ -318,7 +318,7 @@ class AuthRepository {
         AuthError(
           message:
               'No pending Google profile found. Please sign in with Google first.',
-          code: 'NO_PENDING_PROFILE',
+          transportCode: 'NO_PENDING_PROFILE',
         ),
       );
     }
@@ -809,14 +809,14 @@ class AuthRepository {
         case 409:
           return const AuthError(
             message: 'Email already exists.',
-            code: 'EMAIL_EXISTS',
+            transportCode: 'EMAIL_EXISTS',
           );
         case 429:
           return AuthError(
             message: error.message.isNotEmpty
                 ? error.message
                 : 'Too many requests. Please wait a moment and try again.',
-            code: 'RATE_LIMITED',
+            transportCode: 'RATE_LIMITED',
           );
         default:
           return error;

@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/errors/api_error_codes.dart';
+import '../../../../core/errors/error_messages.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/app_error.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../providers/register_provider.dart';
@@ -117,8 +120,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
         // Navigate to complete profile
         context.go(AppRoutes.completeProfile);
       } else if (next is RegisterError) {
-        // Show error toast
-        AppToast.error(context, next.error.message);
+        _showRegisterError(next.error);
       }
     });
 
@@ -631,6 +633,42 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
       return 'Password must contain a special character';
     }
     return null;
+  }
+
+  // ── Error handling ──────────────────────────────────────────────
+
+  void _showRegisterError(AppError error) {
+    final message = errorMessageFor(error);
+
+    switch (error.code) {
+      // Email already registered — offer to sign in instead
+      case ApiErrorCode.authEmailAlreadyExists:
+        AppToast.error(
+          context,
+          message,
+          actionLabel: 'Sign In',
+          action: () => context.pop(),
+        );
+        _emailFocus.requestFocus();
+
+      // Weak password — highlight the password field
+      case ApiErrorCode.authWeakPassword:
+        AppToast.error(context, message);
+        _passwordFocus.requestFocus();
+
+      // Nickname already taken — highlight the nickname field
+      case ApiErrorCode.userUsernameTaken:
+        AppToast.error(context, message);
+        _nicknameFocus.requestFocus();
+
+      // Email taken (distinct from "already exists" in some flows)
+      case ApiErrorCode.userEmailTaken:
+        AppToast.error(context, message);
+        _emailFocus.requestFocus();
+
+      default:
+        AppToast.error(context, message);
+    }
   }
 
   // Action Methods

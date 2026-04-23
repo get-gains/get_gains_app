@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../core/constants/api_constants.dart';
+import '../../core/errors/api_error_codes.dart';
 import '../../core/utils/api_response.dart';
 import '../../core/utils/app_error.dart';
 import '../../core/utils/logger.dart';
@@ -73,8 +74,6 @@ class ApiClient {
     _dio.interceptors.addAll([
       // Logging (only in debug)
       if (kDebugMode) LoggingInterceptor(),
-      // Error transformation
-      ErrorInterceptor(),
       // Retry logic
       RetryInterceptor(),
       // Auth (added last so it runs first on requests)
@@ -291,6 +290,7 @@ class ApiClient {
   ///
   /// - If `errors` is empty, returns Success with unwrapped `data`
   /// - If `errors` has items, returns Failure with combined error messages
+  /// - Extracts the typed [ApiErrorCode] from `errors[0].code` when present
   Result<T, AppError> _parseResponse<T>(Map<String, dynamic>? responseData) {
     if (responseData == null) {
       return Failure(const NetworkError(message: 'Empty response from server'));
@@ -313,10 +313,13 @@ class ApiClient {
       final errorMessage = responseData.allErrorMessages;
       final firstError = errors.first as Map<String, dynamic>;
       final field = firstError['field'] as String?;
+      final apiCode = responseData.firstErrorCode;
 
       AppLogger.debug('API returned errors: $errorMessage', tag: 'ApiClient');
 
-      return Failure(ValidationError(message: errorMessage, field: field));
+      return Failure(
+        ValidationError(message: errorMessage, field: field, code: apiCode),
+      );
     }
 
     // Success - return unwrapped data
@@ -347,7 +350,7 @@ class ApiClient {
       case DioExceptionType.cancel:
         return const NetworkError(
           message: 'Request cancelled',
-          code: 'CANCELLED',
+          transportCode: 'CANCELLED',
         );
       default:
         return NetworkError(
@@ -358,7 +361,8 @@ class ApiClient {
   }
 
   /// Try to parse the server's standard { data, errors } format from an
-  /// error response. Returns an AppError with the server's message if found.
+  /// error response. Returns an AppError with the server's message and typed
+  /// [ApiErrorCode] if found.
   AppError? _tryParseServerErrors(Response<dynamic>? response) {
     if (response?.data == null) return null;
     try {
@@ -368,18 +372,22 @@ class ApiClient {
         if (errors != null && errors.isNotEmpty) {
           final errorMessage = data.allErrorMessages;
           final statusCode = response.statusCode;
+          final apiCode = data.firstErrorCode;
 
-          // 403 with a subscription-related message → specific error type so
-          // the UI can show an upgrade modal instead of a generic error.
-          if (statusCode == 403 &&
-              errorMessage.toLowerCase().contains('subscription')) {
-            return SubscriptionRequiredError(message: errorMessage);
+          // Subscription-gated endpoints → specific error type so the UI can
+          // show an upgrade modal instead of a generic error.
+          if (apiCode == ApiErrorCode.subscriptionRequired ||
+              apiCode == ApiErrorCode.subscriptionTierInsufficient) {
+            return SubscriptionRequiredError(
+              message: errorMessage,
+              code: apiCode,
+            );
           }
 
-          // Return the server's error message with the correct status code
+          // Return the server's error message with the typed code
           return NetworkError(
             message: errorMessage,
-            code: 'SERVER_ERROR',
+            code: apiCode,
             statusCode: statusCode,
           );
         }
@@ -395,7 +403,7 @@ class ApiClient {
     return switch (statusCode) {
       400 => NetworkError(
         message: message ?? 'Bad request',
-        code: 'BAD_REQUEST',
+        transportCode: 'BAD_REQUEST',
         statusCode: 400,
       ),
       401 => NetworkError.unauthorized(),
@@ -404,7 +412,7 @@ class ApiClient {
       422 => ValidationError(message: message ?? 'Validation failed'),
       429 => const NetworkError(
         message: 'Too many requests. Please slow down.',
-        code: 'RATE_LIMITED',
+        transportCode: 'RATE_LIMITED',
         statusCode: 429,
       ),
       >= 500 => NetworkError.serverError(

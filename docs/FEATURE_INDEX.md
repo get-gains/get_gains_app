@@ -34,28 +34,29 @@
 
 ## Documentation Structure
 
-| Document                                                                                   | Purpose                                                               |
-| ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| [CONTEXT.md](CONTEXT.md)                                                                   | Core infrastructure, patterns, conventions                            |
-| [FEATURE_INDEX.md](FEATURE_INDEX.md)                                                       | This file - navigation hub                                            |
-| [features/AUTH_PRESENTATION.md](features/AUTH_PRESENTATION.md)                             | Auth screens (login, register, complete-profile)                      |
-| [features/REGISTER.md](features/REGISTER.md)                                               | Registration data layer & flows                                       |
-| [features/VERIFY_RESET_FLOW.md](features/VERIFY_RESET_FLOW.md)                             | Email verification & password reset deep-link flows                   |
-| [features/HOME.md](features/HOME.md)                                                       | Home dashboard screen & widgets                                       |
-| [features/PROFILE.md](features/PROFILE.md)                                                 | Profile viewing and management documentation                          |
-| [features/PROGRAM.md](features/PROGRAM.md)                                                 | Coach programs, routines, exercises, assignments                      |
-| [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md)                           | Standalone workout — exercises, routines, programs, sessions          |
-| [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)                                 | Workout session flow, set logging, record-first workflow              |
-| [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md)                       | Coach exercise list, create exercise, record reference form           |
-| [features/CLIENT_POSE.md](features/CLIENT_POSE.md)                                         | Client form recording, DTW comparison, offline cache                  |
-| [features/POSE_DETECTION.md](features/POSE_DETECTION.md)                                   | Pose detection pipeline (MLKit, landmarks, DTW)                       |
-| [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md)                     | Coach discovery, settings & missing links data layer                  |
-| [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md)                       | Coaches & Subscription presentation layer (screens, routes)           |
-| [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md)                     | Coach client progress — sessions, stats, forms, presentation          |
-| [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                                       | In-app purchases, subscription management, access control             |
-| [features/SUBSCRIPTION_DEFINITIONS.md](features/SUBSCRIPTION_DEFINITIONS.md)               | Subscription-aware stats, session history, upgrade prompts, UI gating |
-| [features/GAINS_COINS.md](features/GAINS_COINS.md)                                         | Gains Coins economy, cosmetics shop, inventory, leaderboard           |
-| [features/GUIDANCE.md](features/GUIDANCE.md)                                               | In-app spotlight tours, contextual help, onboarding                   |
+| Document                                                                     | Purpose                                                               |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| [CONTEXT.md](CONTEXT.md)                                                     | Core infrastructure, patterns, conventions                            |
+| [FEATURE_INDEX.md](FEATURE_INDEX.md)                                         | This file - navigation hub                                            |
+| [features/AUTH_PRESENTATION.md](features/AUTH_PRESENTATION.md)               | Auth screens (login, register, complete-profile)                      |
+| [features/REGISTER.md](features/REGISTER.md)                                 | Registration data layer & flows                                       |
+| [features/VERIFY_RESET_FLOW.md](features/VERIFY_RESET_FLOW.md)               | Email verification & password reset deep-link flows                   |
+| [features/HOME.md](features/HOME.md)                                         | Home dashboard screen & widgets                                       |
+| [features/PROFILE.md](features/PROFILE.md)                                   | Profile viewing and management documentation                          |
+| [features/PROGRAM.md](features/PROGRAM.md)                                   | Coach programs, routines, exercises, assignments                      |
+| [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md)             | Standalone workout — exercises, routines, programs, sessions          |
+| [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)                   | Workout session flow, set logging, record-first workflow              |
+| [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md)         | Coach exercise list, create exercise, record reference form           |
+| [features/CLIENT_POSE.md](features/CLIENT_POSE.md)                           | Client form recording, DTW comparison, offline cache                  |
+| [features/POSE_DETECTION.md](features/POSE_DETECTION.md)                     | Pose detection pipeline (MLKit, landmarks, DTW)                       |
+| [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md)       | Coach discovery, settings & missing links data layer                  |
+| [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md)         | Coaches & Subscription presentation layer (screens, routes)           |
+| [features/COACH_CLIENT_PROGRESS.md](features/COACH_CLIENT_PROGRESS.md)       | Coach client progress — sessions, stats, forms, presentation          |
+| [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                         | In-app purchases, subscription management, access control             |
+| [features/SUBSCRIPTION_DEFINITIONS.md](features/SUBSCRIPTION_DEFINITIONS.md) | Subscription-aware stats, session history, upgrade prompts, UI gating |
+| [features/GAINS_COINS.md](features/GAINS_COINS.md)                           | Gains Coins economy, cosmetics shop, inventory, leaderboard           |
+| [features/GUIDANCE.md](features/GUIDANCE.md)                                 | In-app spotlight tours, contextual help, onboarding                   |
+| [error-codes.md](error-codes.md)                                             | Typed error codes: envelope, `errorMessageFor`, interceptor rules     |
 
 ---
 
@@ -63,16 +64,17 @@
 
 ### Core Infrastructure _(Documented in [CONTEXT.md](CONTEXT.md))_
 
-| Topic              | Description               | CONTEXT.md Section          |
-| ------------------ | ------------------------- | --------------------------- |
-| Project Structure  | Folder organization       | Architecture Overview       |
-| Riverpod Providers | State management patterns | Key Implementation Patterns |
-| Freezed Models     | Immutable data models     | Creating Models             |
-| API Client         | Dio HTTP client           | Making API Calls            |
-| Result Type        | Error handling            | Using Result Type           |
-| Drift Database     | Local SQLite              | Database Operations         |
-| Secure Storage     | JWT token management      | Secure Storage              |
-| Navigation         | go_router setup           | Navigation                  |
+| Topic              | Description               | CONTEXT.md Section               |
+| ------------------ | ------------------------- | -------------------------------- |
+| Project Structure  | Folder organization       | Architecture Overview            |
+| Riverpod Providers | State management patterns | Key Implementation Patterns      |
+| Freezed Models     | Immutable data models     | Creating Models                  |
+| API Client         | Dio HTTP client           | Making API Calls                 |
+| Result Type        | Error handling            | Using Result Type                |
+| Error Codes        | Typed API error codes     | [error-codes.md](error-codes.md) |
+| Drift Database     | Local SQLite              | Database Operations              |
+| Secure Storage     | JWT token management      | Secure Storage                   |
+| Navigation         | go_router setup           | Navigation                       |
 
 ### Home Dashboard
 
@@ -98,16 +100,16 @@
 
 ### Authentication & User Management
 
-| Feature              | Description                                               | Status      | Documentation                                                    |
-| -------------------- | --------------------------------------------------------- | ----------- | ---------------------------------------------------------------- |
-| Registration         | Email/password + Google sign-up                           | ✅ Complete | [features/REGISTER.md](features/REGISTER.md)                     |
-| Login                | Email/password + Google login screens                     | ✅ Complete | [features/AUTH_PRESENTATION.md](features/AUTH_PRESENTATION.md)   |
-| Password Reset       | Forgot password → email → deep link → reset form          | ✅ Complete | [features/VERIFY_RESET_FLOW.md](features/VERIFY_RESET_FLOW.md)   |
-| Email Verification   | Check email screen + verified deep-link screen            | ✅ Complete | [features/VERIFY_RESET_FLOW.md](features/VERIFY_RESET_FLOW.md)   |
-| Profile Management   | View profile, stats, achievements, sign out               | ✅ Complete | [features/PROFILE.md](features/PROFILE.md)                       |
-| Profile Data Layer   | Fitness profile CRUD, avatar upload, offline cache        | ✅ Complete | [features/PROFILE.md](features/PROFILE.md)                       |
-| Profile Editing UI   | Edit avatar, bio, body metrics, training prefs, equipment | ✅ Complete | [features/PROFILE.md](features/PROFILE.md)                       |
-| Connectivity Service | Network status monitoring for offline-first               | ✅ Complete | [features/PROFILE.md](features/PROFILE.md)                       |
+| Feature              | Description                                               | Status      | Documentation                                                  |
+| -------------------- | --------------------------------------------------------- | ----------- | -------------------------------------------------------------- |
+| Registration         | Email/password + Google sign-up                           | ✅ Complete | [features/REGISTER.md](features/REGISTER.md)                   |
+| Login                | Email/password + Google login screens                     | ✅ Complete | [features/AUTH_PRESENTATION.md](features/AUTH_PRESENTATION.md) |
+| Password Reset       | Forgot password → email → deep link → reset form          | ✅ Complete | [features/VERIFY_RESET_FLOW.md](features/VERIFY_RESET_FLOW.md) |
+| Email Verification   | Check email screen + verified deep-link screen            | ✅ Complete | [features/VERIFY_RESET_FLOW.md](features/VERIFY_RESET_FLOW.md) |
+| Profile Management   | View profile, stats, achievements, sign out               | ✅ Complete | [features/PROFILE.md](features/PROFILE.md)                     |
+| Profile Data Layer   | Fitness profile CRUD, avatar upload, offline cache        | ✅ Complete | [features/PROFILE.md](features/PROFILE.md)                     |
+| Profile Editing UI   | Edit avatar, bio, body metrics, training prefs, equipment | ✅ Complete | [features/PROFILE.md](features/PROFILE.md)                     |
+| Connectivity Service | Network status monitoring for offline-first               | ✅ Complete | [features/PROFILE.md](features/PROFILE.md)                     |
 
 **Primary Files:**
 
@@ -128,15 +130,15 @@
 
 ### Workout Session
 
-| Feature              | Description                                                          | Status      | Documentation                                                |
-| -------------------- | -------------------------------------------------------------------- | ----------- | ------------------------------------------------------------ |
-| Routine List         | Browse assigned routines                                             | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)   |
-| Workout Session      | Start session, navigate exercises, log sets, complete               | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)   |
-| Record-First Flow    | Record form → compare → log set → next exercise                     | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)   |
-| Set Logging          | Auto-detected reps + weight input with +/- controls                 | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)   |
-| Workout History      | Paginated completed session list                                     | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)   |
-| Progress / Stats     | Weekly stats, summary grid, recent workouts                         | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)   |
-| Workout Sync         | Auto-sync sessions/sets on connectivity restore                     | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md)   |
+| Feature           | Description                                           | Status      | Documentation                                              |
+| ----------------- | ----------------------------------------------------- | ----------- | ---------------------------------------------------------- |
+| Routine List      | Browse assigned routines                              | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md) |
+| Workout Session   | Start session, navigate exercises, log sets, complete | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md) |
+| Record-First Flow | Record form → compare → log set → next exercise       | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md) |
+| Set Logging       | Auto-detected reps + weight input with +/- controls   | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md) |
+| Workout History   | Paginated completed session list                      | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md) |
+| Progress / Stats  | Weekly stats, summary grid, recent workouts           | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md) |
+| Workout Sync      | Auto-sync sessions/sets on connectivity restore       | ✅ Complete | [features/WORKOUT_FEATURE.md](features/WORKOUT_FEATURE.md) |
 
 **Primary Files:**
 
@@ -173,13 +175,13 @@
 
 ### Coach Pose Recording _(Documented in [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md))_
 
-| Feature                | Description                                                    | Status         | Documentation                                                          |
-| ---------------------- | -------------------------------------------------------------- | -------------- | ---------------------------------------------------------------------- |
-| Exercise Library       | Browse/search/filter coach exercises                           | ✅ Complete    | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md)  |
-| Create Exercise        | Add new exercises with muscles & equipment                     | ✅ Complete    | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md)  |
-| Record Reference Form  | Camera + MLKit to capture pose landmarks                       | ✅ Complete    | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md)  |
-| Exercise Detail        | View exercise info, active forms, form history                 | ✅ Complete    | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md)  |
-| View / 3D Preview Form | Coach can review recorded reference forms in 2D and 3D        | ✅ Complete    | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md)  |
+| Feature                | Description                                            | Status      | Documentation                                                        |
+| ---------------------- | ------------------------------------------------------ | ----------- | -------------------------------------------------------------------- |
+| Exercise Library       | Browse/search/filter coach exercises                   | ✅ Complete | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md) |
+| Create Exercise        | Add new exercises with muscles & equipment             | ✅ Complete | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md) |
+| Record Reference Form  | Camera + MLKit to capture pose landmarks               | ✅ Complete | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md) |
+| Exercise Detail        | View exercise info, active forms, form history         | ✅ Complete | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md) |
+| View / 3D Preview Form | Coach can review recorded reference forms in 2D and 3D | ✅ Complete | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md) |
 
 **Primary Files:**
 
@@ -227,9 +229,9 @@
 
 ### Coach Settings _(Documented in [features/COACHES_MISSING_LINKS.md](features/COACHES_MISSING_LINKS.md))_
 
-| Feature              | Description                                    | Status      | Documentation                                                        |
-| -------------------- | ---------------------------------------------- | ----------- | -------------------------------------------------------------------- |
-| Coach Settings CRUD  | Max clients, accepting toggle, discoverability | ✅ Complete | [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md) |
+| Feature             | Description                                    | Status      | Documentation                                                        |
+| ------------------- | ---------------------------------------------- | ----------- | -------------------------------------------------------------------- |
+| Coach Settings CRUD | Max clients, accepting toggle, discoverability | ✅ Complete | [features/COACHES_PRESENTATION.md](features/COACHES_PRESENTATION.md) |
 
 **Primary Files:**
 
@@ -257,16 +259,16 @@
 
 ### Standalone Workout _(Documented in [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md))_
 
-| Feature            | Description                                                     | Status        | Documentation                                                    |
-| ------------------ | --------------------------------------------------------------- | ------------- | ---------------------------------------------------------------- |
-| Exercise CRUD      | Create/update/delete personal exercises + browse public library | ✅ Complete   | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
-| Routine CRUD       | Build custom routines from any exercises                        | ✅ Complete   | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
-| Program CRUD       | Organise routines into a day-cycling program                    | ✅ Complete   | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
-| Self-assignment    | Activate / deactivate a standalone program                      | ✅ Complete   | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
-| Today's Routine    | Server day-cycling resolution (`GET /standalone/today`)         | ✅ Complete   | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
-| Session Lifecycle  | Start / complete sessions, view history                         | ✅ Complete   | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
-| Weekly Stats       | Aggregated weekly stats (`GET /standalone/stats/weekly`)        | ✅ Complete   | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
-| Presentation Layer | Screens, providers, routes for all standalone flows             | ✅ Complete   | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Feature            | Description                                                     | Status      | Documentation                                                    |
+| ------------------ | --------------------------------------------------------------- | ----------- | ---------------------------------------------------------------- |
+| Exercise CRUD      | Create/update/delete personal exercises + browse public library | ✅ Complete | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Routine CRUD       | Build custom routines from any exercises                        | ✅ Complete | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Program CRUD       | Organise routines into a day-cycling program                    | ✅ Complete | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Self-assignment    | Activate / deactivate a standalone program                      | ✅ Complete | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Today's Routine    | Server day-cycling resolution (`GET /standalone/today`)         | ✅ Complete | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Session Lifecycle  | Start / complete sessions, view history                         | ✅ Complete | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Weekly Stats       | Aggregated weekly stats (`GET /standalone/stats/weekly`)        | ✅ Complete | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
+| Presentation Layer | Screens, providers, routes for all standalone flows             | ✅ Complete | [features/STANDALONE_WORKOUT.md](features/STANDALONE_WORKOUT.md) |
 
 **Primary Files:**
 
@@ -276,14 +278,14 @@
 
 ### Subscription _(Documented in [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md))_
 
-| Feature                    | Description                                          | Status      | Documentation                                                          |
-| -------------------------- | ---------------------------------------------------- | ----------- | ---------------------------------------------------------------------- |
-| In-App Purchase            | Google Play integration via `in_app_purchase`        | ✅ Complete | [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                  |
-| Subscription State         | Watch subscription tier, status, expiry              | ✅ Complete | [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                  |
-| Subscription Guard         | Access-control widget wrapping gated features        | ✅ Complete | [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                  |
-| Upgrade Prompt             | Contextual CTA when user hits a gated feature        | ✅ Complete | [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                  |
-| Subscription-Aware Stats   | Unified stats separating standalone vs coach source  | ✅ Complete | [features/SUBSCRIPTION_DEFINITIONS.md](features/SUBSCRIPTION_DEFINITIONS.md) |
-| Session History Gating     | History distinguishes workout source                 | ✅ Complete | [features/SUBSCRIPTION_DEFINITIONS.md](features/SUBSCRIPTION_DEFINITIONS.md) |
+| Feature                  | Description                                         | Status      | Documentation                                                                |
+| ------------------------ | --------------------------------------------------- | ----------- | ---------------------------------------------------------------------------- |
+| In-App Purchase          | Google Play integration via `in_app_purchase`       | ✅ Complete | [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                         |
+| Subscription State       | Watch subscription tier, status, expiry             | ✅ Complete | [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                         |
+| Subscription Guard       | Access-control widget wrapping gated features       | ✅ Complete | [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                         |
+| Upgrade Prompt           | Contextual CTA when user hits a gated feature       | ✅ Complete | [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                         |
+| Subscription-Aware Stats | Unified stats separating standalone vs coach source | ✅ Complete | [features/SUBSCRIPTION_DEFINITIONS.md](features/SUBSCRIPTION_DEFINITIONS.md) |
+| Session History Gating   | History distinguishes workout source                | ✅ Complete | [features/SUBSCRIPTION_DEFINITIONS.md](features/SUBSCRIPTION_DEFINITIONS.md) |
 
 **Primary Files:**
 
@@ -296,14 +298,14 @@
 
 ### Gains Coins & Economy _(Documented in [features/GAINS_COINS.md](features/GAINS_COINS.md))_
 
-| Feature               | Description                                                 | Status      | Documentation                                      |
-| --------------------- | ----------------------------------------------------------- | ----------- | -------------------------------------------------- |
-| Coin Balance          | View current balance, lifetime earned/spent                 | ✅ Complete | [features/GAINS_COINS.md](features/GAINS_COINS.md) |
-| Transaction History   | Paginated list of earn/spend transactions                   | ✅ Complete | [features/GAINS_COINS.md](features/GAINS_COINS.md) |
-| Post-workout Reward   | Animated reward screen after session completion             | ✅ Complete | [features/GAINS_COINS.md](features/GAINS_COINS.md) |
-| Cosmetics Shop        | Browse cosmetics by slot; purchase with coins               | ✅ Complete | [features/GAINS_COINS.md](features/GAINS_COINS.md) |
-| Inventory             | Owned cosmetics + equip to avatar slots                     | ✅ Complete | [features/GAINS_COINS.md](features/GAINS_COINS.md) |
-| Leaderboard           | Global ranking by coin balance                              | ✅ Complete | [features/GAINS_COINS.md](features/GAINS_COINS.md) |
+| Feature             | Description                                     | Status      | Documentation                                      |
+| ------------------- | ----------------------------------------------- | ----------- | -------------------------------------------------- |
+| Coin Balance        | View current balance, lifetime earned/spent     | ✅ Complete | [features/GAINS_COINS.md](features/GAINS_COINS.md) |
+| Transaction History | Paginated list of earn/spend transactions       | ✅ Complete | [features/GAINS_COINS.md](features/GAINS_COINS.md) |
+| Post-workout Reward | Animated reward screen after session completion | ✅ Complete | [features/GAINS_COINS.md](features/GAINS_COINS.md) |
+| Cosmetics Shop      | Browse cosmetics by slot; purchase with coins   | ✅ Complete | [features/GAINS_COINS.md](features/GAINS_COINS.md) |
+| Inventory           | Owned cosmetics + equip to avatar slots         | ✅ Complete | [features/GAINS_COINS.md](features/GAINS_COINS.md) |
+| Leaderboard         | Global ranking by coin balance                  | ✅ Complete | [features/GAINS_COINS.md](features/GAINS_COINS.md) |
 
 **Primary Files:**
 
@@ -318,13 +320,13 @@
 
 ### Guidance & Onboarding _(Documented in [features/GUIDANCE.md](features/GUIDANCE.md))_
 
-| Feature              | Description                                                           | Status      | Documentation                                  |
-| -------------------- | --------------------------------------------------------------------- | ----------- | ---------------------------------------------- |
-| Spotlight Tours      | Step-by-step coach-mark overlays for first-time users                 | ✅ Complete | [features/GUIDANCE.md](features/GUIDANCE.md)   |
-| Tour Persistence     | Completed tours stored in Hive; not shown again                       | ✅ Complete | [features/GUIDANCE.md](features/GUIDANCE.md)   |
-| Contextual Help      | Per-screen help sheet with metric/component explanations              | ✅ Complete | [features/GUIDANCE.md](features/GUIDANCE.md)   |
-| RPE Scale Reference  | Rate of Perceived Exertion scale in set-logging help                  | ✅ Complete | [features/GUIDANCE.md](features/GUIDANCE.md)   |
-| Segment Explanations | Body-segment score explanations in form results help                  | ✅ Complete | [features/GUIDANCE.md](features/GUIDANCE.md)   |
+| Feature              | Description                                              | Status      | Documentation                                |
+| -------------------- | -------------------------------------------------------- | ----------- | -------------------------------------------- |
+| Spotlight Tours      | Step-by-step coach-mark overlays for first-time users    | ✅ Complete | [features/GUIDANCE.md](features/GUIDANCE.md) |
+| Tour Persistence     | Completed tours stored in Hive; not shown again          | ✅ Complete | [features/GUIDANCE.md](features/GUIDANCE.md) |
+| Contextual Help      | Per-screen help sheet with metric/component explanations | ✅ Complete | [features/GUIDANCE.md](features/GUIDANCE.md) |
+| RPE Scale Reference  | Rate of Perceived Exertion scale in set-logging help     | ✅ Complete | [features/GUIDANCE.md](features/GUIDANCE.md) |
+| Segment Explanations | Body-segment score explanations in form results help     | ✅ Complete | [features/GUIDANCE.md](features/GUIDANCE.md) |
 
 **Primary Files:**
 
@@ -360,77 +362,77 @@
 
 ## App Routes Summary
 
-| Route                                          | Screen                      | Auth Required | Notes                                                        |
-| ---------------------------------------------- | --------------------------- | ------------- | ------------------------------------------------------------ |
-| `/`                                            | Splash                      | No            | Initial loading                                              |
-| `/login`                                       | Login                       | No            | Public                                                       |
-| `/register`                                    | Register                    | No            | Public                                                       |
-| `/check-email`                                 | Check Email                 | No            | Post-registration email prompt                               |
-| `/forgot-password`                             | Forgot Password             | No            | Public                                                       |
-| `/reset-password`                              | Reset Password              | Semi\*        | Has recovery token                                           |
-| `/email-verified`                              | Email Verified              | No            | Deep-link landing after email verification                   |
-| `/complete-profile`                            | Complete Profile            | Semi\*        | Has Google tokens                                            |
-| `/home`                                        | Home                        | Yes           | Main screen — [features/HOME.md](features/HOME.md)           |
-| `/profile`                                     | Profile                     | Yes           | User profile                                                 |
-| `/profile/edit`                                | Edit Profile                | Yes           | Edit avatar, bio, metrics                                    |
-| `/settings`                                    | Settings                    | Yes           | App settings                                                 |
-| `/routines`                                    | Routine List                | Yes           | Coach-assigned routines                                      |
-| `/routines/:id`                                | Routine Detail              | Yes           | Routine with exercises                                       |
-| `/workout-session`                             | Workout Session             | Yes           | Active workout UI                                            |
-| `/programs`                                    | Programs                    | Yes           | User-side program list                                       |
-| `/create-program`                              | Create Program              | Yes           | Create new program                                           |
-| `/program-details`                             | Program Details             | Yes           | Program detail view                                          |
-| `/calendar`                                    | Calendar                    | Yes           | Calendar view                                                |
-| `/coach/hub`                                   | Coach Hub                   | Yes           | Coach tools hub                                              |
-| `/coach/exercises`                             | Coach Exercise Library      | Yes           | Browse/search exercises                                      |
-| `/coach/exercises/create`                      | Create Exercise             | Yes           | New exercise form                                            |
-| `/coach/exercises/:id`                         | Exercise Detail             | Yes           | Exercise info + forms                                        |
-| `/coach/exercises/:id/record`                  | Form Recording              | Yes           | Record reference form (MLKit)                                |
-| `/coach/exercises/:id/forms/:formId/view`      | Coach View Form             | Yes           | 2D skeleton playback of reference form                       |
-| `/coach/exercises/:id/forms/:formId/3d-preview`| Coach 3D Preview            | Yes           | 3D Unity preview of reference form                           |
-| `/coach/programs`                              | Coach Programs              | Yes           | Coach program list                                           |
-| `/coach/programs/create`                       | Create Coach Program        | Yes           | New program                                                  |
-| `/coach/programs/:id`                          | Coach Program Detail        | Yes           | Program detail + routines                                    |
-| `/coach/programs/:id/edit`                     | Edit Coach Program          | Yes           | Edit program                                                 |
-| `/coach/routines`                              | Coach Routines              | Yes           | Coach routine list                                           |
-| `/coach/routines/create`                       | Create Routine              | Yes           | New routine                                                  |
-| `/coach/routines/:id`                          | Coach Routine Detail        | Yes           | Routine detail + exercises                                   |
-| `/coach/routines/:id/edit`                     | Edit Routine                | Yes           | Edit routine                                                 |
-| `/coach/clients/:userId/programs`              | Client Assignments          | Yes           | Assign programs to client                                    |
-| `/coach/roster`                                | Coach Roster                | Yes           | Client roster with expiry info                               |
-| `/coach/settings`                              | Coach Settings              | Yes           | Capacity & discoverability settings                          |
-| `/coach/clients/:userId/progress`              | Client Progress             | Yes           | Tabbed client detail                                         |
-| `/coach/clients/:userId/sessions/:sessionId`   | Client Session Detail       | Yes           | Session breakdown                                            |
-| `/coach/clients/:userId/exercises/:exerciseId/history` | Exercise History    | Yes           | Exercise progress timeline                                   |
-| `/coach/performance`                           | Performance Dashboard       | Yes           | All-clients volume/adherence report                          |
-| `/workout/history`                             | Workout History             | Yes           | Paginated session history                                    |
-| `/progress`                                    | Progress & Stats            | Yes           | Weekly stats, summary, recent workouts                       |
-| `/client/exercise/:id/view-form`               | View Form                   | Yes           | See [features/CLIENT_POSE.md](features/CLIENT_POSE.md)       |
-| `/client/exercise/:id/unity-record`            | Unity 3D Record             | Yes           | Primary compare route                                        |
-| `/client/exercise/:id/3d-preview`              | Client 3D Preview           | Yes           | 3D preview of reference form                                 |
-| `/client/exercise/:id/compare`                 | 2D Record (legacy)          | Yes           | Legacy compare route                                         |
-| `/coaches/discover`                            | Coach Discovery             | Yes           | Browse/search public coaches                                 |
-| `/coaches/:id`                                 | Coach Profile               | Yes           | View coach profile, subscribe/unsubscribe                    |
-| `/coaches/subscribed`                          | Subscribed Coaches          | Yes           | User's subscribed coaches list                               |
-| `/standalone/exercises`                        | Standalone Exercises        | Yes           | Personal exercise library                                    |
-| `/standalone/exercises/create`                 | Create Exercise             | Yes           | New personal exercise                                        |
-| `/standalone/exercises/:id/edit`               | Edit Exercise               | Yes           | Edit personal exercise                                       |
-| `/standalone/routines`                         | Standalone Routines         | Yes           | Personal routine list                                        |
-| `/standalone/routines/create`                  | Create Routine              | Yes           | New routine                                                  |
-| `/standalone/routines/:id`                     | Routine Detail              | Yes           | Routine detail                                               |
-| `/standalone/routines/:id/edit`                | Edit Routine                | Yes           | Edit routine                                                 |
-| `/standalone/programs`                         | Standalone Programs         | Yes           | Personal program list                                        |
-| `/standalone/programs/create`                  | Create Program              | Yes           | New program                                                  |
-| `/standalone/programs/:id`                     | Program Detail              | Yes           | Program detail                                               |
-| `/standalone/programs/:id/edit`                | Edit Program                | Yes           | Edit program                                                 |
-| `/standalone/today`                            | Today's Standalone Routine  | Yes           | Day-cycling today routine                                    |
-| `/standalone/sessions`                         | Standalone Session History  | Yes           | Session history                                              |
-| `/coins/reward`                                | Coin Reward                 | Yes           | Post-workout reward display                                  |
-| `/coins/history`                               | Coin History                | Yes           | Paginated transaction list                                   |
-| `/shop`                                        | Shop                        | Yes           | Cosmetics catalog                                            |
-| `/shop/cosmetic`                               | Cosmetic Detail             | Yes           | Single item detail + buy                                     |
-| `/inventory`                                   | Inventory                   | Yes           | Owned + equipped cosmetics                                   |
-| `/leaderboard`                                 | Leaderboard                 | Yes           | Global coin rankings                                         |
+| Route                                                  | Screen                     | Auth Required | Notes                                                  |
+| ------------------------------------------------------ | -------------------------- | ------------- | ------------------------------------------------------ |
+| `/`                                                    | Splash                     | No            | Initial loading                                        |
+| `/login`                                               | Login                      | No            | Public                                                 |
+| `/register`                                            | Register                   | No            | Public                                                 |
+| `/check-email`                                         | Check Email                | No            | Post-registration email prompt                         |
+| `/forgot-password`                                     | Forgot Password            | No            | Public                                                 |
+| `/reset-password`                                      | Reset Password             | Semi\*        | Has recovery token                                     |
+| `/email-verified`                                      | Email Verified             | No            | Deep-link landing after email verification             |
+| `/complete-profile`                                    | Complete Profile           | Semi\*        | Has Google tokens                                      |
+| `/home`                                                | Home                       | Yes           | Main screen — [features/HOME.md](features/HOME.md)     |
+| `/profile`                                             | Profile                    | Yes           | User profile                                           |
+| `/profile/edit`                                        | Edit Profile               | Yes           | Edit avatar, bio, metrics                              |
+| `/settings`                                            | Settings                   | Yes           | App settings                                           |
+| `/routines`                                            | Routine List               | Yes           | Coach-assigned routines                                |
+| `/routines/:id`                                        | Routine Detail             | Yes           | Routine with exercises                                 |
+| `/workout-session`                                     | Workout Session            | Yes           | Active workout UI                                      |
+| `/programs`                                            | Programs                   | Yes           | User-side program list                                 |
+| `/create-program`                                      | Create Program             | Yes           | Create new program                                     |
+| `/program-details`                                     | Program Details            | Yes           | Program detail view                                    |
+| `/calendar`                                            | Calendar                   | Yes           | Calendar view                                          |
+| `/coach/hub`                                           | Coach Hub                  | Yes           | Coach tools hub                                        |
+| `/coach/exercises`                                     | Coach Exercise Library     | Yes           | Browse/search exercises                                |
+| `/coach/exercises/create`                              | Create Exercise            | Yes           | New exercise form                                      |
+| `/coach/exercises/:id`                                 | Exercise Detail            | Yes           | Exercise info + forms                                  |
+| `/coach/exercises/:id/record`                          | Form Recording             | Yes           | Record reference form (MLKit)                          |
+| `/coach/exercises/:id/forms/:formId/view`              | Coach View Form            | Yes           | 2D skeleton playback of reference form                 |
+| `/coach/exercises/:id/forms/:formId/3d-preview`        | Coach 3D Preview           | Yes           | 3D Unity preview of reference form                     |
+| `/coach/programs`                                      | Coach Programs             | Yes           | Coach program list                                     |
+| `/coach/programs/create`                               | Create Coach Program       | Yes           | New program                                            |
+| `/coach/programs/:id`                                  | Coach Program Detail       | Yes           | Program detail + routines                              |
+| `/coach/programs/:id/edit`                             | Edit Coach Program         | Yes           | Edit program                                           |
+| `/coach/routines`                                      | Coach Routines             | Yes           | Coach routine list                                     |
+| `/coach/routines/create`                               | Create Routine             | Yes           | New routine                                            |
+| `/coach/routines/:id`                                  | Coach Routine Detail       | Yes           | Routine detail + exercises                             |
+| `/coach/routines/:id/edit`                             | Edit Routine               | Yes           | Edit routine                                           |
+| `/coach/clients/:userId/programs`                      | Client Assignments         | Yes           | Assign programs to client                              |
+| `/coach/roster`                                        | Coach Roster               | Yes           | Client roster with expiry info                         |
+| `/coach/settings`                                      | Coach Settings             | Yes           | Capacity & discoverability settings                    |
+| `/coach/clients/:userId/progress`                      | Client Progress            | Yes           | Tabbed client detail                                   |
+| `/coach/clients/:userId/sessions/:sessionId`           | Client Session Detail      | Yes           | Session breakdown                                      |
+| `/coach/clients/:userId/exercises/:exerciseId/history` | Exercise History           | Yes           | Exercise progress timeline                             |
+| `/coach/performance`                                   | Performance Dashboard      | Yes           | All-clients volume/adherence report                    |
+| `/workout/history`                                     | Workout History            | Yes           | Paginated session history                              |
+| `/progress`                                            | Progress & Stats           | Yes           | Weekly stats, summary, recent workouts                 |
+| `/client/exercise/:id/view-form`                       | View Form                  | Yes           | See [features/CLIENT_POSE.md](features/CLIENT_POSE.md) |
+| `/client/exercise/:id/unity-record`                    | Unity 3D Record            | Yes           | Primary compare route                                  |
+| `/client/exercise/:id/3d-preview`                      | Client 3D Preview          | Yes           | 3D preview of reference form                           |
+| `/client/exercise/:id/compare`                         | 2D Record (legacy)         | Yes           | Legacy compare route                                   |
+| `/coaches/discover`                                    | Coach Discovery            | Yes           | Browse/search public coaches                           |
+| `/coaches/:id`                                         | Coach Profile              | Yes           | View coach profile, subscribe/unsubscribe              |
+| `/coaches/subscribed`                                  | Subscribed Coaches         | Yes           | User's subscribed coaches list                         |
+| `/standalone/exercises`                                | Standalone Exercises       | Yes           | Personal exercise library                              |
+| `/standalone/exercises/create`                         | Create Exercise            | Yes           | New personal exercise                                  |
+| `/standalone/exercises/:id/edit`                       | Edit Exercise              | Yes           | Edit personal exercise                                 |
+| `/standalone/routines`                                 | Standalone Routines        | Yes           | Personal routine list                                  |
+| `/standalone/routines/create`                          | Create Routine             | Yes           | New routine                                            |
+| `/standalone/routines/:id`                             | Routine Detail             | Yes           | Routine detail                                         |
+| `/standalone/routines/:id/edit`                        | Edit Routine               | Yes           | Edit routine                                           |
+| `/standalone/programs`                                 | Standalone Programs        | Yes           | Personal program list                                  |
+| `/standalone/programs/create`                          | Create Program             | Yes           | New program                                            |
+| `/standalone/programs/:id`                             | Program Detail             | Yes           | Program detail                                         |
+| `/standalone/programs/:id/edit`                        | Edit Program               | Yes           | Edit program                                           |
+| `/standalone/today`                                    | Today's Standalone Routine | Yes           | Day-cycling today routine                              |
+| `/standalone/sessions`                                 | Standalone Session History | Yes           | Session history                                        |
+| `/coins/reward`                                        | Coin Reward                | Yes           | Post-workout reward display                            |
+| `/coins/history`                                       | Coin History               | Yes           | Paginated transaction list                             |
+| `/shop`                                                | Shop                       | Yes           | Cosmetics catalog                                      |
+| `/shop/cosmetic`                                       | Cosmetic Detail            | Yes           | Single item detail + buy                               |
+| `/inventory`                                           | Inventory                  | Yes           | Owned + equipped cosmetics                             |
+| `/leaderboard`                                         | Leaderboard                | Yes           | Global coin rankings                                   |
 
 \*Semi-authenticated: Has temporary tokens but not full profile
 
@@ -458,26 +460,26 @@
 
 ### Where to Find Information
 
-| Looking for...            | Go to...                                                                             |
-| ------------------------- | ------------------------------------------------------------------------------------ |
-| Project architecture      | [CONTEXT.md](CONTEXT.md)                                                             |
-| Creating providers        | [CONTEXT.md](CONTEXT.md) → Creating Riverpod Providers                               |
-| Data models               | [CONTEXT.md](CONTEXT.md) → Creating Models                                           |
-| API calls                 | [CONTEXT.md](CONTEXT.md) → Making API Calls                                          |
-| Error handling            | [CONTEXT.md](CONTEXT.md) → Using Result Type                                         |
-| Home dashboard            | [features/HOME.md](features/HOME.md)                                                 |
-| Client pose recording     | [features/CLIENT_POSE.md](features/CLIENT_POSE.md)                                   |
-| Coach pose recording      | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md)                 |
-| Unity message contract    | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) → Unity Message Contract          |
-| Registration flow         | [features/REGISTER.md](features/REGISTER.md)                                         |
-| Google sign-in            | [features/REGISTER.md](features/REGISTER.md) → Google Sign-Up Flow                   |
-| Email verification        | [features/VERIFY_RESET_FLOW.md](features/VERIFY_RESET_FLOW.md)                       |
-| Route guards              | [features/REGISTER.md](features/REGISTER.md) → Router Guard                          |
-| Profile viewing           | [features/PROFILE.md](features/PROFILE.md)                                           |
-| Subscription gating       | [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                                 |
-| Coins & shop              | [features/GAINS_COINS.md](features/GAINS_COINS.md)                                   |
-| Onboarding tours          | [features/GUIDANCE.md](features/GUIDANCE.md)                                         |
-| Server endpoints          | [Server AUTH.md](../../get-gains-server/docs/features/AUTH.md)                       |
+| Looking for...         | Go to...                                                                    |
+| ---------------------- | --------------------------------------------------------------------------- |
+| Project architecture   | [CONTEXT.md](CONTEXT.md)                                                    |
+| Creating providers     | [CONTEXT.md](CONTEXT.md) → Creating Riverpod Providers                      |
+| Data models            | [CONTEXT.md](CONTEXT.md) → Creating Models                                  |
+| API calls              | [CONTEXT.md](CONTEXT.md) → Making API Calls                                 |
+| Error handling         | [CONTEXT.md](CONTEXT.md) → Using Result Type                                |
+| Home dashboard         | [features/HOME.md](features/HOME.md)                                        |
+| Client pose recording  | [features/CLIENT_POSE.md](features/CLIENT_POSE.md)                          |
+| Coach pose recording   | [features/COACH_POSE_RECORDING.md](features/COACH_POSE_RECORDING.md)        |
+| Unity message contract | [features/CLIENT_POSE.md](features/CLIENT_POSE.md) → Unity Message Contract |
+| Registration flow      | [features/REGISTER.md](features/REGISTER.md)                                |
+| Google sign-in         | [features/REGISTER.md](features/REGISTER.md) → Google Sign-Up Flow          |
+| Email verification     | [features/VERIFY_RESET_FLOW.md](features/VERIFY_RESET_FLOW.md)              |
+| Route guards           | [features/REGISTER.md](features/REGISTER.md) → Router Guard                 |
+| Profile viewing        | [features/PROFILE.md](features/PROFILE.md)                                  |
+| Subscription gating    | [features/SUBSCRIPTION.md](features/SUBSCRIPTION.md)                        |
+| Coins & shop           | [features/GAINS_COINS.md](features/GAINS_COINS.md)                          |
+| Onboarding tours       | [features/GUIDANCE.md](features/GUIDANCE.md)                                |
+| Server endpoints       | [Server AUTH.md](../../get-gains-server/docs/features/AUTH.md)              |
 
 ---
 
@@ -525,6 +527,9 @@ lib/
 │   ├── constants/
 │   │   ├── api_constants.dart      # API endpoints
 │   │   └── storage_keys.dart       # Storage keys
+│   ├── errors/
+│   │   ├── api_error_codes.dart    # Generated enum (DO NOT EDIT)
+│   │   └── error_messages.dart     # errorMessageFor() helper
 │   ├── utils/
 │   │   ├── app_error.dart          # Error types
 │   │   ├── logger.dart             # Logging
