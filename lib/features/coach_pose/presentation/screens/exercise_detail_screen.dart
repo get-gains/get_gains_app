@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../workout/data/models/exercise_model.dart';
+import '../../data/models/exercise_form_model.dart';
 import '../providers/exercise_detail_provider.dart';
 import '../widgets/form_card.dart';
 
@@ -288,18 +289,13 @@ class _FormsTab extends ConsumerWidget {
                     .replaceFirst(':formId', form.id),
               );
             },
-            onActivate: () {
-              ref
-                  .read(exerciseDetailProvider(exerciseId).notifier)
-                  .activateForm(form.id);
-            },
             onDelete: () async {
               final confirmed = await showDialog<bool>(
                 context: context,
                 builder: (context) => AlertDialog(
                   title: const Text('Delete Form?'),
                   content: Text(
-                    'Are you sure you want to delete Version ${form.version}? '
+                    'Are you sure you want to delete this ${form.cameraAngle.displayName} form? '
                     'This action cannot be undone.',
                   ),
                   actions: [

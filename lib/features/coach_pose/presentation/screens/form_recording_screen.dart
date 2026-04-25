@@ -11,7 +11,6 @@ import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../data/models/exercise_form_model.dart';
-import '../../data/models/models.dart';
 import '../../services/pose_detection_service.dart';
 import '../providers/form_recording_provider.dart';
 import '../widgets/recording_controls.dart';
@@ -171,9 +170,8 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
   /// Whether more than one camera is available (front + back).
   bool get _canFlipCamera => _cameras.length >= 2;
 
-  /// Start a single continuous image stream.
-  /// During setup: processes every ~10th frame for validation.
-  /// During recording: processes every frame for ≥30 FPS landmark capture.
+  /// Start a single continuous image stream for **setup validation only**.
+  /// During recording, the camera uses `startVideoRecording()` instead.
   void _startImageStream() {
     if (_isStreamingImages) return;
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
@@ -195,9 +193,6 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
         if (_frameCount % 10 == 0) {
           _processSetupFrame(image);
         }
-      } else if (state.phase == RecordingPhase.recording) {
-        // No MLKit here — only copy frame bytes to buffer; pose runs in batch after stop.
-        _captureRecordingFrame(image);
       }
     });
   }
@@ -244,18 +239,6 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
     }
   }
 
-  /// Capture a raw frame during recording (no MLKit). Bytes are copied
-  /// synchronously; processing runs in batch after stop so FPS = camera FPS.
-  void _captureRecordingFrame(CameraImage image) {
-    final rotationDegrees = _getCameraRotationDegrees();
-    final captured = CapturedFrame.fromCameraImage(image, rotationDegrees);
-    if (mounted) {
-      ref
-          .read(formRecordingProvider(widget.exerciseId).notifier)
-          .addCapturedFrame(captured);
-    }
-  }
-
   void _startRecording() {
     // Stream is already running — start the countdown, which will
     // auto-transition to recording once it reaches zero.
@@ -276,11 +259,19 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
   }
 
   Future<void> _stopRecording() async {
-    await _stopImageStream();
-
-    await ref
-        .read(formRecordingProvider(widget.exerciseId).notifier)
-        .stopRecording();
+    // Stop video recording and pass the file to the provider
+    try {
+      final file = await _cameraController!.stopVideoRecording();
+      ref
+          .read(formRecordingProvider(widget.exerciseId).notifier)
+          .setRecordedVideo(file.path);
+    } catch (e) {
+      AppLogger.error(
+        'Failed to stop video recording',
+        tag: 'FormRecording',
+        error: e,
+      );
+    }
   }
 
   int _getCameraRotationDegrees() {
@@ -332,11 +323,42 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
       if (next.phase == RecordingPhase.complete) {
         _showSuccess(context, isDark);
       }
+      // When countdown finishes and recording starts:
+      // stop the image stream and start video recording.
+      if (previous?.phase == RecordingPhase.countdown &&
+          next.phase == RecordingPhase.recording) {
+        _stopImageStream().then((_) async {
+          try {
+            await _cameraController?.startVideoRecording();
+            AppLogger.info('Video recording started', tag: 'FormRecording');
+          } catch (e) {
+            AppLogger.error(
+              'Failed to start video recording',
+              tag: 'FormRecording',
+              error: e,
+            );
+          }
+        });
+      }
       // When the provider auto-stops recording (transitions to processing),
-      // we need to stop the camera image stream from the screen side.
+      // we need to stop the video recording and pass the file path.
       if (previous?.phase == RecordingPhase.recording &&
-          next.phase == RecordingPhase.processing) {
-        _stopImageStream();
+          next.phase == RecordingPhase.processing &&
+          next.videoFilePath == null) {
+        _cameraController
+            ?.stopVideoRecording()
+            .then((file) {
+              ref
+                  .read(formRecordingProvider(widget.exerciseId).notifier)
+                  .setRecordedVideo(file.path);
+            })
+            .catchError((Object e) {
+              AppLogger.error(
+                'Failed to stop video recording on auto-stop',
+                tag: 'FormRecording',
+                error: e,
+              );
+            });
       }
     });
 
@@ -628,7 +650,8 @@ class _ProcessingOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final message = state.processingMessage ??
+    final message =
+        state.processingMessage ??
         (state.phase == RecordingPhase.processing
             ? 'Processing landmarks...'
             : 'Uploading form...');
@@ -679,6 +702,11 @@ class _CompleteOverlay extends StatelessWidget {
   const _CompleteOverlay({this.form});
   final ExerciseFormModel? form;
 
+  String _formatDate(DateTime? dt) {
+    if (dt == null) return 'Just now';
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -703,7 +731,7 @@ class _CompleteOverlay extends StatelessWidget {
             if (form != null) ...[
               const SizedBox(height: 8),
               Text(
-                'Version ${form!.version} · ${form!.totalFrames} frames',
+                '${form!.cameraAngle.displayName} · ${_formatDate(form!.createdAt)}',
                 style: Theme.of(
                   context,
                 ).textTheme.bodyMedium?.copyWith(color: Colors.white70),

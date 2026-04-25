@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui';
 
@@ -7,7 +8,6 @@ import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/utils/logger.dart';
-import '../data/models/captured_frame.dart';
 import '../data/models/landmark_models.dart';
 
 part 'pose_detection_service.g.dart';
@@ -228,17 +228,22 @@ class PoseDetectionService {
     }
   }
 
-  /// Process a previously captured frame (post-recording batch).
-  /// Used by coach form: capture raw frames during recording, then run
-  /// MLKit on each frame after stop so FPS = camera FPS regardless of device speed.
-  Future<LandmarkFrame?> processCapturedFrame(
-    CapturedFrame captured,
-    int timestampMs,
-  ) async {
-    final inputImage = _buildInputImageFromCaptured(captured);
-    if (inputImage == null) return null;
+  /// Process an extracted JPEG frame file (post-recording batch via ffmpeg).
+  ///
+  /// Uses [InputImage.fromFilePath] — ffmpeg outputs upright JPEGs
+  /// (rotation metadata is already applied), so we use [rotation0deg].
+  /// Returns `null` if another frame is being processed or no pose detected.
+  Future<LandmarkFrame?> processImageFile(
+    File file,
+    int timestampMs, {
+    Size? imageSize,
+  }) async {
+    if (_isBusy || _isDisposed) return null;
+    _isBusy = true;
 
     try {
+      final inputImage = InputImage.fromFilePath(file.path);
+
       final poses = await _poseDetector
           .processImage(inputImage)
           .timeout(const Duration(seconds: 10), onTimeout: () => <Pose>[]);
@@ -246,73 +251,24 @@ class PoseDetectionService {
       if (poses.isEmpty) return null;
 
       final pose = poses.first;
-      final rotation = _rotationFromDegrees(captured.rotationDegrees);
+      // ffmpeg extracts upright frames — use image dimensions as-is.
+      final width = imageSize?.width ?? 640;
+      final height = imageSize?.height ?? 480;
       return _poseToLandmarkFrame(
         pose,
         timestampMs,
-        captured.width.toDouble(),
-        captured.height.toDouble(),
-        rotation: rotation,
+        width,
+        height,
+        rotation: InputImageRotation.rotation0deg,
       );
-    } catch (_) {
+    } catch (e) {
+      AppLogger.warning(
+        'MLKit: processImageFile error: $e',
+        tag: 'PoseDetection',
+      );
       return null;
-    }
-  }
-
-  InputImageRotation _rotationFromDegrees(int degrees) {
-    return switch (degrees) {
-      90 => InputImageRotation.rotation90deg,
-      180 => InputImageRotation.rotation180deg,
-      270 => InputImageRotation.rotation270deg,
-      _ => InputImageRotation.rotation0deg,
-    };
-  }
-
-  InputImage? _buildInputImageFromCaptured(CapturedFrame captured) {
-    final rotation = _rotationFromDegrees(captured.rotationDegrees);
-    final size = Size(captured.width.toDouble(), captured.height.toDouble());
-
-    switch (captured.format) {
-      case 'nv21':
-        return InputImage.fromBytes(
-          bytes: captured.bytes,
-          metadata: InputImageMetadata(
-            size: size,
-            rotation: rotation,
-            format: InputImageFormat.nv21,
-            bytesPerRow: captured.bytesPerRow,
-          ),
-        );
-      case 'bgra8888':
-        return InputImage.fromBytes(
-          bytes: captured.bytes,
-          metadata: InputImageMetadata(
-            size: size,
-            rotation: rotation,
-            format: InputImageFormat.bgra8888,
-            bytesPerRow: captured.bytesPerRow,
-          ),
-        );
-      case 'yuv420':
-        return InputImage.fromBytes(
-          bytes: captured.bytes,
-          metadata: InputImageMetadata(
-            size: size,
-            rotation: rotation,
-            format: InputImageFormat.yuv_420_888,
-            bytesPerRow: captured.bytesPerRow,
-          ),
-        );
-      default:
-        return InputImage.fromBytes(
-          bytes: captured.bytes,
-          metadata: InputImageMetadata(
-            size: size,
-            rotation: rotation,
-            format: InputImageFormat.nv21,
-            bytesPerRow: captured.bytesPerRow,
-          ),
-        );
+    } finally {
+      _isBusy = false;
     }
   }
 

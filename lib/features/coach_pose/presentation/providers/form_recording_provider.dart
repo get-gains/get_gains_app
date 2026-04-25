@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/utils/logger.dart';
+import '../../../../services/pose/frames_blob.dart';
+import '../../../../services/pose/frames_upload_service.dart';
+import '../../../../services/pose/video_frame_extractor.dart';
 import '../../data/coach_pose_repository.dart';
 import '../../data/models/models.dart';
 import '../../services/feature_extractor.dart';
@@ -48,8 +52,7 @@ class FormRecordingState {
     this.rawFrames = const [],
     this.processedFrames = const [],
     this.featureFrames = const [],
-    this.capturedFrames = const [],
-    this.capturedFrameCount = 0,
+    this.videoFilePath,
     this.recordingStartMs,
     this.recordingDurationMs = 0,
     this.frameCount = 0,
@@ -69,11 +72,8 @@ class FormRecordingState {
   final List<LandmarkFrame> processedFrames;
   final List<FeatureFrame> featureFrames;
 
-  /// Raw camera frames captured during recording (no MLKit). Processed in batch after stop.
-  final List<CapturedFrame> capturedFrames;
-
-  /// Set when recording stops; used for FPS = capturedFrameCount / duration (camera FPS).
-  final int capturedFrameCount;
+  /// Path to the video file captured via [CameraController.startVideoRecording].
+  final String? videoFilePath;
   final int? recordingStartMs;
   final int recordingDurationMs;
   final int frameCount;
@@ -99,8 +99,8 @@ class FormRecordingState {
     List<LandmarkFrame>? rawFrames,
     List<LandmarkFrame>? processedFrames,
     List<FeatureFrame>? featureFrames,
-    List<CapturedFrame>? capturedFrames,
-    int? capturedFrameCount,
+    String? videoFilePath,
+    bool clearVideoFilePath = false,
     int? recordingStartMs,
     int? recordingDurationMs,
     int? frameCount,
@@ -120,8 +120,9 @@ class FormRecordingState {
       rawFrames: rawFrames ?? this.rawFrames,
       processedFrames: processedFrames ?? this.processedFrames,
       featureFrames: featureFrames ?? this.featureFrames,
-      capturedFrames: capturedFrames ?? this.capturedFrames,
-      capturedFrameCount: capturedFrameCount ?? this.capturedFrameCount,
+      videoFilePath: clearVideoFilePath
+          ? null
+          : (videoFilePath ?? this.videoFilePath),
       recordingStartMs: recordingStartMs ?? this.recordingStartMs,
       recordingDurationMs: recordingDurationMs ?? this.recordingDurationMs,
       frameCount: frameCount ?? this.frameCount,
@@ -136,7 +137,7 @@ class FormRecordingState {
 }
 
 /// Manages the full form recording pipeline:
-/// setup → record → process → upload.
+/// setup → record (video) → extract frames → process → upload.
 @riverpod
 class FormRecordingNotifier extends _$FormRecordingNotifier {
   late LandmarkPreprocessor _preprocessor;
@@ -149,9 +150,6 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
   /// Tracks when all setup checks first started passing continuously.
   /// Reset to `null` whenever a check fails.
   DateTime? _setupStableSince;
-
-  /// Mutable buffer for frames during recording. No state updates per frame.
-  final List<CapturedFrame> _capturedFramesBuffer = [];
 
   @override
   FormRecordingState build(String exerciseId) {
@@ -283,16 +281,14 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
   /// Internal: transition from countdown to active recording.
   void _beginRecording() {
     _recordingTimer?.cancel();
-    _capturedFramesBuffer.clear();
 
     state = state.copyWith(
       phase: RecordingPhase.recording,
       rawFrames: [],
-      capturedFrames: [],
-      capturedFrameCount: 0,
       recordingStartMs: DateTime.now().millisecondsSinceEpoch,
       frameCount: 0,
       countdownSeconds: 0,
+      clearVideoFilePath: true,
     );
 
     // Auto-stop after kMaxRecordingDurationSeconds
@@ -325,59 +321,101 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
     );
   }
 
-  /// Add a raw camera frame during recording (no MLKit, no pose detection).
-  /// Frames are buffered in memory; state is updated only when recording stops.
-  void addCapturedFrame(CapturedFrame frame) {
-    if (state.phase != RecordingPhase.recording) return;
-    _capturedFramesBuffer.add(frame);
-  }
-
-  /// Stop recording and begin processing (batch MLKit then pipeline).
-  Future<void> stopRecording() async {
+  /// Called by the screen after [CameraController.stopVideoRecording] returns.
+  /// Transitions to processing and kicks off the video → ffmpeg → MLKit pipeline.
+  void setRecordedVideo(String path) {
     if (state.phase != RecordingPhase.recording) return;
     _recordingTimer?.cancel();
     _elapsedTimer?.cancel();
 
     final endMs = DateTime.now().millisecondsSinceEpoch;
     final durationMs = endMs - (state.recordingStartMs ?? endMs);
-    final capturedCount = _capturedFramesBuffer.length;
-    final captured = List<CapturedFrame>.from(_capturedFramesBuffer);
-    _capturedFramesBuffer.clear();
 
     state = state.copyWith(
       phase: RecordingPhase.processing,
+      videoFilePath: path,
       recordingDurationMs: durationMs,
-      capturedFrames: captured,
-      capturedFrameCount: capturedCount,
-      frameCount: capturedCount,
       processingProgress: 0.0,
-      processingMessage: 'Detecting pose...',
+      processingMessage: 'Extracting frames...',
     );
 
     AppLogger.info(
-      'Recording stopped. $capturedCount captured frames, ${durationMs}ms',
+      'Recording stopped. Video at $path, ${durationMs}ms',
       tag: 'FormRecording',
     );
 
-    await _processCapturedFrames();
+    _processVideo();
   }
 
-  /// Run MLKit on each captured frame (batch, after recording), then pipeline.
-  Future<void> _processCapturedFrames() async {
-    try {
-      final poseService = ref.read(poseDetectionServiceProvider);
-      final startMs = state.recordingStartMs ?? 0;
-      final captured = state.capturedFrames;
+  /// Stop recording — called when auto-stop timer fires.
+  /// The screen listens for the recording→processing transition and calls
+  /// [CameraController.stopVideoRecording] → [setRecordedVideo].
+  void stopRecording() {
+    if (state.phase != RecordingPhase.recording) return;
+    _recordingTimer?.cancel();
+    _elapsedTimer?.cancel();
+    // The screen will detect the phase change and stop the video recording,
+    // then call setRecordedVideo with the file path.
+    state = state.copyWith(
+      phase: RecordingPhase.processing,
+      processingProgress: 0.0,
+      processingMessage: 'Stopping recording...',
+    );
+  }
 
+  /// Extract frames from video via ffmpeg, run MLKit on each, then pipeline.
+  Future<void> _processVideo() async {
+    final videoPath = state.videoFilePath;
+    if (videoPath == null) {
+      state = state.copyWith(
+        phase: RecordingPhase.error,
+        errorMessage: 'No video file available for processing.',
+      );
+      return;
+    }
+
+    List<File> extractedFrames = [];
+    try {
+      final extractor = ref.read(videoFrameExtractorProvider);
+      final poseService = ref.read(poseDetectionServiceProvider);
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final dir = await extractor.createTempFrameDir(
+        'coach-${state.exerciseId}-$ts',
+      );
+
+      state = state.copyWith(
+        processingProgress: 0.05,
+        processingMessage: 'Extracting frames...',
+      );
+
+      extractedFrames = await extractor.extractFrames(
+        videoPath: videoPath,
+        targetFps: 30,
+        outputDirPath: dir,
+      );
+
+      state = state.copyWith(
+        frameCount: extractedFrames.length,
+        processingProgress: 0.1,
+        processingMessage: 'Detecting pose...',
+      );
+
+      AppLogger.info(
+        'Extracted ${extractedFrames.length} frames from video',
+        tag: 'FormRecording',
+      );
+
+      // Run MLKit on each extracted frame sequentially
+      final startMs = state.recordingStartMs ?? 0;
       final rawFrames = <LandmarkFrame>[];
-      for (var i = 0; i < captured.length; i++) {
+      for (var i = 0; i < extractedFrames.length; i++) {
         state = state.copyWith(
-          processingProgress: 0.05 + 0.15 * (i / captured.length),
+          processingProgress: 0.1 + 0.2 * (i / extractedFrames.length),
           processingMessage: 'Detecting pose...',
         );
         final timestampMs = startMs + (i * 1000 ~/ 30);
-        final frame = await poseService.processCapturedFrame(
-          captured[i],
+        final frame = await poseService.processImageFile(
+          extractedFrames[i],
           timestampMs,
         );
         if (frame != null) rawFrames.add(frame);
@@ -387,7 +425,7 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
       await _processFrames();
     } catch (e) {
       AppLogger.error(
-        'Batch pose processing failed',
+        'Video processing failed',
         tag: 'FormRecording',
         error: e,
       );
@@ -395,6 +433,16 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
         phase: RecordingPhase.error,
         errorMessage: 'Failed to process recording: $e',
       );
+    } finally {
+      // Cleanup: delete extracted frames and video file
+      if (extractedFrames.isNotEmpty) {
+        ref.read(videoFrameExtractorProvider).cleanup(extractedFrames);
+      }
+      if (videoPath != null) {
+        try {
+          await File(videoPath).delete();
+        } catch (_) {}
+      }
     }
   }
 
@@ -463,10 +511,11 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
     }
   }
 
-  /// Upload the processed form to the server.
+  /// Upload the processed form via S3 blob + lightweight server call.
   Future<void> _uploadForm({List<LandmarkFrame>? normalizedFrames}) async {
     try {
       final repo = ref.read(coachPoseRepositoryProvider);
+      final uploadService = ref.read(framesUploadServiceProvider);
 
       // FPS = pose/vertex data rate (landmark frames per second), not video FPS
       var processedFrames = state.processedFrames;
@@ -479,8 +528,6 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
           : 0;
 
       // Post-processing: if pose data is below 30 FPS but we have enough to interpolate, upsample
-      // Threshold matches client_recording_provider (10 FPS) so both pipelines
-      // handle low capture rates (e.g. ~12 FPS with Unity + camera) equally.
       const minFpsToUpsample = 10;
       if (frameRate < kMinFrameRate &&
           frameRate >= minFpsToUpsample &&
@@ -534,20 +581,50 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
         }
       }
 
-      final result = await repo.uploadForm(
-        exerciseId: state.exerciseId,
+      // Build the frames blob for S3
+      final blob = FramesBlob.coach(
+        version: 2,
         cameraAngle: state.cameraAngle.serverValue,
         durationMs: state.recordingDurationMs,
         frameRate: frameRate,
         totalFrames: poseFrameCount,
-        landmarkFrames: processedFrames.map((f) => f.toJson()).toList(),
-        featureFrames: featureFrames.map((f) => f.toJson()).toList(),
-        normalizedFrames: normalizedForUpload?.map((f) => f.toJson()).toList(),
+        landmarkFrames: processedFrames,
+        featureFrames: featureFrames,
+        normalizedFrames: normalizedForUpload,
         relevantAngles: state.relevantAngles.isNotEmpty
             ? state.relevantAngles
             : null,
         avgLandmarkConfidence: avgConfidence,
-        recordingQuality: _assessQuality(avgConfidence),
+      );
+
+      // Step 1: Upload blob to S3 via presigned URL
+      final keyResult = await uploadService.uploadCoachFormFrames(
+        exerciseId: state.exerciseId,
+        framesBlob: blob.toJson(),
+      );
+
+      final key = keyResult.when(
+        success: (k) => k,
+        failure: (error) {
+          AppLogger.error(
+            'S3 blob upload failed',
+            tag: 'FormRecording',
+            error: error,
+          );
+          state = state.copyWith(
+            phase: RecordingPhase.error,
+            errorMessage: 'Failed to upload form data: ${error.message}',
+          );
+          return null;
+        },
+      );
+      if (key == null) return;
+
+      // Step 2: Create the server record with the S3 key
+      final result = await repo.uploadForm(
+        exerciseId: state.exerciseId,
+        cameraAngle: state.cameraAngle.serverValue,
+        recordedFramesKey: key,
       );
 
       result.when(

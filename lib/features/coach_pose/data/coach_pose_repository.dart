@@ -1,5 +1,6 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../core/constants/api_constants.dart';
 import '../../../core/utils/app_error.dart';
 import '../../../core/utils/logger.dart';
 import '../../../core/utils/result.dart';
@@ -13,8 +14,8 @@ part 'coach_pose_repository.g.dart';
 ///
 /// Handles API calls for:
 /// - Exercise CRUD
-/// - Form upload, list, delete, activate
-/// - Pose config management
+/// - Form upload, list, delete
+/// - Form download URL retrieval
 class CoachPoseRepository {
   CoachPoseRepository({required ApiClient apiClient}) : _apiClient = apiClient;
 
@@ -112,12 +113,10 @@ class CoachPoseRepository {
 
   /// Get all forms for a specific exercise
   Future<Result<List<ExerciseFormModel>, AppError>> getExerciseForms(
-    String exerciseId, {
-    bool activeOnly = false,
-  }) async {
+    String exerciseId,
+  ) async {
     final result = await _apiClient.get<Map<String, dynamic>>(
       '/pose/exercises/$exerciseId/forms',
-      queryParameters: {'activeOnly': activeOnly},
     );
 
     return result.when(
@@ -140,63 +139,22 @@ class CoachPoseRepository {
     );
   }
 
-  /// Get a specific form by ID (full detail with landmark data)
-  Future<Result<ExerciseFormDetailModel, AppError>> getFormById(
-    String formId,
-  ) async {
-    final result = await _apiClient.get<Map<String, dynamic>>(
-      '/pose/forms/$formId',
-    );
-
-    return result.when(
-      success: (data) {
-        try {
-          final form = ExerciseFormDetailModel.fromJson(
-            data['form'] as Map<String, dynamic>,
-          );
-          return Success(form);
-        } catch (e) {
-          AppLogger.error(
-            'Failed to parse form detail',
-            tag: 'CoachPoseRepo',
-            error: e,
-          );
-          return Failure(UnknownError(message: 'Failed to parse form: $e'));
-        }
-      },
-      failure: (error) => Failure(error),
-    );
-  }
-
-  /// Upload a new reference form
+  /// Upload a new reference form.
+  ///
+  /// The rich frame data (landmarks, features, etc.) is already in S3
+  /// via [FramesUploadService]. This call only sends the lightweight
+  /// metadata + the S3 key to the server.
   Future<Result<ExerciseFormModel, AppError>> uploadForm({
     required String exerciseId,
     required String cameraAngle,
-    required int durationMs,
-    required int frameRate,
-    required int totalFrames,
-    required List<Map<String, dynamic>> landmarkFrames,
-    required List<Map<String, dynamic>> featureFrames,
-    List<Map<String, dynamic>>? normalizedFrames,
-    List<String>? relevantAngles,
-    double? avgLandmarkConfidence,
-    String? recordingQuality,
+    required String recordedFramesKey,
   }) async {
     final result = await _apiClient.post<Map<String, dynamic>>(
       '/pose/forms',
       data: {
         'exerciseId': exerciseId,
         'cameraAngle': cameraAngle,
-        'durationMs': durationMs,
-        'frameRate': frameRate,
-        'totalFrames': totalFrames,
-        'landmarkFrames': landmarkFrames,
-        'featureFrames': featureFrames,
-        if (normalizedFrames != null) 'normalizedFrames': normalizedFrames,
-        if (relevantAngles != null) 'relevantAngles': relevantAngles,
-        if (avgLandmarkConfidence != null)
-          'avgLandmarkConfidence': avgLandmarkConfidence,
-        if (recordingQuality != null) 'recordingQuality': recordingQuality,
+        'recorded_frames_key': recordedFramesKey,
       },
     );
 
@@ -232,115 +190,18 @@ class CoachPoseRepository {
     );
   }
 
-  /// Activate a specific form version
-  Future<Result<ExerciseFormModel, AppError>> activateForm(
-    String formId,
-  ) async {
-    final result = await _apiClient.patch<Map<String, dynamic>>(
-      '/pose/forms/$formId/activate',
-    );
-
-    return result.when(
-      success: (data) {
-        try {
-          final form = ExerciseFormModel.fromJson(
-            data['form'] as Map<String, dynamic>,
-          );
-          return Success(form);
-        } catch (e) {
-          AppLogger.error(
-            'Failed to parse activated form',
-            tag: 'CoachPoseRepo',
-            error: e,
-          );
-          return Failure(UnknownError(message: 'Failed to parse form: $e'));
-        }
-      },
-      failure: (error) => Failure(error),
-    );
-  }
-
-  // ============== Pose Config Operations ==============
-
-  /// Create or update pose config for an exercise
-  Future<Result<PoseConfigModel, AppError>> upsertPoseConfig(
-    String exerciseId, {
-    required List<String> activeSegments,
-    required List<String> recommendedAngles,
-    required List<Map<String, dynamic>> trackedAngles,
-    double minLandmarkConfidence = 0.5,
-    String? setupInstructions,
-  }) async {
-    final result = await _apiClient.put<Map<String, dynamic>>(
-      '/pose/exercises/$exerciseId/config',
-      data: {
-        'activeSegments': activeSegments,
-        'recommendedAngles': recommendedAngles,
-        'trackedAngles': trackedAngles,
-        'minLandmarkConfidence': minLandmarkConfidence,
-        if (setupInstructions != null) 'setupInstructions': setupInstructions,
-      },
-    );
-
-    return result.when(
-      success: (data) {
-        try {
-          final config = PoseConfigModel.fromJson(
-            data['config'] as Map<String, dynamic>,
-          );
-          return Success(config);
-        } catch (e) {
-          AppLogger.error(
-            'Failed to parse upserted pose config',
-            tag: 'CoachPoseRepo',
-            error: e,
-          );
-          return Failure(UnknownError(message: 'Failed to parse config: $e'));
-        }
-      },
-      failure: (error) => Failure(error),
-    );
-  }
-
-  /// Get pose config for an exercise.
-  ///
-  /// Returns `null` inside [Success] when the server responds with 404
-  /// (config doesn't exist yet). This is expected for newly-created
-  /// exercises that have never had a config set.
-  Future<Result<PoseConfigModel?, AppError>> getPoseConfig(
-    String exerciseId,
-  ) async {
+  /// Get a presigned download URL for a form's frames blob in S3.
+  Future<Result<String, AppError>> getFormDownloadUrl(String formId) async {
     final result = await _apiClient.get<Map<String, dynamic>>(
-      '/pose/exercises/$exerciseId/config',
+      ApiConstants.poseFormDownloadUrl(formId),
     );
 
     return result.when(
       success: (data) {
-        try {
-          final config = PoseConfigModel.fromJson(
-            data['config'] as Map<String, dynamic>,
-          );
-          return Success(config);
-        } catch (e) {
-          AppLogger.error(
-            'Failed to parse pose config',
-            tag: 'CoachPoseRepo',
-            error: e,
-          );
-          return Failure(UnknownError(message: 'Failed to parse config: $e'));
-        }
+        final url = data['url'] as String;
+        return Success(url);
       },
-      failure: (error) {
-        // 404 means no config exists yet — perfectly normal for new exercises
-        if (error is NetworkError && error.statusCode == 404) {
-          AppLogger.debug(
-            'No pose config exists yet for exercise $exerciseId',
-            tag: 'CoachPoseRepo',
-          );
-          return const Success(null);
-        }
-        return Failure(error);
-      },
+      failure: (error) => Failure(error),
     );
   }
 }
