@@ -5,9 +5,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../core/constants/api_constants.dart';
 import '../../core/errors/api_error_codes.dart';
-import '../../core/utils/app_error.dart';
 import '../../core/utils/logger.dart';
-import '../../features/client_pose/data/models/body_segment.dart';
 import '../../features/workout/data/workout_repository.dart';
 import '../api/api_client.dart';
 import '../database/app_database.dart';
@@ -99,13 +97,11 @@ class WorkoutSyncService {
       final sessionsResult = await _syncPendingSessions();
       final setsResult = await _syncPendingSets();
       final completionsResult = await _syncPendingCompletions();
-      final poseResultsResult = await _syncPendingPoseResults();
 
       final result = WorkoutSyncResult(
         sessionsSynced: sessionsResult,
         setsSynced: setsResult,
         completionsSynced: completionsResult,
-        poseResultsSynced: poseResultsResult,
       );
 
       AppLogger.info('Workout sync complete: $result', tag: _tag);
@@ -452,97 +448,6 @@ class WorkoutSyncService {
   // ──────────────────────────────────────────────────────────
   // Pose Result Sync
   // ──────────────────────────────────────────────────────────
-
-  /// Sync locally-queued pose comparison results to the server.
-  Future<int> _syncPendingPoseResults() async {
-    final pendingItems = await _db.getPendingSyncItems();
-
-    final poseItems = pendingItems
-        .where(
-          (item) =>
-              item.entityTable == 'pose_results' && item.operation == 'create',
-        )
-        .toList();
-
-    if (poseItems.isEmpty) return 0;
-
-    int synced = 0;
-    for (final item in poseItems) {
-      try {
-        final payload = jsonDecode(item.payload) as Map<String, dynamic>;
-
-        // Skip entries with invalid/missing required fields — they'll never
-        // pass server validation so there's no point retrying.
-        final exerciseFormId = payload['exerciseFormId'] as String?;
-        if (exerciseFormId == null || exerciseFormId.isEmpty) {
-          AppLogger.warning(
-            'Removing invalid pose result from queue (missing exerciseFormId): ${item.id}',
-            tag: _tag,
-          );
-          await _db.removeFromSyncQueue(item.id);
-          continue;
-        }
-
-        // Ensure segmentScores contains all required BodySegment keys.
-        // Older queued items may have missing keys that fail server
-        // validation. Default missing segments to 0.0.
-        final rawScores = payload['segmentScores'];
-        if (rawScores is Map<String, dynamic>) {
-          for (final segment in BodySegment.values) {
-            rawScores.putIfAbsent(segment.name, () => 0.0);
-          }
-        }
-
-        final result = await _apiClient.post<Map<String, dynamic>>(
-          ApiConstants.poseResults,
-          data: payload,
-        );
-
-        result.when(
-          success: (_) {
-            _db.removeFromSyncQueue(item.id);
-            synced++;
-            AppLogger.debug('Synced pose result: ${item.recordId}', tag: _tag);
-          },
-          failure: (error) {
-            // 4xx client errors (except 401/408/429) are permanent — remove
-            // from queue instead of retrying forever.
-            final statusCode = (error is NetworkError)
-                ? error.statusCode
-                : null;
-            if (statusCode != null &&
-                statusCode >= 400 &&
-                statusCode < 500 &&
-                statusCode != 401 &&
-                statusCode != 408 &&
-                statusCode != 429) {
-              AppLogger.warning(
-                'Removing pose result ${item.recordId} from queue '
-                '(permanent $statusCode error): ${error.message}',
-                tag: _tag,
-              );
-              _db.removeFromSyncQueue(item.id);
-            } else {
-              AppLogger.error(
-                'Failed to sync pose result ${item.recordId}: ${error.message}',
-                tag: _tag,
-              );
-              _db.incrementRetryCount(item.id);
-            }
-          },
-        );
-      } catch (e) {
-        AppLogger.error(
-          'Error syncing pose result ${item.recordId}',
-          tag: _tag,
-          error: e,
-        );
-        await _db.incrementRetryCount(item.id);
-      }
-    }
-
-    return synced;
-  }
 }
 
 /// Provider for [WorkoutSyncService].
@@ -566,27 +471,19 @@ class WorkoutSyncResult {
     required this.sessionsSynced,
     required this.setsSynced,
     required this.completionsSynced,
-    required this.poseResultsSynced,
   });
 
-  factory WorkoutSyncResult.empty() => WorkoutSyncResult(
-    sessionsSynced: 0,
-    setsSynced: 0,
-    completionsSynced: 0,
-    poseResultsSynced: 0,
-  );
+  factory WorkoutSyncResult.empty() =>
+      WorkoutSyncResult(sessionsSynced: 0, setsSynced: 0, completionsSynced: 0);
 
   final int sessionsSynced;
   final int setsSynced;
   final int completionsSynced;
-  final int poseResultsSynced;
 
-  int get total =>
-      sessionsSynced + setsSynced + completionsSynced + poseResultsSynced;
+  int get total => sessionsSynced + setsSynced + completionsSynced;
 
   @override
   String toString() =>
       'WorkoutSyncResult(sessions: $sessionsSynced, '
-      'sets: $setsSynced, completions: $completionsSynced, '
-      'poseResults: $poseResultsSynced)';
+      'sets: $setsSynced, completions: $completionsSynced)';
 }

@@ -91,7 +91,6 @@ class ApiConstants {
   static const String subscribedCoaches = '/user/coaches/subscribed';
 
   // Pose Detection Endpoints
-  static const String poseResults = '/pose/results';
   static const String poseFramesUploadUrl = '/pose/uploads/frames-url';
 
   /// GET /pose/forms/:formId/download-url

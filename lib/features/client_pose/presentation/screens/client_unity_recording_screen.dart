@@ -16,7 +16,6 @@ import '../../../../providers/router_provider.dart';
 import '../../../../services/database/app_database.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../coach_pose/data/models/landmark_models.dart';
-import '../../../coach_pose/data/models/models.dart';
 import '../../../coach_pose/services/pose_detection_service.dart';
 import '../../../coach_pose/services/setup_validation_service.dart';
 import '../../../coach_pose/presentation/widgets/setup_checklist.dart';
@@ -391,42 +390,36 @@ class _ClientUnityRecordingScreenState
 
   // ── Camera stream ────────────────────────────────────────────────────────
 
-  void _startImageStream() {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return;
-    }
-    _cameraController!.startImageStream((CameraImage image) {
-      final rotationDegrees = _getCameraRotationDegrees();
-      final captured = CapturedFrame.fromCameraImage(image, rotationDegrees);
-      ref
-          .read(clientRecordingProvider(widget.exerciseId).notifier)
-          .addCapturedFrame(captured);
-    });
-  }
-
-  int _getCameraRotationDegrees() {
-    if (_cameraController == null) return 0;
-    final o = _cameraController!.description.sensorOrientation;
-    return o == 90 || o == 180 || o == 270 ? o : 0;
-  }
-
-  void _stopImageStream() {
-    if (_cameraController != null &&
-        _cameraController!.value.isStreamingImages) {
-      _cameraController!.stopImageStream();
-    }
+  // Setup phase keeps startImageStream for live setup-validation preview.
+  void _startSetupImageStream() {
+    // Reuse _startSetupStream which is already camera-based.
   }
 
   // ── Recording actions ────────────────────────────────────────────────────
 
   void _onStartRecording() {
     _isNavigatingAfterLog = false;
-    // Stop the setup validation stream before starting the recording stream
+    // Stop the setup validation stream before starting video recording
     _stopSetupStream();
     ref
         .read(clientRecordingProvider(widget.exerciseId).notifier)
         .startRecording();
-    _startImageStream();
+    // Start video recording
+    _cameraController
+        ?.startVideoRecording()
+        .then((_) {
+          AppLogger.info(
+            'Video recording started',
+            tag: 'ClientUnityRecording',
+          );
+        })
+        .catchError((Object e) {
+          AppLogger.error(
+            'Failed to start video recording',
+            tag: 'ClientUnityRecording',
+            error: e,
+          );
+        });
     // Switch Unity skeleton color to green for client's live pose
     if (_isUnityLoaded) {
       sendToUnity(
@@ -443,10 +436,18 @@ class _ClientUnityRecordingScreenState
   }
 
   Future<void> _onStopRecording() async {
-    _stopImageStream();
-    await ref
-        .read(clientRecordingProvider(widget.exerciseId).notifier)
-        .stopRecordingAndCompare();
+    try {
+      final file = await _cameraController!.stopVideoRecording();
+      ref
+          .read(clientRecordingProvider(widget.exerciseId).notifier)
+          .setRecordedVideo(file.path);
+    } catch (e) {
+      AppLogger.error(
+        'Failed to stop video recording',
+        tag: 'ClientUnityRecording',
+        error: e,
+      );
+    }
   }
 
   void _onTryAgain() {
@@ -537,7 +538,6 @@ class _ClientUnityRecordingScreenState
     WakelockPlus.disable();
     _autoStartTimer?.cancel();
     _stopSetupStream();
-    _stopImageStream();
     _cameraController?.dispose();
     _weightController.dispose();
     _repsController.dispose();
@@ -557,8 +557,23 @@ class _ClientUnityRecordingScreenState
       if (next is ClientRecordingReady && _isUnityLoaded) {
         _sendReferenceFramesToUnity();
       }
+      // When recording auto-stops (Active → Processing), stop the camera
+      // video recording and pass the file to the provider.
       if (prev is ClientRecordingActive && next is ClientRecordingProcessing) {
-        _stopImageStream();
+        _cameraController
+            ?.stopVideoRecording()
+            .then((file) {
+              ref
+                  .read(clientRecordingProvider(widget.exerciseId).notifier)
+                  .setRecordedVideo(file.path);
+            })
+            .catchError((Object e) {
+              AppLogger.error(
+                'Failed to stop video recording on auto-stop',
+                tag: 'ClientUnityRecording',
+                error: e,
+              );
+            });
       }
     });
 
