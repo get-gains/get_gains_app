@@ -241,10 +241,7 @@ class PoseDetectionService {
     try {
       final poses = await _poseDetector
           .processImage(inputImage)
-          .timeout(
-            const Duration(seconds: 10),
-            onTimeout: () => <Pose>[],
-          );
+          .timeout(const Duration(seconds: 10), onTimeout: () => <Pose>[]);
 
       if (poses.isEmpty) return null;
 

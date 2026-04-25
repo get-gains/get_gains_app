@@ -92,6 +92,11 @@ class ApiConstants {
 
   // Pose Detection Endpoints
   static const String poseResults = '/pose/results';
+  static const String poseFramesUploadUrl = '/pose/uploads/frames-url';
+
+  /// GET /pose/forms/:formId/download-url
+  static String poseFormDownloadUrl(String formId) =>
+      '/pose/forms/$formId/download-url';
 
   // Sync Endpoints
   static const String sync = '/sync';
