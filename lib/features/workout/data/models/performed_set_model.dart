@@ -18,6 +18,8 @@ abstract class PerformedSetModel with _$PerformedSetModel {
     double? weightKg,
     int? rpe,
     String? notes,
+    String? recordedFramesKey,
+    double? overallScore,
     @Default(false) bool isCompleted,
     DateTime? createdAt,
     DateTime? updatedAt,

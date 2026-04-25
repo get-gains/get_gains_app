@@ -324,6 +324,11 @@ class WorkoutSyncService {
           if (payload['weightKg'] != null) 'weightKg': payload['weightKg'],
           if (payload['rpe'] != null) 'rpe': payload['rpe'],
           if (payload['notes'] != null) 'notes': payload['notes'],
+          if (payload['recordedFramesKey'] != null)
+            'recordedFramesKey': payload['recordedFramesKey'],
+          if (payload['overallScore'] != null)
+            'overallScore': ((payload['overallScore'] as num).toDouble() * 100)
+                .round(),
         });
       } catch (e) {
         AppLogger.error(
@@ -444,10 +449,6 @@ class WorkoutSyncService {
 
     return synced;
   }
-
-  // ──────────────────────────────────────────────────────────
-  // Pose Result Sync
-  // ──────────────────────────────────────────────────────────
 }
 
 /// Provider for [WorkoutSyncService].

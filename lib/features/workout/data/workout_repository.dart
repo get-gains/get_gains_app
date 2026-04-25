@@ -618,6 +618,8 @@ class WorkoutRepository {
     double? weightKg,
     int? rpe,
     String? notes,
+    String? recordedFramesKey,
+    double? overallScore,
   }) async {
     try {
       // Resolve model IDs to local integer IDs
@@ -657,6 +659,8 @@ class WorkoutRepository {
         weightKg: weightKg,
         rpe: rpe,
         notes: notes,
+        recordedFramesKey: recordedFramesKey,
+        overallScore: overallScore,
       );
 
       // Add to sync queue
@@ -673,6 +677,9 @@ class WorkoutRepository {
             'weightKg': weightKg,
             'rpe': rpe,
             'notes': notes,
+            if (recordedFramesKey != null)
+              'recordedFramesKey': recordedFramesKey,
+            if (overallScore != null) 'overallScore': overallScore,
           }),
         ),
       );
@@ -687,6 +694,8 @@ class WorkoutRepository {
           weightKg: weightKg,
           rpe: rpe,
           notes: notes,
+          recordedFramesKey: recordedFramesKey,
+          overallScore: overallScore,
           isCompleted: true,
           createdAt: DateTime.now(),
         ),

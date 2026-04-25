@@ -233,6 +233,8 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
     int? rpe,
     String? notes,
     String? routineExerciseIdOverride,
+    String? recordedFramesKey,
+    double? overallScore,
   }) async {
     final currentState = state;
     if (currentState is! WorkoutSessionActive) return false;
@@ -257,6 +259,8 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
       weightKg: weight,
       rpe: rpe,
       notes: notes,
+      recordedFramesKey: recordedFramesKey,
+      overallScore: overallScore,
     );
 
     var didLogSuccessfully = false;

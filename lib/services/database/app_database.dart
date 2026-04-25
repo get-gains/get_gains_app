@@ -125,6 +125,8 @@ class PerformedSets extends Table {
   IntColumn get rpe => integer().nullable()();
   TextColumn get notes => text().nullable()();
   BoolColumn get isCompleted => boolean().withDefault(const Constant(false))();
+  TextColumn get recordedFramesKey => text().nullable()();
+  RealColumn get overallScore => real().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   BoolColumn get isSynced => boolean().withDefault(const Constant(false))();
@@ -156,6 +158,7 @@ class StandaloneProgramRoutines extends Table {
   )();
   IntColumn get routineId =>
       integer().references(Routines, #id, onDelete: KeyAction.cascade)();
+
   /// Day of week as a string (MONDAY, TUESDAY, ..., SUNDAY).
   TextColumn get dayOfWeek => text()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -335,7 +338,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Database schema version - increment when changing tables
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   /// Handle migrations when schema version changes
   @override
@@ -378,6 +381,15 @@ class AppDatabase extends _$AppDatabase {
           // Drop and recreate the table (safe since it's a local cache)
           await m.drop(standaloneProgramRoutines);
           await m.createTable(standaloneProgramRoutines);
+        }
+        if (from < 7) {
+          // v7: Add pose-related columns to performed sets
+          await m.addColumn(performedSets, performedSets.recordedFramesKey);
+          await m.addColumn(performedSets, performedSets.overallScore);
+          // Drop stale pose_results sync-queue rows (endpoint removed)
+          await customStatement(
+            "DELETE FROM sync_queue WHERE entity_table = 'pose_results'",
+          );
         }
       },
       beforeOpen: (details) async {
@@ -728,6 +740,8 @@ class AppDatabase extends _$AppDatabase {
     required int repsCompleted,
     double? weightKg,
     int? rpe,
+    String? recordedFramesKey,
+    double? overallScore,
     String? notes,
   }) {
     return into(performedSets).insert(
@@ -739,6 +753,8 @@ class AppDatabase extends _$AppDatabase {
         weightKg: Value(weightKg),
         rpe: Value(rpe),
         notes: Value(notes),
+        recordedFramesKey: Value(recordedFramesKey),
+        overallScore: Value(overallScore),
         isCompleted: const Value(true),
       ),
     );

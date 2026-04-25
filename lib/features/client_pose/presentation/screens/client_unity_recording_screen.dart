@@ -1891,6 +1891,8 @@ class _ClientUnityRecordingScreenState
             reps: reps,
             weight: weight,
             routineExerciseIdOverride: routineExerciseIdForLookup,
+            recordedFramesKey: state.recordedFramesKey,
+            overallScore: state.result.overallScore,
           );
     } catch (e) {
       AppLogger.warning('Failed to log set: $e', tag: 'ClientUnityRecording');

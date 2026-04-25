@@ -179,7 +179,10 @@ class ExerciseLogNotifier extends _$ExerciseLogNotifier {
   }
 
   /// Complete the current set and save to repository
-  Future<void> completeCurrentSet() async {
+  Future<void> completeCurrentSet({
+    String? recordedFramesKey,
+    double? overallScore,
+  }) async {
     if (state == null) return;
 
     final currentIndex = state!.currentSetIndex;
@@ -200,6 +203,8 @@ class ExerciseLogNotifier extends _$ExerciseLogNotifier {
       // Always log against this card's exercise, not whatever
       // exercise index is currently selected in session state.
       routineExerciseIdOverride: state!.routineExercise.id,
+      recordedFramesKey: recordedFramesKey,
+      overallScore: overallScore,
     );
 
     // Mark as completed
