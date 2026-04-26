@@ -12,6 +12,7 @@ import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/models/exercise_form_model.dart';
 import '../../services/pose_detection_service.dart';
+import '../providers/exercise_detail_provider.dart';
 import '../providers/form_recording_provider.dart';
 import '../widgets/recording_controls.dart';
 import '../widgets/setup_checklist.dart';
@@ -342,7 +343,11 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
       previous,
       next,
     ) {
-      if (next.phase == RecordingPhase.complete) {
+      final didCompleteUpload =
+          previous?.phase != RecordingPhase.complete &&
+          next.phase == RecordingPhase.complete;
+      if (didCompleteUpload) {
+        ref.invalidate(exerciseDetailProvider(widget.exerciseId));
         _showSuccess(context, isDark);
       }
       // When countdown finishes and recording starts:
@@ -393,9 +398,7 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
               );
               ref
                   .read(formRecordingProvider(widget.exerciseId).notifier)
-                  .setRecordingError(
-                    'Recording timed out. Please try again.',
-                  );
+                  .setRecordingError('Recording timed out. Please try again.');
             });
       }
     });
@@ -617,8 +620,12 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
   Future<void> _confirmExit(BuildContext context) async {
     final state = ref.read(formRecordingProvider(widget.exerciseId));
 
+    if (state.phase == RecordingPhase.complete) {
+      context.pop(state.uploadedForm?.id);
+      return;
+    }
+
     if (state.phase == RecordingPhase.idle ||
-        state.phase == RecordingPhase.complete ||
         state.phase == RecordingPhase.error) {
       context.pop();
       return;
@@ -768,7 +775,7 @@ class _CompleteOverlay extends StatelessWidget {
             ],
             const SizedBox(height: 32),
             ElevatedButton(
-              onPressed: () => context.pop(),
+              onPressed: () => context.pop(form?.id),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryDark,
                 foregroundColor: Colors.white,

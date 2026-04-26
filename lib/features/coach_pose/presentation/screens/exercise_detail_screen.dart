@@ -93,10 +93,25 @@ class _ExerciseDetailScreenState extends ConsumerState<ExerciseDetailScreen>
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          context.push(
+        onPressed: () async {
+          final uploadedFormId = await context.push<String>(
             AppRoutes.recordForm.replaceFirst(':id', widget.exerciseId),
           );
+
+          if (!mounted || uploadedFormId == null) {
+            return;
+          }
+
+          final forms = ref
+              .read(exerciseDetailProvider(widget.exerciseId))
+              .forms;
+          final alreadyVisible = forms.any((form) => form.id == uploadedFormId);
+
+          if (!alreadyVisible) {
+            await ref
+                .read(exerciseDetailProvider(widget.exerciseId).notifier)
+                .refresh();
+          }
         },
         backgroundColor: isDark
             ? AppColors.primaryDark
