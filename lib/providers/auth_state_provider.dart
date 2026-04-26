@@ -125,7 +125,9 @@ class AuthStateNotifier extends _$AuthStateNotifier {
           final refreshed = await apiClient.tryRefreshToken();
           if (!refreshed) {
             // ignore: avoid_print
-            print('[AuthState] Token refresh failed, checking offline credentials');
+            print(
+              '[AuthState] Token refresh failed, checking offline credentials',
+            );
 
             // Offline-first: allow degraded mode if we still have
             // cached user info — the token will refresh on next

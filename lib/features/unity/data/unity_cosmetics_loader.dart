@@ -54,10 +54,10 @@ class UnityCosmeticsLoader {
 
         final assetRef = cosmeticRows.first.unityAssetRef;
         AppLogger.debug(
-          'Workout cosmetics: category=${row.category} assetRef=$assetRef',
+          'Workout cosmetics: assetRef=$assetRef',
           tag: 'UnityCosmeticsLoader',
         );
-        cosmetics.add({'category': row.category, 'assetRef': assetRef});
+        cosmetics.add({'category': '', 'assetRef': assetRef});
       }
 
       final payload = jsonEncode({'cosmetics': cosmetics});

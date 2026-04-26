@@ -7,6 +7,7 @@ import '../../../core/utils/logger.dart';
 import '../../../core/utils/result.dart';
 import '../../../services/api/api_client.dart';
 import '../../../services/database/app_database.dart';
+import 'cosmetics_api_json.dart';
 import 'models/cosmetic_model.dart';
 
 part 'shop_repository.g.dart';
@@ -79,7 +80,7 @@ class ShopRepository {
               description: row.description,
               tier: row.tier,
               coinCost: row.coinCost,
-              category: row.category,
+              category: '',
               previewImageUrl: row.previewImageUrl,
               unityAssetRef: row.unityAssetRef,
               status: row.status,
@@ -125,7 +126,9 @@ class ShopRepository {
         try {
           final itemsList = (data['items'] as List)
               .map(
-                (item) => CosmeticModel.fromJson(item as Map<String, dynamic>),
+                (item) => CosmeticModel.fromJson(
+                  sanitizeShopCosmeticJson(item as Map<String, dynamic>),
+                ),
               )
               .toList();
 
@@ -147,7 +150,6 @@ class ShopRepository {
                     description: Value(cosmetic.description),
                     tier: cosmetic.tier,
                     coinCost: cosmetic.coinCost,
-                    category: cosmetic.category,
                     previewImageUrl: cosmetic.previewImageUrl,
                     unityAssetRef: cosmetic.unityAssetRef,
                     status: cosmetic.status,

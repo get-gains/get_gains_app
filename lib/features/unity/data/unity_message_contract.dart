@@ -77,11 +77,11 @@ class UnityMessageContract {
 
   /// JSON payload built from [defaultPoseDebugSwapArmLandmarks], etc.
   static String defaultPoseDebugOptionsPayload() => jsonEncode({
-        'swapArmLandmarks': defaultPoseDebugSwapArmLandmarks,
-        'forceShowStickFigure': defaultPoseDebugForceStickFigure,
-        'invertArmDepthZ': defaultPoseDebugInvertArmDepthZ,
-        'invertHeadDepthZ': defaultPoseDebugInvertHeadDepthZ,
-      });
+    'swapArmLandmarks': defaultPoseDebugSwapArmLandmarks,
+    'forceShowStickFigure': defaultPoseDebugForceStickFigure,
+    'invertArmDepthZ': defaultPoseDebugInvertArmDepthZ,
+    'invertHeadDepthZ': defaultPoseDebugInvertHeadDepthZ,
+  });
 
   // ── Events from Unity ────────────────────────────────────────────
 

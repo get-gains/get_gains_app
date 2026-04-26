@@ -64,8 +64,7 @@ class _CosmeticPreviewState extends ConsumerState<CosmeticPreview> {
     // Reload Unity cosmetics only when the equipped set actually changes.
     // Compare by cosmeticId to avoid false positives from DateTime.now() in
     // InventoryLoaded.equippedCosmetics getter.
-    final oldIds =
-        oldWidget.equippedCosmetics.map((e) => e.cosmeticId).toSet();
+    final oldIds = oldWidget.equippedCosmetics.map((e) => e.cosmeticId).toSet();
     final newIds = widget.equippedCosmetics.map((e) => e.cosmeticId).toSet();
     if (!setEquals(oldIds, newIds)) {
       AppLogger.debug(
@@ -113,8 +112,9 @@ class _CosmeticPreviewState extends ConsumerState<CosmeticPreview> {
               if (!_isUnityLoaded)
                 Positioned.fill(
                   child: Container(
-                    color:
-                        isDark ? AppColors.surface1Dark : AppColors.surface1Light,
+                    color: isDark
+                        ? AppColors.surface1Dark
+                        : AppColors.surface1Light,
                     child: Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
