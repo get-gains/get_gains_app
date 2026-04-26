@@ -329,7 +329,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                       const SizedBox(height: 12),
 
-                      // Leaderboard quick action
+                      // Leaderboard & Missions
                       Row(
                         children: [
                           Expanded(
@@ -348,6 +348,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 end: Alignment.bottomRight,
                               ),
                               onTap: () => context.push(AppRoutes.leaderboard),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: QuickActionCard(
+                              icon: Icons.flag_rounded,
+                              title: 'Missions',
+                              subtitle: 'Challenges & rewards',
+                              gradient: LinearGradient(
+                                colors: [
+                                  const Color(0xFFF59E0B),
+                                  const Color(
+                                    0xFFF59E0B,
+                                  ).withValues(alpha: 0.7),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              onTap: () => context.push(AppRoutes.missions),
                             ),
                           ),
                         ],
