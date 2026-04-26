@@ -93,6 +93,7 @@ class PoseSkeletonPainter extends CustomPainter {
     final landmarks = frame.landmarks;
     if (landmarks.isEmpty) return;
 
+    // --- Pass 1: centroid + z-scale for 3-D projection ---
     double cx = 0, cy = 0, cz = 0;
     double minX = 1, maxX = 0, minZ = 1, maxZ = -1;
     int n = 0;
@@ -115,8 +116,32 @@ class PoseSkeletonPainter extends CustomPainter {
     final rangeZ = max(maxZ - minZ, 0.01);
     final zScale = rangeX / rangeZ;
 
-    double toSx(double nx) => nx * size.width;
-    double toSy(double ny) => ny * size.height;
+    // --- Pass 2: project every landmark → bounding box in projected space ---
+    // This ensures the skeleton fills the canvas regardless of whether the
+    // recording was done on a landscape webcam (laptop) or portrait phone.
+    double pMinX = double.infinity, pMaxX = double.negativeInfinity;
+    double pMinY = double.infinity, pMaxY = double.negativeInfinity;
+    for (final p in landmarks.values) {
+      final (px, py) = _project(p.x, p.y, p.z, cx, cy, cz, zScale);
+      if (px < pMinX) pMinX = px;
+      if (px > pMaxX) pMaxX = px;
+      if (py < pMinY) pMinY = py;
+      if (py > pMaxY) pMaxY = py;
+    }
+
+    // 8 % padding so extremities (feet/hands) don't touch the edge.
+    const pad = 0.08;
+    final pRangeX = (pMaxX - pMinX).clamp(0.01, 2.0);
+    final pRangeY = (pMaxY - pMinY).clamp(0.01, 2.0);
+    final bMinX = pMinX - pad * pRangeX;
+    final bMaxX = pMaxX + pad * pRangeX;
+    final bMinY = pMinY - pad * pRangeY;
+    final bMaxY = pMaxY + pad * pRangeY;
+    final bRangeX = bMaxX - bMinX;
+    final bRangeY = bMaxY - bMinY;
+
+    double toSx(double nx) => ((nx - bMinX) / bRangeX) * size.width;
+    double toSy(double ny) => ((ny - bMinY) / bRangeY) * size.height;
 
     // Draw bones
     for (final (from, to) in _skeletonBones) {
