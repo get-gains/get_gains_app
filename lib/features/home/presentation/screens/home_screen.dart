@@ -398,10 +398,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 subtitle: 'Programs, exercises & clients',
                                 gradient: LinearGradient(
                                   colors: [
-                                    const Color(0xFF3B82F6),
-                                    const Color(
-                                      0xFF3B82F6,
-                                    ).withValues(alpha: 0.7),
+                                    AppColors.coach,
+                                    AppColors.coachMuted,
                                   ],
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,

@@ -119,6 +119,10 @@ class AppColors {
   static const Color infoMuted = Color(0xFF1E40AF);
   static const Color infoLight = Color(0xFFDBEAFE);
 
+  // Coach Tools
+  static const Color coach = Color(0xFF0F766E);
+  static const Color coachMuted = Color(0xFF115E59);
+
   // ============================================================
   // CHART COLORS
   // ============================================================
