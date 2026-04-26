@@ -259,18 +259,40 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
   }
 
   Future<void> _stopRecording() async {
-    // Stop video recording and pass the file to the provider
+    // Stop video recording and pass the file to the provider.
+    // Timeout guards against Android MPEG4Writer hanging indefinitely.
     try {
-      final file = await _cameraController!.stopVideoRecording();
+      final file = await _cameraController!.stopVideoRecording().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          AppLogger.error(
+            'stopVideoRecording timed out after 10s',
+            tag: 'FormRecording',
+          );
+          throw TimeoutException('stopVideoRecording timed out');
+        },
+      );
       ref
           .read(formRecordingProvider(widget.exerciseId).notifier)
           .setRecordedVideo(file.path);
+    } on TimeoutException catch (e) {
+      AppLogger.error(
+        'stopVideoRecording timed out',
+        tag: 'FormRecording',
+        error: e,
+      );
+      ref
+          .read(formRecordingProvider(widget.exerciseId).notifier)
+          .setRecordingError('Recording timed out. Please try again.');
     } catch (e) {
       AppLogger.error(
         'Failed to stop video recording',
         tag: 'FormRecording',
         error: e,
       );
+      ref
+          .read(formRecordingProvider(widget.exerciseId).notifier)
+          .setRecordingError('Could not finalize recording. Please try again.');
     }
   }
 
@@ -342,11 +364,22 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
       }
       // When the provider auto-stops recording (transitions to processing),
       // we need to stop the video recording and pass the file path.
+      // Timeout guards against Android MPEG4Writer hanging indefinitely.
       if (previous?.phase == RecordingPhase.recording &&
           next.phase == RecordingPhase.processing &&
           next.videoFilePath == null) {
         _cameraController
             ?.stopVideoRecording()
+            .timeout(
+              const Duration(seconds: 10),
+              onTimeout: () {
+                AppLogger.error(
+                  'stopVideoRecording (auto-stop) timed out after 10s',
+                  tag: 'FormRecording',
+                );
+                throw TimeoutException('stopVideoRecording timed out');
+              },
+            )
             .then((file) {
               ref
                   .read(formRecordingProvider(widget.exerciseId).notifier)
@@ -358,6 +391,11 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
                 tag: 'FormRecording',
                 error: e,
               );
+              ref
+                  .read(formRecordingProvider(widget.exerciseId).notifier)
+                  .setRecordingError(
+                    'Recording timed out. Please try again.',
+                  );
             });
       }
     });
@@ -459,17 +497,8 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Camera
-        ClipRect(
-          child: FittedBox(
-            fit: BoxFit.cover,
-            child: SizedBox(
-              width: _cameraController!.value.previewSize!.height,
-              height: _cameraController!.value.previewSize!.width,
-              child: CameraPreview(_cameraController!),
-            ),
-          ),
-        ),
+        // Camera — CameraPreview manages its own aspect ratio internally
+        CameraPreview(_cameraController!),
 
         // Setup checklist overlay
         if (state.phase == RecordingPhase.setupGuidance)

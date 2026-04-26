@@ -70,6 +70,7 @@ class ClientRecordingActive extends ClientRecordingState {
     required this.recordingDurationMs,
     required this.referenceDurationMs,
     this.coachName,
+    this.autoStopRequested = false,
   });
 
   final String exerciseName;
@@ -83,6 +84,7 @@ class ClientRecordingActive extends ClientRecordingState {
   final int recordingDurationMs;
   final int referenceDurationMs;
   final String? coachName;
+  final bool autoStopRequested;
 }
 
 /// Recording stopped, processing comparison
@@ -350,21 +352,37 @@ class ClientRecording extends _$ClientRecording {
         recordingDurationMs: elapsedMs,
         referenceDurationMs: _referenceDurationMs,
         coachName: active.coachName,
+        autoStopRequested: active.autoStopRequested,
       );
     });
   }
 
-  /// Signal to stop recording. The screen detects the Active → Processing
-  /// transition, calls [CameraController.stopVideoRecording], then passes
-  /// the file path via [setRecordedVideo].
+  /// Signal to stop recording.
+  ///
+  /// The screen owns [CameraController] and listens for this flag to call
+  /// `stopVideoRecording()` exactly once, then forwards the output via
+  /// [setRecordedVideo].
   void stopRecording() {
     if (state is! ClientRecordingActive) return;
+    final active = state as ClientRecordingActive;
+    if (active.autoStopRequested) return;
+
     _elapsedTimer?.cancel();
     _elapsedTimer = null;
 
-    state = const ClientRecordingProcessing(
-      progress: 0.0,
-      message: 'Stopping recording...',
+    state = ClientRecordingActive(
+      exerciseName: active.exerciseName,
+      formId: active.formId,
+      cameraAngle: active.cameraAngle,
+      referenceLandmarkFrames: active.referenceLandmarkFrames,
+      referenceFeatureFrames: active.referenceFeatureFrames,
+      clientLandmarkFrames: active.clientLandmarkFrames,
+      clientFeatureFrames: active.clientFeatureFrames,
+      repCount: active.repCount,
+      recordingDurationMs: active.recordingDurationMs,
+      referenceDurationMs: active.referenceDurationMs,
+      coachName: active.coachName,
+      autoStopRequested: true,
     );
   }
 
@@ -387,6 +405,11 @@ class ClientRecording extends _$ClientRecording {
     );
 
     _processVideo(durationMs);
+  }
+
+  /// Called by the screen if camera stop fails.
+  void setRecordingError(String message) {
+    state = ClientRecordingError(message);
   }
 
   /// Legacy entry point — stop recording and run comparison directly.

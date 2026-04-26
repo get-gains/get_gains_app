@@ -38,6 +38,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
   bool _isCameraInitialized = false;
   bool _isCameraError = false;
   bool _isFlipping = false;
+  bool _isStoppingRecording = false;
 
   // ── Guidance state ───────────────────────────────────────────────────
   bool _preBriefDismissed = false;
@@ -109,17 +110,28 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
   }
 
   Future<void> _onStopRecording() async {
+    if (_isStoppingRecording) return;
+    _isStoppingRecording = true;
+
+    final notifier = ref.read(
+      clientRecordingProvider(widget.exerciseId).notifier,
+    );
+    notifier.stopRecording();
+
     try {
       final file = await _cameraController!.stopVideoRecording();
-      ref
-          .read(clientRecordingProvider(widget.exerciseId).notifier)
-          .setRecordedVideo(file.path);
+      notifier.setRecordedVideo(file.path);
     } catch (e) {
       AppLogger.error(
         'Failed to stop video recording',
         tag: 'ClientRecording',
         error: e,
       );
+      notifier.setRecordingError(
+        'Could not finalize recording. Please try again.',
+      );
+    } finally {
+      _isStoppingRecording = false;
     }
   }
 
@@ -194,24 +206,15 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final state = ref.watch(clientRecordingProvider(widget.exerciseId));
 
-    // When recording auto-stops (Active → Processing), stop the camera
-    // video recording and pass the file to the provider.
+    // When auto-stop is requested by the provider, use the unified stop flow.
     ref.listen(clientRecordingProvider(widget.exerciseId), (prev, next) {
-      if (prev is ClientRecordingActive && next is ClientRecordingProcessing) {
-        _cameraController
-            ?.stopVideoRecording()
-            .then((file) {
-              ref
-                  .read(clientRecordingProvider(widget.exerciseId).notifier)
-                  .setRecordedVideo(file.path);
-            })
-            .catchError((Object e) {
-              AppLogger.error(
-                'Failed to stop video recording on auto-stop',
-                tag: 'ClientRecording',
-                error: e,
-              );
-            });
+      final autoStopTriggered =
+          next is ClientRecordingActive &&
+          next.autoStopRequested &&
+          (prev is! ClientRecordingActive || !prev.autoStopRequested);
+
+      if (autoStopTriggered) {
+        unawaited(_onStopRecording());
       }
     });
 

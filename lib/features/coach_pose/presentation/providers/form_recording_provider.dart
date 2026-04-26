@@ -323,8 +323,19 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
 
   /// Called by the screen after [CameraController.stopVideoRecording] returns.
   /// Transitions to processing and kicks off the video → ffmpeg → MLKit pipeline.
+  ///
+  /// Accepts both [RecordingPhase.recording] and [RecordingPhase.processing]
+  /// because [stopRecording] may have already flipped the phase to processing
+  /// (to show the spinner) before the stopVideoRecording future resolves.
   void setRecordedVideo(String path) {
-    if (state.phase != RecordingPhase.recording) return;
+    // Allow recording OR processing phase — stopRecording() transitions to
+    // processing immediately so by the time the camera future resolves the
+    // phase is already processing.
+    if (state.phase != RecordingPhase.recording &&
+        state.phase != RecordingPhase.processing) return;
+    // Idempotency: if we already have a video path, pipeline already started.
+    if (state.videoFilePath != null) return;
+
     _recordingTimer?.cancel();
     _elapsedTimer?.cancel();
 
@@ -360,6 +371,14 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
       phase: RecordingPhase.processing,
       processingProgress: 0.0,
       processingMessage: 'Stopping recording...',
+    );
+  }
+
+  /// Called by the screen if [CameraController.stopVideoRecording] throws or times out.
+  void setRecordingError(String message) {
+    state = state.copyWith(
+      phase: RecordingPhase.error,
+      errorMessage: message,
     );
   }
 
