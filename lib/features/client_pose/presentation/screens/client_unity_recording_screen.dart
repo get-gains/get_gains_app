@@ -73,6 +73,7 @@ class _ClientUnityRecordingScreenState
   bool _isCameraInitialized = false;
   bool _isCameraError = false;
   bool _isFlipping = false;
+  bool _isStoppingRecording = false;
   int _frameSkipCount = 0; // for setup validation stream throttle
 
   // ── Unity ───────────────────────────────────────────────────────────────
@@ -436,17 +437,28 @@ class _ClientUnityRecordingScreenState
   }
 
   Future<void> _onStopRecording() async {
+    if (_isStoppingRecording) return;
+    _isStoppingRecording = true;
+
+    final notifier = ref.read(
+      clientRecordingProvider(widget.exerciseId).notifier,
+    );
+    notifier.stopRecording();
+
     try {
       final file = await _cameraController!.stopVideoRecording();
-      ref
-          .read(clientRecordingProvider(widget.exerciseId).notifier)
-          .setRecordedVideo(file.path);
+      notifier.setRecordedVideo(file.path);
     } catch (e) {
       AppLogger.error(
         'Failed to stop video recording',
         tag: 'ClientUnityRecording',
         error: e,
       );
+      notifier.setRecordingError(
+        'Could not finalize recording. Please try again.',
+      );
+    } finally {
+      _isStoppingRecording = false;
     }
   }
 
@@ -557,23 +569,14 @@ class _ClientUnityRecordingScreenState
       if (next is ClientRecordingReady && _isUnityLoaded) {
         _sendReferenceFramesToUnity();
       }
-      // When recording auto-stops (Active → Processing), stop the camera
-      // video recording and pass the file to the provider.
-      if (prev is ClientRecordingActive && next is ClientRecordingProcessing) {
-        _cameraController
-            ?.stopVideoRecording()
-            .then((file) {
-              ref
-                  .read(clientRecordingProvider(widget.exerciseId).notifier)
-                  .setRecordedVideo(file.path);
-            })
-            .catchError((Object e) {
-              AppLogger.error(
-                'Failed to stop video recording on auto-stop',
-                tag: 'ClientUnityRecording',
-                error: e,
-              );
-            });
+
+      final autoStopTriggered =
+          next is ClientRecordingActive &&
+          next.autoStopRequested &&
+          (prev is! ClientRecordingActive || !prev.autoStopRequested);
+
+      if (autoStopTriggered) {
+        unawaited(_onStopRecording());
       }
     });
 
