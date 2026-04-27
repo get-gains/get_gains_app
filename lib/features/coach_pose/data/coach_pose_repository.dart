@@ -27,12 +27,14 @@ class CoachPoseRepository {
   Future<Result<List<ExerciseModel>, AppError>> getExercises({
     String? search,
     String? muscleGroup,
+    bool onlyMine = false,
     int limit = 50,
     int offset = 0,
   }) async {
     final queryParams = <String, dynamic>{'limit': limit, 'offset': offset};
     if (search != null && search.isNotEmpty) queryParams['search'] = search;
     if (muscleGroup != null) queryParams['muscleGroup'] = muscleGroup;
+    if (onlyMine) queryParams['onlyMine'] = 'true';
 
     final result = await _apiClient.get<Map<String, dynamic>>(
       '/workout/exercises',
@@ -121,20 +123,21 @@ class CoachPoseRepository {
     final Map<String, dynamic> data = {};
     if (name != null) data['name'] = name;
     if (description != null) data['description'] = description;
-    
+
     if (primaryMuscleGroup != null || targetMuscles != null) {
       final normalizedTargetMuscles = <String>{
         if (primaryMuscleGroup != null) primaryMuscleGroup.toUpperCase(),
         ...(targetMuscles ?? []).map((m) => m.toUpperCase()),
       }.toList(growable: false);
-      
+
       data['target_muscles'] = normalizedTargetMuscles;
-      
+
       // Backward compatibility
-      if (primaryMuscleGroup != null) data['primaryMuscleGroup'] = primaryMuscleGroup;
+      if (primaryMuscleGroup != null)
+        data['primaryMuscleGroup'] = primaryMuscleGroup;
       data['targetMuscles'] = normalizedTargetMuscles;
     }
-    
+
     if (equipmentNeeded != null) data['equipmentNeeded'] = equipmentNeeded;
 
     final result = await _apiClient.patch<Map<String, dynamic>>(

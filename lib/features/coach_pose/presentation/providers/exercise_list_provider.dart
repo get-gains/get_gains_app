@@ -67,6 +67,7 @@ class ExerciseListNotifier extends _$ExerciseListNotifier {
     final result = await repo.getExercises(
       search: state.searchQuery.isEmpty ? null : state.searchQuery,
       muscleGroup: state.selectedMuscleGroup?.name.toUpperCase(),
+      onlyMine: true,
       limit: _pageSize,
       offset: 0,
     );
@@ -100,6 +101,7 @@ class ExerciseListNotifier extends _$ExerciseListNotifier {
     final result = await repo.getExercises(
       search: state.searchQuery.isEmpty ? null : state.searchQuery,
       muscleGroup: state.selectedMuscleGroup?.name.toUpperCase(),
+      onlyMine: true,
       limit: _pageSize,
       offset: state.exercises.length,
     );

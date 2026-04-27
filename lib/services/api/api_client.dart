@@ -70,18 +70,18 @@ class ApiClient {
       },
     );
 
-    // Add interceptors in order (executed in LIFO order for requests, FIFO for responses)
+    // Add interceptors in order (FIFO for requests, LIFO for responses/errors)
     _dio.interceptors.addAll([
-      // Logging (only in debug)
-      if (kDebugMode) LoggingInterceptor(),
-      // Retry logic
-      RetryInterceptor(),
-      // Auth (added last so it runs first on requests)
+      // Auth (runs first on requests — attaches token before logging)
       AuthInterceptor(
         secureStorage: _secureStorage,
         onTokenRefresh: _refreshToken,
-        onAuthFailure: _onAuthFailure,
+        onAuthFailure: () => _onAuthFailure(),
       ),
+      // Retry logic
+      RetryInterceptor(),
+      // Logging (only in debug — runs last so it captures final headers)
+      if (kDebugMode) LoggingInterceptor(),
     ]);
   }
 
