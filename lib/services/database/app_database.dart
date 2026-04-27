@@ -583,10 +583,13 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Get routine exercise by remote ID
-  Future<RoutineExercise?> getRoutineExerciseByRemoteId(String remoteId) {
-    return (select(
-      routineExercises,
-    )..where((re) => re.remoteId.equals(remoteId))).getSingleOrNull();
+  Future<RoutineExercise?> getRoutineExerciseByRemoteId(String remoteId) async {
+    final results =
+        await (select(routineExercises)
+              ..where((re) => re.remoteId.equals(remoteId))
+              ..limit(1))
+            .get();
+    return results.isEmpty ? null : results.first;
   }
 
   /// Insert or update routine exercise
@@ -671,10 +674,13 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Get workout session by remote ID (server CUID)
-  Future<WorkoutSession?> getWorkoutSessionByRemoteId(String remoteId) {
-    return (select(
-      workoutSessions,
-    )..where((ws) => ws.remoteId.equals(remoteId))).getSingleOrNull();
+  Future<WorkoutSession?> getWorkoutSessionByRemoteId(String remoteId) async {
+    final results =
+        await (select(workoutSessions)
+              ..where((ws) => ws.remoteId.equals(remoteId))
+              ..limit(1))
+            .get();
+    return results.isEmpty ? null : results.first;
   }
 
   /// Start a new workout session

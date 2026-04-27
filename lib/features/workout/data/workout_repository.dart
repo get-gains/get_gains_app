@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/constants/api_constants.dart';
+import '../../../core/errors/api_error_codes.dart';
 import '../../../core/utils/app_error.dart';
 import '../../../core/utils/logger.dart';
 import '../../../core/utils/result.dart';
@@ -325,13 +326,79 @@ class WorkoutRepository {
 
   // ============== Workout Session Operations ==============
 
-  /// Get active workout session for a user
+  /// Get active workout session for a user.
+  ///
+  /// If the session has no [remoteId] yet (server sync pending), attempts
+  /// an eager sync so that the model's `id` resolves to the server ID
+  /// before the caller navigates to recording/upload screens.
   Future<Result<WorkoutSessionModel?, AppError>> getActiveSession(
     String userId,
   ) async {
     try {
       final session = await _db.getActiveWorkoutSession(userId);
       if (session == null) return const Success(null);
+
+      // Eagerly sync if remoteId is missing so pose-frame uploads work.
+      if (session.remoteId == null) {
+        // Resolve the assigned_program_routine.id for the server request.
+        // New sessions store it in assignedProgramId; legacy sessions
+        // created before the fix may only have routineId set.
+        String? programRoutineId = session.assignedProgramId;
+        if (programRoutineId == null && session.routineId != null) {
+          final routine = await _db.getRoutineById(session.routineId!);
+          programRoutineId = routine?.remoteId;
+        }
+
+        if (programRoutineId != null) {
+          try {
+            final serverResult = await _apiClient.post<Map<String, dynamic>>(
+              ApiConstants.workoutSessions,
+              data: {'assignedProgramRoutineId': programRoutineId},
+            );
+            await serverResult.when(
+              success: (data) async {
+                final sessionJson = data['session'] as Map<String, dynamic>;
+                final remoteId = sessionJson['id'] as String;
+                await _db.updateWorkoutSessionRemoteId(session.id, remoteId);
+                AppLogger.info(
+                  'Eagerly synced resumed session ${session.id} → $remoteId',
+                  tag: 'WorkoutRepo',
+                );
+              },
+              failure: (error) async {
+                if (error.code == ApiErrorCode.workoutSessionAlreadyActive) {
+                  final activeResult = await _apiClient
+                      .get<Map<String, dynamic>>(
+                        '${ApiConstants.workoutSessions}/active',
+                      );
+                  final activeData = activeResult.valueOrNull;
+                  final activeSession =
+                      activeData?['session'] as Map<String, dynamic>?;
+                  if (activeSession != null) {
+                    final remoteId = activeSession['id'] as String;
+                    await _db.updateWorkoutSessionRemoteId(
+                      session.id,
+                      remoteId,
+                    );
+                    AppLogger.info(
+                      'Resolved active session on resume ${session.id} → $remoteId',
+                      tag: 'WorkoutRepo',
+                    );
+                  }
+                }
+              },
+            );
+          } catch (_) {
+            // Best-effort — sync queue will handle it eventually
+          }
+        }
+        // Re-fetch so the model picks up the newly set remoteId
+        final updated = await _db.getWorkoutSessionById(session.id);
+        if (updated != null) {
+          final sets = await _db.getPerformedSets(updated.id);
+          return Success(await _mapWorkoutSession(updated, sets));
+        }
+      }
 
       final sets = await _db.getPerformedSets(session.id);
       return Success(await _mapWorkoutSession(session, sets));
@@ -519,23 +586,85 @@ class WorkoutRepository {
         WorkoutSessionsCompanion.insert(
           userId: userId,
           routineId: Value(localRoutineId),
-          assignedProgramId: Value(assignedProgramId),
+          // Store the assigned_program_routine.id (routineModelId) so that
+          // background sync and _autoCreateSession can create the server
+          // session with the correct identifier.
+          assignedProgramId: Value(routineModelId),
           startedAt: DateTime.now(),
         ),
       );
 
-      // Add to sync queue so the session is created on the server
-      await _db.addToSyncQueue(
-        SyncQueueCompanion.insert(
-          entityTable: 'workout_sessions',
-          recordId: sessionId.toString(),
-          operation: 'create',
-          payload: jsonEncode({
-            'sessionId': sessionId,
-            'assignedProgramId': assignedProgramId,
-          }),
-        ),
-      );
+      // Eagerly sync the session to the server so that remoteId is
+      // available before the user navigates to the recording screen.
+      // If this fails (e.g. offline), fall back to the async sync queue.
+      // NOTE: routineModelId is the assigned_program_routine.id from the
+      // server's getPrograms response — exactly what the server expects.
+      bool syncedEagerly = false;
+      if (routineModelId != null) {
+        try {
+          final serverResult = await _apiClient.post<Map<String, dynamic>>(
+            ApiConstants.workoutSessions,
+            data: {'assignedProgramRoutineId': routineModelId},
+          );
+          await serverResult.when(
+            success: (data) async {
+              final sessionJson = data['session'] as Map<String, dynamic>;
+              final remoteId = sessionJson['id'] as String;
+              await _db.updateWorkoutSessionRemoteId(sessionId, remoteId);
+              syncedEagerly = true;
+              AppLogger.info(
+                'Eagerly synced session $sessionId → $remoteId',
+                tag: 'WorkoutRepo',
+              );
+            },
+            failure: (error) async {
+              // 409 — server already has an active session; fetch its ID
+              if (error.code == ApiErrorCode.workoutSessionAlreadyActive) {
+                final activeResult = await _apiClient.get<Map<String, dynamic>>(
+                  '${ApiConstants.workoutSessions}/active',
+                );
+                final activeData = activeResult.valueOrNull;
+                final activeSession =
+                    activeData?['session'] as Map<String, dynamic>?;
+                if (activeSession != null) {
+                  final remoteId = activeSession['id'] as String;
+                  await _db.updateWorkoutSessionRemoteId(sessionId, remoteId);
+                  syncedEagerly = true;
+                  AppLogger.info(
+                    'Resolved existing active session $sessionId → $remoteId',
+                    tag: 'WorkoutRepo',
+                  );
+                }
+              } else {
+                AppLogger.warning(
+                  'Eager session sync failed, will retry via queue: ${error.message}',
+                  tag: 'WorkoutRepo',
+                );
+              }
+            },
+          );
+        } catch (e) {
+          AppLogger.warning(
+            'Eager session sync threw, will retry via queue: $e',
+            tag: 'WorkoutRepo',
+          );
+        }
+      }
+
+      // If eager sync failed, enqueue for deferred background sync
+      if (!syncedEagerly) {
+        await _db.addToSyncQueue(
+          SyncQueueCompanion.insert(
+            entityTable: 'workout_sessions',
+            recordId: sessionId.toString(),
+            operation: 'create',
+            payload: jsonEncode({
+              'sessionId': sessionId,
+              'assignedProgramRoutineId': routineModelId,
+            }),
+          ),
+        );
+      }
 
       final session = await _db.getWorkoutSessionById(sessionId);
       if (session == null) {

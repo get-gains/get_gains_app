@@ -131,7 +131,7 @@ class WorkoutSyncService {
         ApiConstants.workoutSessions,
         data: {
           if (session.assignedProgramId != null)
-            'assignedProgramId': session.assignedProgramId,
+            'assignedProgramRoutineId': session.assignedProgramId,
         },
       );
 
@@ -215,8 +215,8 @@ class WorkoutSyncService {
         final result = await _apiClient.post<Map<String, dynamic>>(
           ApiConstants.workoutSessions,
           data: {
-            if (payload['assignedProgramId'] != null)
-              'assignedProgramId': payload['assignedProgramId'],
+            if (payload['assignedProgramRoutineId'] != null)
+              'assignedProgramRoutineId': payload['assignedProgramRoutineId'],
           },
         );
 

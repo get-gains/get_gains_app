@@ -502,7 +502,10 @@ class ClientRecording extends _$ClientRecording {
         message: 'Analyzing form...',
       );
 
-      var clientLandmarksForPipeline = rawLandmarks;
+      final filtered = rawLandmarks
+          .map(_preprocessor.filterByConfidence)
+          .toList();
+      var clientLandmarksForPipeline = _preprocessor.smoothFrames(filtered);
       var poseFps =
           recordingDurationMs > 0 && clientLandmarksForPipeline.isNotEmpty
           ? (clientLandmarksForPipeline.length * 1000 / recordingDurationMs)
@@ -583,6 +586,7 @@ class ClientRecording extends _$ClientRecording {
         clientFrames: _featureExtractor.extractBatch(
           _preprocessor.processBatch(
             clientLandmarksForPipeline.sublist(0, trimLen),
+            skipSmooth: true,
           ),
           angleDefinitions: angleDefinitions,
         ),
@@ -605,7 +609,10 @@ class ClientRecording extends _$ClientRecording {
         ) {
           if (o + refLen > clientLen) break;
           final trimmed = clientLandmarksForPipeline.sublist(o, o + refLen);
-          final normalizedLandmarks = _preprocessor.processBatch(trimmed);
+          final normalizedLandmarks = _preprocessor.processBatch(
+            trimmed,
+            skipSmooth: true,
+          );
           final clientFeatures = _featureExtractor.extractBatch(
             normalizedLandmarks,
             angleDefinitions: angleDefinitions,
@@ -667,6 +674,7 @@ class ClientRecording extends _$ClientRecording {
       try {
         final clientNormalized = _preprocessor.processBatch(
           bestTrimmedLandmarks,
+          skipSmooth: true,
         );
         final clientFeatureFrames = _featureExtractor.extractBatch(
           clientNormalized,
@@ -681,10 +689,12 @@ class ClientRecording extends _$ClientRecording {
           totalFrames: bestTrimmedLandmarks.length,
           landmarkFrames: bestTrimmedLandmarks,
           featureFrames: clientFeatureFrames,
+          normalizedFrames: clientNormalized,
           overallScore: result.overallScore,
           segmentScores: result.segmentScores,
           corrections: result.corrections,
           relevantAngles: _relevantAngles.isNotEmpty ? _relevantAngles : null,
+          avgLandmarkConfidence: _computeAvgConfidence(bestTrimmedLandmarks),
         );
 
         // Only upload to S3 when inside a real workout session.
@@ -727,9 +737,7 @@ class ClientRecording extends _$ClientRecording {
         uploadSuccess: uploadSuccess,
         recordedFramesKey: recordedFramesKey,
         referenceLandmarkFrames: List.unmodifiable(_referenceLandmarks),
-        clientLandmarkFrames: List.unmodifiable(
-          _preprocessor.smoothFrames(bestTrimmedLandmarks),
-        ),
+        clientLandmarkFrames: List.unmodifiable(bestTrimmedLandmarks),
         exerciseName: _exerciseName,
       );
     } catch (e) {
@@ -750,6 +758,20 @@ class ClientRecording extends _$ClientRecording {
         } catch (_) {}
       }
     }
+  }
+
+  /// Compute average landmark confidence across all frames.
+  double? _computeAvgConfidence(List<LandmarkFrame> frames) {
+    if (frames.isEmpty) return null;
+    final totalConfidence = frames
+        .expand((f) => f.landmarks.values)
+        .map((p) => p.confidence)
+        .fold<double>(0, (sum, c) => sum + c);
+    final totalPoints = frames.fold<int>(
+      0,
+      (sum, f) => sum + f.landmarks.length,
+    );
+    return totalPoints > 0 ? totalConfidence / totalPoints : null;
   }
 
   /// Reset to initial state for another attempt

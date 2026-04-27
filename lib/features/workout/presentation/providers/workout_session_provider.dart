@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/utils/app_error.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../providers/auth_state_provider.dart';
 import '../../../../services/sync/workout_sync_service.dart';
 import '../../data/models/models.dart';
@@ -171,6 +172,11 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
 
     state = const WorkoutSessionLoading();
 
+    // Ensure local routine/exercise cache is fresh so that
+    // _resolveLocalRoutineExerciseId can find rows by remoteId.
+    await _repository.syncPrograms();
+    if (!ref.mounted) return;
+
     // Check for an existing active session for the same routine first.
     // This prevents creating orphan sessions when the user leaves and
     // returns to the same workout.
@@ -308,7 +314,12 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
           currentExerciseIndex: newIndex,
         );
       },
-      failure: (_) {},
+      failure: (error) {
+        AppLogger.error(
+          'logSet failed: ${error.message}',
+          tag: 'WorkoutSession',
+        );
+      },
     );
 
     return didLogSuccessfully;
