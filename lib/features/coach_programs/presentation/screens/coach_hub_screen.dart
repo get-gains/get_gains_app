@@ -68,7 +68,7 @@ class CoachHubScreen extends ConsumerWidget {
                     activeIcon: Icons.insights,
                     title: 'Performance',
                     subtitle: 'Client progress & adherence dashboard',
-                    color: const Color(0xFF3B82F6),
+                    color: const Color(0xFF20B2AA),
                     isDark: isDark,
                     onTap: () =>
                         context.push(AppRoutes.coachPerformanceDashboard),
