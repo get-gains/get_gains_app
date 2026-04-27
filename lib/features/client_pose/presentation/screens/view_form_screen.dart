@@ -454,6 +454,7 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
                         PoseViewWidget(
                           landmarkFrames: widget.landmarkFrames,
                           mode: PoseViewMode.raw2D,
+                          mirrorX: true,
                           color: widget.isDark
                               ? Colors.cyanAccent
                               : Colors.cyan,
