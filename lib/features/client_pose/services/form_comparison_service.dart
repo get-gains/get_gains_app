@@ -156,10 +156,12 @@ class FormComparisonService {
                 maxRomPenalty;
       final romFactor = 1.0 - romPenalty;
 
-      // --- Fix D: Pearson correlation factor ---
-      // Catches pattern mismatch that DTW masks by warping. Computed on the
-      // unwarped (smoothed, same-length) series — no time-warp bias.
-      final pearsonR = _pearsonCorrelation(smoothedRef, smoothedClient);
+      // --- Fix D: Shift-invariant Pearson correlation factor ---
+      // Catches pattern mismatch that DTW masks by warping. Uses peak
+      // cross-correlation: finds the temporal lag that maximizes Pearson,
+      // so correct form with a phase offset still scores high while wrong
+      // exercises can't be salvaged by any shift.
+      final pearsonR = _peakCrossCorrelation(smoothedRef, smoothedClient);
       final correlationFactor = pearsonR.clamp(0.0, 1.0);
       // strong-pattern (r≈1) → ×1.0, no-pattern (r≈0) → ×0.5, anti-pattern → ×0.5
       final pearsonMultiplier = 0.5 + 0.5 * correlationFactor;
@@ -509,5 +511,33 @@ class FormComparisonService {
     if (aIsConst || bIsConst) return 0.0; // one moves, other doesn't
 
     return covAB / math.sqrt(varA * varB);
+  }
+
+  /// Shift-invariant peak cross-correlation.
+  ///
+  /// Tries all lags in [-maxShift, +maxShift] and returns the highest
+  /// Pearson r found. This makes the correlation immune to temporal
+  /// offsets — correct form that is phase-shifted still scores high,
+  /// while a genuinely different pattern can't be rescued by any shift.
+  double _peakCrossCorrelation(List<double> a, List<double> b, {int? maxLag}) {
+    final n = math.min(a.length, b.length);
+    if (n < 4) return 0.0;
+
+    final maxShift = maxLag ?? math.min(n ~/ 3, 30);
+    double bestR = -1.0;
+
+    for (int lag = -maxShift; lag <= maxShift; lag++) {
+      final aStart = math.max(0, lag);
+      final bStart = math.max(0, -lag);
+      final len = math.min(n - aStart, n - bStart);
+      if (len < 4) continue;
+
+      final aSlice = a.sublist(aStart, aStart + len);
+      final bSlice = b.sublist(bStart, bStart + len);
+      final r = _pearsonCorrelation(aSlice, bSlice);
+      if (r > bestR) bestR = r;
+    }
+
+    return bestR;
   }
 }
