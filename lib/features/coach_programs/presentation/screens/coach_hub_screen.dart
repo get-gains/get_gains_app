@@ -39,15 +39,6 @@ class CoachHubScreen extends ConsumerWidget {
                   context,
                 ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.settings_outlined),
-                  tooltip: 'Coach Settings',
-                  onPressed: () => context.push(AppRoutes.coachSettings),
-                ),
-              ],
-              backgroundColor: Colors.transparent,
-              elevation: 0,
             ),
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
