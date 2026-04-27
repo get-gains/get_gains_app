@@ -66,21 +66,25 @@ class UnityMessageContract {
   static const String methodSetCameraAngle = 'SetCameraAngle';
 
   /// Debug / tuning for humanoid pose vs landmarks. Message: JSON, e.g.
-  /// `{"swapArmLandmarks":true,"forceShowStickFigure":true,"invertArmDepthZ":true,"invertHeadDepthZ":true}`
+  /// `{"swapArmLandmarks":false,"swapLegLandmarks":false,"forceShowStickFigure":false,"invertArmDepthZ":true,"invertHeadDepthZ":true,"invertLegDepthZ":true}`
   static const String methodSetPoseDebugOptions = 'SetPoseDebugOptions';
 
-  /// Defaults for [methodSetPoseDebugOptions] (inline 3D card, fullscreen preview, reset).
-  static const bool defaultPoseDebugSwapArmLandmarks = true;
+  /// Defaults for [methodSetPoseDebugOptions] (inline 3D card, fullscreen preview, reset; matches Unity pose-debug shipped defaults).
+  static const bool defaultPoseDebugSwapArmLandmarks = false;
+  static const bool defaultPoseDebugSwapLegLandmarks = false;
   static const bool defaultPoseDebugForceStickFigure = false;
   static const bool defaultPoseDebugInvertArmDepthZ = true;
   static const bool defaultPoseDebugInvertHeadDepthZ = true;
+  static const bool defaultPoseDebugInvertLegDepthZ = true;
 
   /// JSON payload built from [defaultPoseDebugSwapArmLandmarks], etc.
   static String defaultPoseDebugOptionsPayload() => jsonEncode({
     'swapArmLandmarks': defaultPoseDebugSwapArmLandmarks,
+    'swapLegLandmarks': defaultPoseDebugSwapLegLandmarks,
     'forceShowStickFigure': defaultPoseDebugForceStickFigure,
     'invertArmDepthZ': defaultPoseDebugInvertArmDepthZ,
     'invertHeadDepthZ': defaultPoseDebugInvertHeadDepthZ,
+    'invertLegDepthZ': defaultPoseDebugInvertLegDepthZ,
   });
 
   // ── Events from Unity ────────────────────────────────────────────
