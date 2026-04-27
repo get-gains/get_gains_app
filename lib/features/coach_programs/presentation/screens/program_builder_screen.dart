@@ -254,7 +254,7 @@ class _ProgramBuilderScreenState extends ConsumerState<ProgramBuilderScreen> {
                   title: 'No Routines Yet',
                   description:
                       'Add routines from your template library or create new ones.',
-                  actionLabel: 'Add Routine',
+                  actionLabel: 'Add routine',
                   onAction: () => _showAddRoutineSheet(program),
                 )
               : ReorderableListView.builder(
@@ -292,15 +292,25 @@ class _ProgramBuilderScreenState extends ConsumerState<ProgramBuilderScreen> {
             label: 'Next: Exercises',
             icon: Icons.arrow_forward,
             iconPosition: IconPosition.trailing,
+            isFullWidth: true,
             disabled: sortedRoutines.isEmpty,
             onPressed: () => ref
                 .read(programBuilderProvider(widget.clientId).notifier)
                 .goToStep(2),
+            textStyle: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           center: AppButton.outline(
             label: 'Add Routine',
             icon: Icons.add,
+            isFullWidth: true,
             onPressed: () => _showAddRoutineSheet(program),
+            textStyle: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
       ],
@@ -676,88 +686,59 @@ class _StepIndicator extends StatelessWidget {
         ),
       ),
       child: Row(
-        children: List.generate(labels.length, (i) {
-          final isActive = i == currentStep;
-          final isCompleted = i < currentStep;
-          return Expanded(
-            child: GestureDetector(
-              onTap: isCompleted || isActive
-                  ? null
-                  : null, // Navigation handled via buttons only
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: List.generate(labels.length * 2 - 1, (index) {
+          if (index.isEven) {
+            final i = index ~/ 2;
+            final isActive = i == currentStep;
+            final isCompleted = i < currentStep;
+            return GestureDetector(
+              onTap: isCompleted || isActive ? null : null, // Navigation handled via buttons only
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    children: [
-                      if (i > 0)
-                        Expanded(
-                          child: Container(
-                            height: 2,
-                            color: isCompleted || isActive
-                                ? (isDark
-                                      ? AppColors.primaryDark
-                                      : AppColors.primaryLight)
-                                : (isDark
-                                      ? AppColors.borderDark
-                                      : AppColors.borderLight),
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isActive
+                          ? (isDark
+                                ? AppColors.primaryDark
+                                : AppColors.primaryLight)
+                          : isCompleted
+                          ? (isDark
+                                ? AppColors.accentDark
+                                : AppColors.accentLight)
+                          : (isDark
+                                ? AppColors.surface2Dark
+                                : AppColors.surface2Light),
+                    ),
+                    alignment: Alignment.center,
+                    child: isCompleted
+                        ? const Icon(
+                            Icons.check,
+                            size: 16,
+                            color: Colors.white,
+                          )
+                        : Text(
+                            '${i + 1}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: isActive
+                                  ? Colors.white
+                                  : (isDark
+                                        ? AppColors.mutedForegroundDark
+                                        : AppColors.mutedForegroundLight),
+                              fontFamily: AppTextStyles.fontFamilySans,
+                            ),
                           ),
-                        ),
-                      Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isActive
-                              ? (isDark
-                                    ? AppColors.primaryDark
-                                    : AppColors.primaryLight)
-                              : isCompleted
-                              ? (isDark
-                                    ? AppColors.accentDark
-                                    : AppColors.accentLight)
-                              : (isDark
-                                    ? AppColors.surface2Dark
-                                    : AppColors.surface2Light),
-                        ),
-                        alignment: Alignment.center,
-                        child: isCompleted
-                            ? const Icon(
-                                Icons.check,
-                                size: 16,
-                                color: Colors.white,
-                              )
-                            : Text(
-                                '${i + 1}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: isActive
-                                      ? Colors.white
-                                      : (isDark
-                                            ? AppColors.mutedForegroundDark
-                                            : AppColors.mutedForegroundLight),
-                                  fontFamily: AppTextStyles.fontFamilySans,
-                                ),
-                              ),
-                      ),
-                      if (i < labels.length - 1)
-                        Expanded(
-                          child: Container(
-                            height: 2,
-                            color: isCompleted
-                                ? (isDark
-                                      ? AppColors.primaryDark
-                                      : AppColors.primaryLight)
-                                : (isDark
-                                      ? AppColors.borderDark
-                                      : AppColors.borderLight),
-                          ),
-                        ),
-                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(
                     labels[i],
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: isActive
@@ -777,8 +758,26 @@ class _StepIndicator extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
-          );
+            );
+          } else {
+            final i = index ~/ 2;
+            final isCompleted = i < currentStep;
+            return Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 13.0),
+                child: Container(
+                  height: 2,
+                  color: isCompleted
+                      ? (isDark
+                            ? AppColors.primaryDark
+                            : AppColors.primaryLight)
+                      : (isDark
+                            ? AppColors.borderDark
+                            : AppColors.borderLight),
+                ),
+              ),
+            );
+          }
         }),
       ),
     );
@@ -817,9 +816,20 @@ class _BottomActionBar extends StatelessWidget {
         child: Row(
           children: [
             if (leading != null) leading!,
-            if (center != null) ...[const Spacer(), center!],
-            const Spacer(),
-            if (trailing != null) trailing!,
+            if (center != null)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 8.0),
+                  child: center!,
+                ),
+              ),
+            if (trailing != null)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 8.0),
+                  child: trailing!,
+                ),
+              ),
           ],
         ),
       ),
