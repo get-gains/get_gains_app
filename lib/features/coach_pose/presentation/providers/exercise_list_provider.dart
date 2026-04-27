@@ -138,4 +138,27 @@ class ExerciseListNotifier extends _$ExerciseListNotifier {
   Future<void> refresh() async {
     await loadExercises();
   }
+
+  /// Delete an exercise and remove it from the list.
+  Future<void> deleteExercise(String id) async {
+    final repo = ref.read(coachPoseRepositoryProvider);
+    final result = await repo.deleteExercise(id);
+
+    result.when(
+      success: (_) {
+        AppLogger.info('Exercise deleted: $id', tag: 'ExerciseList');
+        state = state.copyWith(
+          exercises: state.exercises.where((e) => e.id != id).toList(),
+        );
+      },
+      failure: (error) {
+        AppLogger.error(
+          'Failed to delete exercise',
+          tag: 'ExerciseList',
+          error: error,
+        );
+        state = state.copyWith(errorMessage: error.message);
+      },
+    );
+  }
 }

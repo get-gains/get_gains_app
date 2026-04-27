@@ -8,6 +8,7 @@ import '../../../../widgets/widgets.dart';
 import '../../../workout/data/models/exercise_model.dart';
 import '../../data/models/exercise_form_model.dart';
 import '../providers/exercise_detail_provider.dart';
+import '../providers/exercise_list_provider.dart';
 import '../widgets/form_card.dart';
 
 /// Exercise detail screen showing info, forms, and config.
@@ -66,6 +67,7 @@ class _ExerciseDetailScreenState extends ConsumerState<ExerciseDetailScreen>
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
+
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: isDark

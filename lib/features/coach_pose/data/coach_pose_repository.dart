@@ -109,6 +109,71 @@ class CoachPoseRepository {
     );
   }
 
+  /// Update an existing exercise
+  Future<Result<ExerciseModel, AppError>> updateExercise({
+    required String exerciseId,
+    String? name,
+    String? description,
+    String? primaryMuscleGroup,
+    List<String>? targetMuscles,
+    List<String>? equipmentNeeded,
+  }) async {
+    final Map<String, dynamic> data = {};
+    if (name != null) data['name'] = name;
+    if (description != null) data['description'] = description;
+    
+    if (primaryMuscleGroup != null || targetMuscles != null) {
+      final normalizedTargetMuscles = <String>{
+        if (primaryMuscleGroup != null) primaryMuscleGroup.toUpperCase(),
+        ...(targetMuscles ?? []).map((m) => m.toUpperCase()),
+      }.toList(growable: false);
+      
+      data['target_muscles'] = normalizedTargetMuscles;
+      
+      // Backward compatibility
+      if (primaryMuscleGroup != null) data['primaryMuscleGroup'] = primaryMuscleGroup;
+      data['targetMuscles'] = normalizedTargetMuscles;
+    }
+    
+    if (equipmentNeeded != null) data['equipmentNeeded'] = equipmentNeeded;
+
+    final result = await _apiClient.patch<Map<String, dynamic>>(
+      '/workout/exercises/$exerciseId',
+      data: data,
+    );
+
+    return result.when(
+      success: (data) {
+        try {
+          final exercise = ExerciseModel.fromJson(
+            data['exercise'] as Map<String, dynamic>,
+          );
+          return Success(exercise);
+        } catch (e) {
+          AppLogger.error(
+            'Failed to parse updated exercise',
+            tag: 'CoachPoseRepo',
+            error: e,
+          );
+          return Failure(UnknownError(message: 'Failed to parse exercise: $e'));
+        }
+      },
+      failure: (error) => Failure(error),
+    );
+  }
+
+  /// Delete an exercise
+  Future<Result<void, AppError>> deleteExercise(String exerciseId) async {
+    final result = await _apiClient.delete<Map<String, dynamic>>(
+      '/workout/exercises/$exerciseId',
+    );
+
+    return result.when(
+      success: (_) => const Success(null),
+      failure: (error) => Failure(error),
+    );
+  }
+
   // ============== Form Operations ==============
 
   /// Get all forms for a specific exercise

@@ -71,6 +71,7 @@ class AppRoutes {
   // Coach Pose routes
   static const String coachExercises = '/coach/exercises';
   static const String createExercise = '/coach/exercises/create';
+  static const String editExercise = '/coach/exercises/:id/edit';
   static const String exerciseDetail = '/coach/exercises/:id';
   static const String recordForm = '/coach/exercises/:id/record';
   static const String coachViewForm = '/coach/exercises/:id/forms/:formId/view';
@@ -366,6 +367,13 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: AppRoutes.createExercise,
         builder: (context, state) => const CreateExerciseScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.editExercise,
+        builder: (context, state) {
+          final exercise = state.extra as ExerciseModel;
+          return EditExerciseScreen(exercise: exercise);
+        },
       ),
       GoRoute(
         path: AppRoutes.exerciseDetail,
