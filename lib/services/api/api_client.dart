@@ -53,7 +53,7 @@ class ApiClient {
 
   late final Dio _dio;
   final SecureStorageService _secureStorage;
-  late final void Function() _onAuthFailure;
+  late void Function() _onAuthFailure;
 
   /// Access the raw Dio instance (for advanced use cases)
   Dio get dio => _dio;
@@ -432,11 +432,5 @@ class ApiClient {
 ApiClient apiClient(Ref ref) {
   final secureStorage = ref.watch(secureStorageServiceProvider);
 
-  return ApiClient(
-    secureStorage: secureStorage,
-    // Auth failure callback will be set by auth state provider
-    onAuthFailure: () {
-      AppLogger.warning('Auth failure callback not set', tag: 'ApiClient');
-    },
-  );
+  return ApiClient(secureStorage: secureStorage);
 }
