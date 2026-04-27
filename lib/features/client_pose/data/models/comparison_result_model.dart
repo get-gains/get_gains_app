@@ -27,6 +27,7 @@ abstract class ComparisonResultModel with _$ComparisonResultModel {
     double? avgLandmarkConfidence,
     List<LandmarkFrame>? clientLandmarkFrames,
     List<FeatureFrame>? clientFeatureFrames,
+    Map<String, double>? angleCoverage, // per-angle OOV coverage (0.0-1.0)
     // Enrichment from server history queries
     String? exerciseName,
     String? coachName,

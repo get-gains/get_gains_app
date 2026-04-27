@@ -203,6 +203,15 @@ class ClientRecording extends _$ClientRecording {
           List<FeatureFrame> referenceFeatureFrames;
 
           if (coachBlob != null) {
+            // Reject old-format references — z normalization changed in v3
+            if (coachBlob.version < 3) {
+              state = const ClientRecordingError(
+                'This reference form was recorded with an older app version '
+                'and is no longer compatible. Ask your coach to re-record it.',
+              );
+              return;
+            }
+
             referenceFrames = coachBlob.landmarkFrames;
             referenceFeatureFrames = coachBlob.featureFrames;
 
@@ -470,7 +479,9 @@ class ClientRecording extends _$ClientRecording {
           extractedFrames[i],
           timestampMs,
         );
-        if (frame != null) rawLandmarks.add(frame);
+        rawLandmarks.add(
+          frame ?? LandmarkFrame(timestampMs: timestampMs, landmarks: const {}),
+        );
       }
 
       state = const ClientRecordingProcessing(
@@ -630,7 +641,7 @@ class ClientRecording extends _$ClientRecording {
         );
 
         final blob = FramesBlob.client(
-          version: 2,
+          version: 3,
           cameraAngle: _cameraAngle ?? 'FRONT',
           durationMs: recordingDurationMs,
           frameRate: poseFps,

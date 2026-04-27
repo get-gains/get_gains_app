@@ -42,6 +42,7 @@ class _TourOrchestratorState extends ConsumerState<TourOrchestrator>
   OverlayEntry? _overlayEntry;
   late AnimationController _animController;
   late Animation<double> _fadeAnimation;
+  int _showStepGeneration = 0;
 
   @override
   void initState() {
@@ -96,6 +97,9 @@ class _TourOrchestratorState extends ConsumerState<TourOrchestrator>
     // Remove the old overlay (from a previous step) before inserting a new one.
     _removeOverlaySync();
 
+    // Bump generation so any stale post-frame callbacks become no-ops.
+    final generation = ++_showStepGeneration;
+
     if (targetKey == null) {
       AppLogger.warning(
         'Tour step target "${state.currentStep.targetKey}" has no registered '
@@ -103,7 +107,7 @@ class _TourOrchestratorState extends ConsumerState<TourOrchestrator>
         tag: 'TourOrchestrator',
       );
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
+        if (!mounted || generation != _showStepGeneration) return;
         ref.read(tourProvider.notifier).advance();
       });
       return;
@@ -111,14 +115,14 @@ class _TourOrchestratorState extends ConsumerState<TourOrchestrator>
 
     // Wait for the frame to be painted so the target widget is laid out.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
+      if (!mounted || generation != _showStepGeneration) return;
 
       // Scroll the target into view first, then wait for the scroll + layout.
       final scrolled = _scrollTargetIntoView(targetKey);
       if (scrolled) {
         // Wait for scroll animation to finish + one extra frame for layout.
         await Future<void>.delayed(const Duration(milliseconds: 350));
-        if (!mounted) return;
+        if (!mounted || generation != _showStepGeneration) return;
       }
 
       final targetRect = _measureTarget(targetKey);
@@ -131,6 +135,9 @@ class _TourOrchestratorState extends ConsumerState<TourOrchestrator>
         ref.read(tourProvider.notifier).advance();
         return;
       }
+
+      // Another _showStep may have run while we were awaiting — bail out.
+      _removeOverlaySync();
 
       _overlayEntry = OverlayEntry(
         builder: (_) => _buildOverlayContent(state, targetRect),
@@ -203,6 +210,7 @@ class _TourOrchestratorState extends ConsumerState<TourOrchestrator>
             // Dimmed backdrop with cutout (covers full screen)
             Positioned.fill(
               child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () => ref.read(tourProvider.notifier).skip(),
                 child: CustomPaint(
                   size: screen,

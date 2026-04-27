@@ -86,18 +86,32 @@ class FormComparisonService {
       );
     }
 
-    // Compute DTW score per angle
+    // Compute DTW score per angle with OOV-aware alignment
     final angleScores = <String, double>{};
+    final angleCoverage = <String, double>{};
     final corrections = <CorrectionModel>[];
 
+    /// Minimum coverage ratio for an angle to be included in scoring.
+    const minCoverageRatio = 0.30;
+
     for (final angleName in commonAngles) {
-      final refSeries = _extractAngleSeries(referenceFrames, angleName);
-      final clientSeries = _extractAngleSeries(clientFrames, angleName);
+      // Build aligned series: only frames where BOTH sides have the angle
+      final aligned = _alignedSeries(referenceFrames, clientFrames, angleName);
+      angleCoverage[angleName] = aligned.coverage;
 
-      if (refSeries.length < 2 || clientSeries.length < 2) continue;
+      // Drop angles with insufficient coverage
+      if (aligned.coverage < minCoverageRatio) {
+        AppLogger.info(
+          'Dropping angle $angleName: coverage ${(aligned.coverage * 100).toStringAsFixed(0)}% < ${(minCoverageRatio * 100).toStringAsFixed(0)}%',
+          tag: 'FormComparison',
+        );
+        continue;
+      }
 
-      final smoothedRef = _smooth(refSeries);
-      final smoothedClient = _smooth(clientSeries);
+      if (aligned.ref.length < 2 || aligned.client.length < 2) continue;
+
+      final smoothedRef = _smooth(aligned.ref);
+      final smoothedClient = _smooth(aligned.client);
 
       final (dtwDistance, pathLength) = _dtw(smoothedRef, smoothedClient);
 
@@ -114,7 +128,7 @@ class FormComparisonService {
       if (score < 0.7) {
         final avgDev = meanDev;
         final maxDev = _maxDeviation(smoothedRef, smoothedClient);
-        final direction = _inferDirection(refSeries, clientSeries);
+        final direction = _inferDirection(aligned.ref, aligned.client);
         final segment = _angleToSegment(angleName).name;
 
         corrections.add(
@@ -133,10 +147,27 @@ class FormComparisonService {
     // Aggregate per-angle scores into body-segment scores
     final segmentScores = _aggregateSegmentScores(angleScores);
 
-    // Overall score is mean of all angle scores
-    final overallScore = angleScores.isEmpty
-        ? 0.0
-        : angleScores.values.reduce((a, b) => a + b) / angleScores.length;
+    // Overall score is mean of all kept angle scores
+    final double overallScore;
+    if (angleScores.isEmpty) {
+      overallScore = 0.0;
+      // All angles dropped — tell the user why
+      corrections.add(
+        CorrectionModel(
+          angleName: 'visibility',
+          segment: BodySegment.FULL_BODY.name,
+          avgDeviation: 0,
+          maxDeviation: 0,
+          direction: 'insufficient_visibility',
+          message:
+              'Could not see enough of your body to assess form. '
+              'Make sure your full body is in frame.',
+        ),
+      );
+    } else {
+      overallScore =
+          angleScores.values.reduce((a, b) => a + b) / angleScores.length;
+    }
 
     final result = ComparisonResultModel(
       exerciseFormId: exerciseFormId,
@@ -150,6 +181,7 @@ class FormComparisonService {
       frameRate: _computeFrameRate(clientFrames),
       totalFrames: clientFrames.length,
       avgLandmarkConfidence: avgLandmarkConfidence,
+      angleCoverage: angleCoverage,
     );
 
     AppLogger.info(
@@ -161,22 +193,25 @@ class FormComparisonService {
     return result;
   }
 
-  /// Classic DTW algorithm — returns (accumulated distance, path length).
-  (double, int) _dtw(List<double> s, List<double> t) {
+  /// Classic DTW algorithm with Sakoe-Chiba band — returns (accumulated distance, path length).
+  ///
+  /// [bandRatio] constrains warping to ±(bandRatio × max(n, m)) cells around
+  /// the diagonal, preventing unbounded tempo warping.
+  (double, int) _dtw(List<double> s, List<double> t, {double bandRatio = 0.2}) {
     final n = s.length;
     final m = t.length;
+    final band = math.max(1, (math.max(n, m) * bandRatio).ceil());
     final dtw = List.generate(
       n + 1,
       (_) => List.filled(m + 1, double.infinity),
     );
-    final pathLen = List.generate(
-      n + 1,
-      (_) => List.filled(m + 1, 0),
-    );
+    final pathLen = List.generate(n + 1, (_) => List.filled(m + 1, 0));
     dtw[0][0] = 0;
 
     for (int i = 1; i <= n; i++) {
-      for (int j = 1; j <= m; j++) {
+      final jStart = math.max(1, i - band);
+      final jEnd = math.min(m, i + band);
+      for (int j = jStart; j <= jEnd; j++) {
         final cost = (s[i - 1] - t[j - 1]).abs();
         final prevs = [
           dtw[i - 1][j], // insertion
@@ -228,6 +263,28 @@ class FormComparisonService {
         .where((f) => f.angles.containsKey(name))
         .map((f) => f.angles[name]!)
         .toList();
+  }
+
+  /// Build aligned series for [angleName]: only frames where BOTH ref and
+  /// client have the angle are kept. Returns the paired lists and the
+  /// coverage ratio (frames available / max sequence length).
+  ({List<double> ref, List<double> client, double coverage}) _alignedSeries(
+    List<FeatureFrame> refFrames,
+    List<FeatureFrame> clientFrames,
+    String angleName,
+  ) {
+    final n = math.min(refFrames.length, clientFrames.length);
+    final r = <double>[];
+    final c = <double>[];
+    for (var i = 0; i < n; i++) {
+      final a = refFrames[i].angles[angleName];
+      final b = clientFrames[i].angles[angleName];
+      if (a != null && b != null) {
+        r.add(a);
+        c.add(b);
+      }
+    }
+    return (ref: r, client: c, coverage: n > 0 ? r.length / n : 0.0);
   }
 
   double _maxDeviation(List<double> ref, List<double> client) {

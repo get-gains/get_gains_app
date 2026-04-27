@@ -306,7 +306,7 @@ class PoseDetectionService {
       landmarks[_landmarkTypeToString(type)] = LandmarkPoint(
         x: normWidth > 0 ? landmark.x / normWidth : 0.0,
         y: normHeight > 0 ? landmark.y / normHeight : 0.0,
-        z: landmark.z,
+        z: normWidth > 0 ? landmark.z / normWidth : 0.0,
         confidence: landmark.likelihood,
       );
     }

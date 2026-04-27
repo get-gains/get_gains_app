@@ -332,7 +332,8 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
     // processing immediately so by the time the camera future resolves the
     // phase is already processing.
     if (state.phase != RecordingPhase.recording &&
-        state.phase != RecordingPhase.processing) return;
+        state.phase != RecordingPhase.processing)
+      return;
     // Idempotency: if we already have a video path, pipeline already started.
     if (state.videoFilePath != null) return;
 
@@ -376,10 +377,7 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
 
   /// Called by the screen if [CameraController.stopVideoRecording] throws or times out.
   void setRecordingError(String message) {
-    state = state.copyWith(
-      phase: RecordingPhase.error,
-      errorMessage: message,
-    );
+    state = state.copyWith(phase: RecordingPhase.error, errorMessage: message);
   }
 
   /// Extract frames from video via ffmpeg, run MLKit on each, then pipeline.
@@ -437,7 +435,9 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
           extractedFrames[i],
           timestampMs,
         );
-        if (frame != null) rawFrames.add(frame);
+        rawFrames.add(
+          frame ?? LandmarkFrame(timestampMs: timestampMs, landmarks: const {}),
+        );
       }
 
       state = state.copyWith(rawFrames: rawFrames);
@@ -602,7 +602,7 @@ class FormRecordingNotifier extends _$FormRecordingNotifier {
 
       // Build the frames blob for S3
       final blob = FramesBlob.coach(
-        version: 2,
+        version: 3,
         cameraAngle: state.cameraAngle.serverValue,
         durationMs: state.recordingDurationMs,
         frameRate: frameRate,
