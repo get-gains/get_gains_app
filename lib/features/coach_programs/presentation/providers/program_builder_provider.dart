@@ -112,7 +112,7 @@ class ProgramBuilderNotifier extends _$ProgramBuilderNotifier {
 
   /// Load an existing program into the builder (edit mode).
   ///
-  /// Enters at step 1 (routines) so the coach can start editing immediately.
+  /// Enters at step 0 (details) so the coach can edit the program name/description.
   Future<void> loadExistingProgram(String programId) async {
     state = const ProgramBuilderLoading();
 
@@ -120,7 +120,7 @@ class ProgramBuilderNotifier extends _$ProgramBuilderNotifier {
 
     result.when(
       success: (program) {
-        state = ProgramBuilderLoaded(program: program, currentStep: 1);
+        state = ProgramBuilderLoaded(program: program, currentStep: 0);
       },
       failure: (error) {
         AppLogger.error(
