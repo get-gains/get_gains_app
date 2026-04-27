@@ -128,6 +128,105 @@ List<LandmarkFrame> _generateSquatSequence(int numFrames, {int startMs = 0}) {
   });
 }
 
+/// Build a frame for an arm-dominant exercise (bicep curl-like).
+///
+/// [phase] sweeps the elbows through a large arc while legs stay static.
+LandmarkFrame _buildArmExerciseFrame(int timestampMs, double phase) {
+  const shoulderY = 0.3;
+  const hipY = 0.55;
+
+  // Elbows swing through large arc: 0.3 → 0.0 in Y (curl up)
+  final elbowY = shoulderY + 0.15 - 0.15 * phase;
+  // Wrists follow: 0.5 → 0.25 in Y
+  final wristY = shoulderY + 0.25 - 0.25 * phase;
+
+  return LandmarkFrame(
+    timestampMs: timestampMs,
+    landmarks: {
+      'LEFT_SHOULDER': LandmarkPoint(
+        x: 0.45,
+        y: shoulderY,
+        z: 0.0,
+        confidence: 0.95,
+      ),
+      'RIGHT_SHOULDER': LandmarkPoint(
+        x: 0.55,
+        y: shoulderY,
+        z: 0.0,
+        confidence: 0.95,
+      ),
+      'LEFT_HIP': LandmarkPoint(x: 0.45, y: hipY, z: 0.0, confidence: 0.90),
+      'RIGHT_HIP': LandmarkPoint(x: 0.55, y: hipY, z: 0.0, confidence: 0.90),
+      'LEFT_ELBOW': LandmarkPoint(x: 0.40, y: elbowY, z: 0.0, confidence: 0.85),
+      'RIGHT_ELBOW': LandmarkPoint(
+        x: 0.60,
+        y: elbowY,
+        z: 0.0,
+        confidence: 0.85,
+      ),
+      'LEFT_WRIST': LandmarkPoint(x: 0.38, y: wristY, z: 0.0, confidence: 0.80),
+      'RIGHT_WRIST': LandmarkPoint(
+        x: 0.62,
+        y: wristY,
+        z: 0.0,
+        confidence: 0.80,
+      ),
+      'LEFT_KNEE': LandmarkPoint(x: 0.45, y: 0.75, z: 0.0, confidence: 0.85),
+      'RIGHT_KNEE': LandmarkPoint(x: 0.55, y: 0.75, z: 0.0, confidence: 0.85),
+      'LEFT_ANKLE': LandmarkPoint(x: 0.45, y: 0.92, z: 0.0, confidence: 0.80),
+      'RIGHT_ANKLE': LandmarkPoint(x: 0.55, y: 0.92, z: 0.0, confidence: 0.80),
+      'LEFT_FOOT_INDEX': LandmarkPoint(
+        x: 0.48,
+        y: 0.95,
+        z: 0.0,
+        confidence: 0.75,
+      ),
+      'RIGHT_FOOT_INDEX': LandmarkPoint(
+        x: 0.52,
+        y: 0.95,
+        z: 0.0,
+        confidence: 0.75,
+      ),
+    },
+  );
+}
+
+/// Generate an arm curl sequence over [numFrames].
+List<LandmarkFrame> _generateArmCurlSequence(int numFrames, {int startMs = 0}) {
+  return List.generate(numFrames, (i) {
+    final t = i / math.max(1, numFrames - 1);
+    final phase = math.sin(t * math.pi);
+    final timestampMs = startMs + (i * 1000 ~/ 30);
+    return _buildArmExerciseFrame(timestampMs, phase);
+  });
+}
+
+/// Generate a static-pose sequence: same posture for every frame.
+List<LandmarkFrame> _generateStaticSequence(
+  int numFrames, {
+  int startMs = 0,
+  double phase = 0.5,
+}) {
+  return List.generate(numFrames, (i) {
+    final timestampMs = startMs + (i * 1000 ~/ 30);
+    return _buildFullBodyFrame(timestampMs, phase);
+  });
+}
+
+/// Generate an inverted squat: squat → stand → squat (opposite phase).
+List<LandmarkFrame> _generateInvertedSquatSequence(
+  int numFrames, {
+  int startMs = 0,
+}) {
+  return List.generate(numFrames, (i) {
+    final t = i / math.max(1, numFrames - 1);
+    // Inverted: start at bottom (phase=1), go up (phase=0), back down
+    final phase = math.cos(t * math.pi) * 0.5 + 0.5;
+    final timestampMs = startMs + (i * 1000 ~/ 30);
+    return _buildFullBodyFrame(timestampMs, phase);
+  });
+}
+
 void main() {
   late FeatureExtractor featureExtractor;
   late FormComparisonService comparisonService;
@@ -271,5 +370,95 @@ void main() {
 
       expect(result.overallScore, equals(0.0));
     });
+
+    test(
+      'Fixture 5: Wrong exercise — squat ref vs arm curl client → low score',
+      () {
+        // Reference: squat (leg-dominant)
+        final refLandmarks = _generateSquatSequence(60);
+        final refFeatures = featureExtractor.extractBatch(refLandmarks);
+
+        // Client: arm curls (arm-dominant, legs static)
+        final clientLandmarks = _generateArmCurlSequence(60);
+        final clientFeatures = featureExtractor.extractBatch(clientLandmarks);
+
+        final result = comparisonService.compare(
+          exerciseFormId: 'test-form',
+          referenceFrames: refFeatures,
+          clientFrames: clientFeatures,
+          cameraAngle: 'FRONT',
+        );
+
+        // Wrong exercise must score well below 50% — the ROM penalty and
+        // Pearson correlation should crush the score.
+        expect(
+          result.overallScore,
+          lessThanOrEqualTo(0.50),
+          reason:
+              'Wrong exercise should score ≤50%, got '
+              '${(result.overallScore * 100).toStringAsFixed(1)}%',
+        );
+      },
+    );
+
+    test(
+      'Fixture 6: Static client — ref full ROM squat, client holds mid-squat → low score',
+      () {
+        // Reference: dynamic squat
+        final refLandmarks = _generateSquatSequence(60);
+        final refFeatures = featureExtractor.extractBatch(refLandmarks);
+
+        // Client: static mid-squat position for all frames
+        final clientLandmarks = _generateStaticSequence(60);
+        final clientFeatures = featureExtractor.extractBatch(clientLandmarks);
+
+        final result = comparisonService.compare(
+          exerciseFormId: 'test-form',
+          referenceFrames: refFeatures,
+          clientFrames: clientFeatures,
+          cameraAngle: 'FRONT',
+        );
+
+        // Static client should score low: zero ROM → heavy ROM penalty,
+        // zero variance → Pearson undefined (returns 0) → 0.5 multiplier.
+        expect(
+          result.overallScore,
+          lessThanOrEqualTo(0.40),
+          reason:
+              'Static client should score ≤40%, got '
+              '${(result.overallScore * 100).toStringAsFixed(1)}%',
+        );
+      },
+    );
+
+    test(
+      'Fixture 7: Inverted pattern — same ROM, opposite phase → low score',
+      () {
+        // Reference: normal squat (stand → squat → stand)
+        final refLandmarks = _generateSquatSequence(60);
+        final refFeatures = featureExtractor.extractBatch(refLandmarks);
+
+        // Client: inverted squat (squat → stand → squat)
+        final clientLandmarks = _generateInvertedSquatSequence(60);
+        final clientFeatures = featureExtractor.extractBatch(clientLandmarks);
+
+        final result = comparisonService.compare(
+          exerciseFormId: 'test-form',
+          referenceFrames: refFeatures,
+          clientFrames: clientFeatures,
+          cameraAngle: 'FRONT',
+        );
+
+        // Inverted pattern has same ROM but Pearson ≈ -1 → 0.5 multiplier.
+        // Score should be noticeably below identity.
+        expect(
+          result.overallScore,
+          lessThanOrEqualTo(0.60),
+          reason:
+              'Inverted pattern should score ≤60%, got '
+              '${(result.overallScore * 100).toStringAsFixed(1)}%',
+        );
+      },
+    );
   });
 }

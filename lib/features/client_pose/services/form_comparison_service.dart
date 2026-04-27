@@ -110,6 +110,21 @@ class FormComparisonService {
 
       if (aligned.ref.length < 2 || aligned.client.length < 2) continue;
 
+      // Drop angles where the reference barely moves — these carry no
+      // coaching signal and inflate scores when both sides are near-static.
+      // In production, detectRelevantAngles handles this upstream; this
+      // gate is defense-in-depth for direct compare() calls and tests.
+      final refROM =
+          aligned.ref.reduce(math.max) - aligned.ref.reduce(math.min);
+      const minRefRom = 5.0; // degrees
+      if (refROM < minRefRom) {
+        AppLogger.info(
+          'Dropping angle $angleName: refROM ${refROM.toStringAsFixed(1)}° < $minRefRom°',
+          tag: 'FormComparison',
+        );
+        continue;
+      }
+
       final smoothedRef = _smooth(aligned.ref);
       final smoothedClient = _smooth(aligned.client);
 
@@ -118,11 +133,52 @@ class FormComparisonService {
       // Mean angular deviation per aligned frame pair
       final meanDev = pathLength > 0 ? dtwDistance / pathLength : 180.0;
 
-      // Subtract baseline noise floor (~5° from MLKit detection jitter)
-      // then map to 0-1: 5° adjusted → 1.0, ≥40° adjusted → 0.0
-      final adjustedDev = math.max(0.0, meanDev - 5.0);
-      final score = (1.0 - adjustedDev / 40.0).clamp(0.0, 1.0);
+      // --- Fix C: Tighter score mapping (4°/30° moderate) ---
+      final adjustedDev = math.max(0.0, meanDev - 4.0);
+      final baseScore = (1.0 - adjustedDev / 30.0).clamp(0.0, 1.0);
+
+      // --- Fix B: Bidirectional ROM penalty ---
+      // Penalises when the client's range-of-motion deviates significantly
+      // from the reference in either direction (too much or too little movement).
+      // refROM already computed above for the minRefRom gate.
+      final clientROM =
+          aligned.client.reduce(math.max) - aligned.client.reduce(math.min);
+      final romRatio = refROM > 1.0 ? clientROM / refROM : 1.0;
+      final romDeviation = (romRatio - 1.0).abs();
+      // Tolerance: ±60% ROM difference is acceptable (covers natural variation).
+      // Beyond that, ramp penalty over next 1.4 units to a max of 50% reduction.
+      const romTolerance = 0.6;
+      const romRampRange = 1.4;
+      const maxRomPenalty = 0.5;
+      final romPenalty = romDeviation <= romTolerance
+          ? 0.0
+          : ((romDeviation - romTolerance) / romRampRange).clamp(0.0, 1.0) *
+                maxRomPenalty;
+      final romFactor = 1.0 - romPenalty;
+
+      // --- Fix D: Pearson correlation factor ---
+      // Catches pattern mismatch that DTW masks by warping. Computed on the
+      // unwarped (smoothed, same-length) series — no time-warp bias.
+      final pearsonR = _pearsonCorrelation(smoothedRef, smoothedClient);
+      final correlationFactor = pearsonR.clamp(0.0, 1.0);
+      // strong-pattern (r≈1) → ×1.0, no-pattern (r≈0) → ×0.5, anti-pattern → ×0.5
+      final pearsonMultiplier = 0.5 + 0.5 * correlationFactor;
+
+      final score = (baseScore * romFactor * pearsonMultiplier).clamp(0.0, 1.0);
       angleScores[angleName] = score;
+
+      // Ship 1 diagnostics: per-angle breakdown for tuning
+      AppLogger.info(
+        '[DIAG] angle=$angleName | meanDev=${meanDev.toStringAsFixed(2)}° '
+        '| adjustedDev=${adjustedDev.toStringAsFixed(2)}° | baseScore=${(baseScore * 100).toStringAsFixed(1)}% '
+        '| romRatio=${romRatio.toStringAsFixed(2)} | romFactor=${romFactor.toStringAsFixed(2)} '
+        '| pearsonR=${pearsonR.toStringAsFixed(3)} | pearsonMul=${pearsonMultiplier.toStringAsFixed(2)} '
+        '| finalScore=${(score * 100).toStringAsFixed(1)}% '
+        '| coverage=${(aligned.coverage * 100).toStringAsFixed(0)}% '
+        '| refROM=${refROM.toStringAsFixed(1)}° | clientROM=${clientROM.toStringAsFixed(1)}° '
+        '| pathLen=$pathLength | dtwDist=${dtwDistance.toStringAsFixed(1)}',
+        tag: 'FormComparison',
+      );
 
       // Generate correction if score is below threshold
       if (score < 0.7) {
@@ -147,7 +203,8 @@ class FormComparisonService {
     // Aggregate per-angle scores into body-segment scores
     final segmentScores = _aggregateSegmentScores(angleScores);
 
-    // Overall score is mean of all kept angle scores
+    // --- Fix F: Coverage-weighted overall score ---
+    // Angles with higher coverage (more visible frames) contribute more.
     final double overallScore;
     if (angleScores.isEmpty) {
       overallScore = 0.0;
@@ -165,9 +222,24 @@ class FormComparisonService {
         ),
       );
     } else {
-      overallScore =
-          angleScores.values.reduce((a, b) => a + b) / angleScores.length;
+      double weightedSum = 0;
+      double weightSum = 0;
+      for (final entry in angleScores.entries) {
+        final w = angleCoverage[entry.key] ?? 1.0;
+        weightedSum += entry.value * w;
+        weightSum += w;
+      }
+      overallScore = weightSum > 0 ? weightedSum / weightSum : 0.0;
     }
+
+    // Ship 1 diagnostics: summary of all angle scores
+    AppLogger.info(
+      '[DIAG] === COMPARISON SUMMARY === '
+      '| angles scored: ${angleScores.length} '
+      '| overall: ${(overallScore * 100).toStringAsFixed(1)}% '
+      '| angle scores: ${angleScores.entries.map((e) => '${e.key}=${(e.value * 100).toStringAsFixed(1)}%').join(', ')}',
+      tag: 'FormComparison',
+    );
 
     final result = ComparisonResultModel(
       exerciseFormId: exerciseFormId,
@@ -403,5 +475,39 @@ class FormComparisonService {
     final durationS = _computeDurationMs(frames) / 1000.0;
     if (durationS <= 0) return 0;
     return (frames.length / durationS).round();
+  }
+
+  /// Pearson correlation coefficient between two same-length series.
+  ///
+  /// Returns a value in [-1, 1]. Special cases:
+  /// - Both series constant (zero variance) → 1.0 (identical "no movement" pattern)
+  /// - One series constant, the other varies → 0.0 (pattern mismatch)
+  double _pearsonCorrelation(List<double> a, List<double> b) {
+    final n = math.min(a.length, b.length);
+    if (n < 2) return 0.0;
+
+    double sumA = 0, sumB = 0;
+    for (int i = 0; i < n; i++) {
+      sumA += a[i];
+      sumB += b[i];
+    }
+    final meanA = sumA / n;
+    final meanB = sumB / n;
+
+    double covAB = 0, varA = 0, varB = 0;
+    for (int i = 0; i < n; i++) {
+      final da = a[i] - meanA;
+      final db = b[i] - meanB;
+      covAB += da * db;
+      varA += da * da;
+      varB += db * db;
+    }
+
+    final aIsConst = varA < 1e-10;
+    final bIsConst = varB < 1e-10;
+    if (aIsConst && bIsConst) return 1.0; // both static = perfect match
+    if (aIsConst || bIsConst) return 0.0; // one moves, other doesn't
+
+    return covAB / math.sqrt(varA * varB);
   }
 }

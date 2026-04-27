@@ -562,6 +562,8 @@ class ClientRecording extends _$ClientRecording {
       }
 
       int bestOffset = 0;
+      double secondBestScore = 0.0;
+      final offsetScores = <int, double>{};
       ComparisonResultModel bestResult = _comparisonService.compare(
         exerciseFormId: _formId ?? '',
         referenceFrames: referenceFeatures,
@@ -574,6 +576,7 @@ class ClientRecording extends _$ClientRecording {
         cameraAngle: _cameraAngle ?? 'FRONT',
         avgLandmarkConfidence: null,
       );
+      offsetScores[0] = bestResult.overallScore;
       List<LandmarkFrame> bestTrimmedLandmarks = clientLandmarksForPipeline
           .sublist(0, trimLen);
 
@@ -601,10 +604,14 @@ class ClientRecording extends _$ClientRecording {
             cameraAngle: _cameraAngle ?? 'FRONT',
             avgLandmarkConfidence: null,
           );
+          offsetScores[o] = result.overallScore;
           if (result.overallScore > bestResult.overallScore) {
+            secondBestScore = bestResult.overallScore;
             bestResult = result;
             bestOffset = o;
             bestTrimmedLandmarks = trimmed;
+          } else if (result.overallScore > secondBestScore) {
+            secondBestScore = result.overallScore;
           }
         }
         if (bestOffset > 0) {
@@ -614,6 +621,19 @@ class ClientRecording extends _$ClientRecording {
           );
         }
       }
+
+      // Ship 1 diagnostics: offset search summary
+      final margin = bestResult.overallScore - secondBestScore;
+      AppLogger.info(
+        '[DIAG] === OFFSET SEARCH === '
+        '| bestOffset=$bestOffset '
+        '| bestScore=${(bestResult.overallScore * 100).toStringAsFixed(1)}% '
+        '| secondBest=${(secondBestScore * 100).toStringAsFixed(1)}% '
+        '| margin=${(margin * 100).toStringAsFixed(1)}pp '
+        '| offsets tried: ${offsetScores.length} '
+        '| all scores: ${offsetScores.entries.map((e) => '${e.key}=${(e.value * 100).toStringAsFixed(1)}%').join(', ')}',
+        tag: 'ClientRecording',
+      );
 
       final result = bestResult;
 
