@@ -61,6 +61,10 @@ class AppRoutes {
   static const String programDetails = '/program-details';
   static const String calendar = '/calendar';
 
+  // Client My Program routes (program-first navigation)
+  static const String myProgram = '/my-program';
+  static const String myProgramDetail = '/my-program/:programId';
+
   // Coach Hub
   static const String coachHub = '/coach/hub';
 
@@ -301,6 +305,21 @@ GoRouter router(Ref ref) {
           final id = state.pathParameters['id']!;
           final routine = state.extra as RoutineModel?;
           return RoutineDetailScreen(routineId: id, routine: routine);
+        },
+      ),
+
+      // Client My Program routes (program-first navigation)
+      GoRoute(
+        path: AppRoutes.myProgram,
+        builder: (context, state) => const MyProgramListScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.myProgramDetail,
+        builder: (context, state) {
+          final program = state.extra as AssignedProgramModel?;
+          // If navigated without extra (e.g. deep-link), fallback gracefully.
+          if (program == null) return const MyProgramListScreen();
+          return MyProgramDetailScreen(program: program);
         },
       ),
       GoRoute(

@@ -288,6 +288,27 @@ class CachedApiResponses extends Table {
   Set<Column> get primaryKey => {cacheKey};
 }
 
+/// Local cache of coach-assigned programs for offline-first access.
+/// Stores the full serialized JSON of each AssignedProgramModel.
+///
+/// The `remoteId` maps to the server's `assigned_program.id` (CUID string).
+/// The `routinesJson` stores the serialized list of routines (including
+/// exercises) so we can hydrate the model without extra joins.
+class AssignedPrograms extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get remoteId => text().unique()();
+  TextColumn get name => text()();
+  TextColumn get description => text().withDefault(const Constant(''))();
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+  DateTimeColumn get startDate => dateTime().nullable()();
+  DateTimeColumn get endDate => dateTime().nullable()();
+
+  /// Full serialized JSON of List<RoutineModel> — avoids complex join tables.
+  TextColumn get routinesJson => text().withDefault(const Constant('[]'))();
+
+  DateTimeColumn get syncedAt => dateTime().withDefault(currentDateAndTime)();
+}
+
 /// Cached coach reference forms for offline comparison.
 /// Stores the full API response JSON so forms can be loaded without network.
 class CachedExerciseForms extends Table {
@@ -325,6 +346,7 @@ class CachedExerciseForms extends Table {
     StandaloneAssignedPrograms,
     CachedExerciseForms,
     CachedApiResponses,
+    AssignedPrograms,
     // Gains Coins tables
     CoinBalances,
     CoinTransactions,
@@ -338,7 +360,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Database schema version - increment when changing tables
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   /// Handle migrations when schema version changes
   @override
@@ -390,6 +412,10 @@ class AppDatabase extends _$AppDatabase {
           await customStatement(
             "DELETE FROM sync_queue WHERE entity_table = 'pose_results'",
           );
+        }
+        if (from < 8) {
+          // v8: Add assigned programs cache table for program-first navigation
+          await m.createTable(assignedPrograms);
         }
       },
       beforeOpen: (details) async {
@@ -961,6 +987,43 @@ class AppDatabase extends _$AppDatabase {
       ),
     );
   }
+
+  // ============== Assigned Programs Operations ==============
+
+  /// Get all cached assigned programs
+  Future<List<AssignedProgram>> getAssignedPrograms() =>
+      select(assignedPrograms).get();
+
+  /// Get an assigned program by remote ID
+  Future<AssignedProgram?> getAssignedProgramByRemoteId(String remoteId) {
+    return (select(assignedPrograms)
+          ..where((ap) => ap.remoteId.equals(remoteId)))
+        .getSingleOrNull();
+  }
+
+  /// Upsert (insert or replace) an assigned program row
+  Future<int> upsertAssignedProgram(AssignedProgramsCompanion program) {
+    return into(assignedPrograms).insertOnConflictUpdate(program);
+  }
+
+  /// Replace all assigned programs in a single batch (full sync)
+  Future<void> replaceAssignedPrograms(
+    List<AssignedProgramsCompanion> programs,
+  ) async {
+    await transaction(() async {
+      await delete(assignedPrograms).go();
+      await batch((b) {
+        b.insertAll(
+          assignedPrograms,
+          programs,
+          mode: InsertMode.insertOrReplace,
+        );
+      });
+    });
+  }
+
+  /// Delete all assigned programs (e.g. on logout)
+  Future<int> deleteAllAssignedPrograms() => delete(assignedPrograms).go();
 
   // ============== Utility Methods ==============
 

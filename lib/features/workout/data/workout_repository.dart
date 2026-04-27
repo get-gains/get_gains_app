@@ -345,6 +345,110 @@ class WorkoutRepository {
     }
   }
 
+  // ============== Program Operations ==============
+
+  /// Sync assigned programs from server and cache to local DB.
+  ///
+  /// Returns [Success] with the parsed list on success,
+  /// or [Failure] on network/parse error (caller should fall back to local DB).
+  Future<Result<List<AssignedProgramModel>, AppError>> syncPrograms() async {
+    AppLogger.debug('Syncing programs from server', tag: 'WorkoutRepo');
+
+    final result = await _apiClient.get<Map<String, dynamic>>(
+      ApiConstants.workoutPrograms,
+    );
+
+    return result.when(
+      success: (data) async {
+        try {
+          final programsList = <AssignedProgramModel>[];
+          final programsJson = data['programs'] as List;
+
+          for (final programJson in programsJson) {
+            try {
+              final program = AssignedProgramModel.fromJson(
+                programJson as Map<String, dynamic>,
+              );
+              programsList.add(program);
+            } catch (e) {
+              AppLogger.error(
+                'Failed to parse individual program',
+                tag: 'WorkoutRepo',
+                error: e,
+              );
+              continue;
+            }
+          }
+
+          // Full replace: clear old cache, write fresh data
+          await _db.replaceAssignedPrograms(
+            programsList
+                .map(
+                  (p) => AssignedProgramsCompanion.insert(
+                    remoteId: p.id,
+                    name: p.name,
+                    description: Value(p.description),
+                    isActive: Value(p.isActive),
+                    startDate: Value(p.startDate),
+                    endDate: Value(p.endDate),
+                    routinesJson: Value(p.routinesJson),
+                  ),
+                )
+                .toList(),
+          );
+
+          AppLogger.info(
+            'Synced ${programsList.length} programs',
+            tag: 'WorkoutRepo',
+          );
+          return Success(programsList);
+        } catch (e, stackTrace) {
+          AppLogger.error(
+            'Failed to parse programs',
+            tag: 'WorkoutRepo',
+            error: e,
+          );
+          AppLogger.debug('Stack trace: $stackTrace', tag: 'WorkoutRepo');
+          return Failure(
+            DatabaseError(message: 'Failed to parse programs: $e'),
+          );
+        }
+      },
+      failure: (error) => Failure(error),
+    );
+  }
+
+  /// Get all assigned programs from local DB (offline-first).
+  Future<Result<List<AssignedProgramModel>, AppError>> getPrograms() async {
+    try {
+      AppLogger.debug('Fetching programs from local DB', tag: 'WorkoutRepo');
+      final rows = await _db.getAssignedPrograms();
+
+      final models = rows
+          .map(
+            (row) => AssignedProgramModelX.fromDbRow(
+              remoteId: row.remoteId,
+              name: row.name,
+              description: row.description,
+              isActive: row.isActive,
+              startDate: row.startDate,
+              endDate: row.endDate,
+              routinesJson: row.routinesJson,
+            ),
+          )
+          .toList();
+
+      return Success(models);
+    } catch (e) {
+      AppLogger.error(
+        'Failed to load programs from local DB',
+        tag: 'WorkoutRepo',
+        error: e,
+      );
+      return Failure(DatabaseError(message: 'Failed to load programs: $e'));
+    }
+  }
+
   /// Resolve a RoutineModel.id (remote CUID or local int string) to the
   /// local auto-increment integer ID used by the Drift Routines table.
   Future<int?> _resolveLocalRoutineId(String modelId) async {

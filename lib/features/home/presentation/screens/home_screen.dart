@@ -246,7 +246,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
                                 ),
-                                onTap: () => context.push(AppRoutes.routines),
+                                onTap: () => context.push(AppRoutes.myProgram),
                               ),
                             ),
                           ),
@@ -451,7 +451,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         title: 'Today\'s Focus',
                         isDark: isDark,
                         action: TextButton(
-                          onPressed: () => context.push(AppRoutes.routines),
+                          onPressed: () => context.push(AppRoutes.myProgram),
                           child: const Text('See All'),
                         ),
                       ),
@@ -467,7 +467,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               estimatedMinutes: 0,
                               isPlaceholder: true,
                               onStartPressed: () =>
-                                  context.push(AppRoutes.routines),
+                                  context.push(AppRoutes.myProgram),
                             );
                           }
                           if (today.hasRoutine) {
@@ -482,7 +482,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               completedToday: today.completedToday,
                               onStartPressed: today.completedToday
                                   ? null
-                                  : () => context.push(AppRoutes.routines),
+                                  : () => context.push(AppRoutes.myProgram),
                             );
                           }
                           // No active programs at all — show Start a Program CTA
@@ -601,7 +601,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 // Already on home
                 break;
               case 1:
-                context.push(AppRoutes.routines);
+                context.push(AppRoutes.myProgram);
                 break;
               case 2:
                 context.push(AppRoutes.progress);
@@ -760,7 +760,7 @@ class _StartProgramCta extends StatelessWidget {
               child: AppButton.primary(
                 label: 'Browse Workouts',
                 icon: Icons.arrow_forward,
-                onPressed: () => context.push(AppRoutes.routines),
+                onPressed: () => context.push(AppRoutes.myProgram),
               ),
             ),
           ],
@@ -966,7 +966,7 @@ class _BottomNavBar extends StatelessWidget {
               _NavItem(
                 icon: Icons.fitness_center_outlined,
                 activeIcon: Icons.fitness_center,
-                label: 'Workouts',
+                label: 'My Program',
                 isActive: currentIndex == 1,
                 onTap: () => onTap(1),
               ),
