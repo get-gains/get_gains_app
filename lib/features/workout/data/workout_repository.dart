@@ -479,6 +479,21 @@ class WorkoutRepository {
     return re?.id;
   }
 
+  /// Resolve a WorkoutSessionModel.id (remote CUID or local int string) to
+  /// the local auto-increment integer ID used by the Drift WorkoutSessions table.
+  Future<int?> resolveLocalWorkoutSessionId(String modelId) async {
+    // 1. Try parsing as local integer ID
+    final localId = int.tryParse(modelId);
+    if (localId != null) {
+      final session = await _db.getWorkoutSessionById(localId);
+      if (session != null) return localId;
+    }
+
+    // 2. Fall back to looking up by remoteId
+    final session = await _db.getWorkoutSessionByRemoteId(modelId);
+    return session?.id;
+  }
+
   /// Start a new workout session
   Future<Result<WorkoutSessionModel, AppError>> startWorkoutSession({
     required String userId,
@@ -727,7 +742,9 @@ class WorkoutRepository {
   }) async {
     try {
       // Resolve model IDs to local integer IDs
-      final workoutSessionId = int.tryParse(workoutSessionModelId);
+      final workoutSessionId = await resolveLocalWorkoutSessionId(
+        workoutSessionModelId,
+      );
       if (workoutSessionId == null) {
         return Failure(
           DatabaseError(

@@ -402,9 +402,14 @@ class _ClientUnityRecordingScreenState
     _isNavigatingAfterLog = false;
     // Stop the setup validation stream before starting video recording
     _stopSetupStream();
-    ref
-        .read(clientRecordingProvider(widget.exerciseId).notifier)
-        .startRecording();
+    final notifier = ref.read(
+      clientRecordingProvider(widget.exerciseId).notifier,
+    );
+    notifier.setWorkoutContext(
+      workoutSessionId: widget.workoutSessionId,
+      setNumber: _workoutSetNumber,
+    );
+    notifier.startRecording();
     // Start video recording
     _cameraController
         ?.startVideoRecording()
@@ -1907,7 +1912,16 @@ class _ClientUnityRecordingScreenState
     if (!mounted) return;
     setState(() => _isLoggingSet = false);
 
-    if (!didLogSuccessfully) return;
+    if (!didLogSuccessfully) {
+      AppLogger.warning(
+        'logSet returned false — session state: ${ref.read(workoutSessionProvider).runtimeType}',
+        tag: 'ClientUnityRecording',
+      );
+      if (mounted) {
+        AppToast.error(context, 'Failed to log set. Please try again.');
+      }
+      return;
+    }
 
     _isNavigatingAfterLog = true;
     _workoutSetNumber = setNumber + 1;

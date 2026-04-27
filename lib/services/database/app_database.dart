@@ -670,6 +670,13 @@ class AppDatabase extends _$AppDatabase {
     )..where((ws) => ws.id.equals(id))).getSingleOrNull();
   }
 
+  /// Get workout session by remote ID (server CUID)
+  Future<WorkoutSession?> getWorkoutSessionByRemoteId(String remoteId) {
+    return (select(
+      workoutSessions,
+    )..where((ws) => ws.remoteId.equals(remoteId))).getSingleOrNull();
+  }
+
   /// Start a new workout session
   Future<int> startWorkoutSession(WorkoutSessionsCompanion session) {
     return into(workoutSessions).insert(session);
@@ -996,9 +1003,9 @@ class AppDatabase extends _$AppDatabase {
 
   /// Get an assigned program by remote ID
   Future<AssignedProgram?> getAssignedProgramByRemoteId(String remoteId) {
-    return (select(assignedPrograms)
-          ..where((ap) => ap.remoteId.equals(remoteId)))
-        .getSingleOrNull();
+    return (select(
+      assignedPrograms,
+    )..where((ap) => ap.remoteId.equals(remoteId))).getSingleOrNull();
   }
 
   /// Upsert (insert or replace) an assigned program row

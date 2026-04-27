@@ -149,6 +149,19 @@ class ClientRecording extends _$ClientRecording {
   int _referenceDurationMs = 0;
   Timer? _elapsedTimer;
 
+  // Workout context — set by the screen before recording starts.
+  String? _workoutSessionId;
+  int _setNumber = 1;
+
+  /// Set the active workout session context for S3 frame uploads.
+  void setWorkoutContext({
+    required String? workoutSessionId,
+    int setNumber = 1,
+  }) {
+    _workoutSessionId = workoutSessionId;
+    _setNumber = setNumber;
+  }
+
   @override
   ClientRecordingState build(String exerciseId) {
     _featureExtractor = FeatureExtractor();
@@ -674,25 +687,33 @@ class ClientRecording extends _$ClientRecording {
           relevantAngles: _relevantAngles.isNotEmpty ? _relevantAngles : null,
         );
 
-        final uploadService = ref.read(framesUploadServiceProvider);
-        final keyResult = await uploadService.uploadClientSetFrames(
-          workoutSessionId: 'standalone',
-          setNumber: 1,
-          framesBlob: blob.toJson(),
-        );
+        // Only upload to S3 when inside a real workout session.
+        if (_workoutSessionId != null) {
+          final uploadService = ref.read(framesUploadServiceProvider);
+          final keyResult = await uploadService.uploadClientSetFrames(
+            workoutSessionId: _workoutSessionId!,
+            setNumber: _setNumber,
+            framesBlob: blob.toJson(),
+          );
 
-        keyResult.when(
-          success: (key) {
-            recordedFramesKey = key;
-            uploadSuccess = true;
-          },
-          failure: (error) {
-            AppLogger.warning(
-              'Failed to upload client frames blob: ${error.message}',
-              tag: 'ClientRecording',
-            );
-          },
-        );
+          keyResult.when(
+            success: (key) {
+              recordedFramesKey = key;
+              uploadSuccess = true;
+            },
+            failure: (error) {
+              AppLogger.warning(
+                'Failed to upload client frames blob: ${error.message}',
+                tag: 'ClientRecording',
+              );
+            },
+          );
+        } else {
+          AppLogger.info(
+            'Skipping S3 upload — no workout session (practice mode)',
+            tag: 'ClientRecording',
+          );
+        }
       } catch (e) {
         AppLogger.warning(
           'Failed to upload comparison result: $e',

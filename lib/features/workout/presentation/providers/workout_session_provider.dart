@@ -352,8 +352,16 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
 
     state = const WorkoutSessionLoading();
 
+    final localId = await _repository.resolveLocalWorkoutSessionId(
+      currentState.session.id,
+    );
+    if (localId == null) {
+      state = currentState;
+      return;
+    }
+
     final result = await _repository.completeWorkoutSession(
-      sessionId: int.parse(currentState.session.id),
+      sessionId: localId,
       notes: notes,
     );
 
