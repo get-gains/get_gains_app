@@ -44,14 +44,18 @@ class CoachHubScreen extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  // ── Client Management ──────────────────────────
-                  _SectionHeader(title: 'Client Management', isDark: isDark),
-                  const SizedBox(height: 12),
+                  Text(
+                    'Quick Actions',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   _HubTile(
                     icon: Icons.people_outlined,
                     activeIcon: Icons.people,
                     title: 'Clients',
-                    subtitle: 'View your subscribed client roster',
+                    subtitle: 'Manage roster & training programs',
                     color: isDark
                         ? AppColors.primaryDark
                         : AppColors.primaryLight,
@@ -68,22 +72,6 @@ class CoachHubScreen extends ConsumerWidget {
                     isDark: isDark,
                     onTap: () =>
                         context.push(AppRoutes.coachPerformanceDashboard),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // ── Content Management ─────────────────────────
-                  _SectionHeader(title: 'Content Management', isDark: isDark),
-                  const SizedBox(height: 12),
-                  _HubTile(
-                    icon: Icons.calendar_today_outlined,
-                    activeIcon: Icons.calendar_today,
-                    title: 'Programs',
-                    subtitle: 'Build per-client training programs',
-                    color: isDark
-                        ? AppColors.accentDark
-                        : const Color(0xFF22C55E),
-                    isDark: isDark,
-                    onTap: () => context.push(AppRoutes.coachRoster),
                   ),
                   const SizedBox(height: 12),
                   _HubTile(
@@ -112,23 +100,6 @@ class CoachHubScreen extends ConsumerWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, required this.isDark});
-
-  final String title;
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: Theme.of(
-        context,
-      ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
     );
   }
 }
