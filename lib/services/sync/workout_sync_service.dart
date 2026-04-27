@@ -297,19 +297,29 @@ class WorkoutSyncService {
           }
         }
 
-        // Resolve local routine exercise ID to remote ID
-        final localReId = payload['routineExerciseId'] as int?;
-        String? remoteReId;
-        if (localReId != null) {
-          final re = await _db.getRoutineExerciseById(localReId);
-          remoteReId = re?.remoteId;
+        // Read the APRE CUID directly from the payload.
+        // New payloads use 'assignedProgramRoutineExerciseId'; legacy
+        // payloads may still carry 'routineExerciseId' as an int that
+        // needs resolution via the local routine_exercises table.
+        String? apreId = payload['assignedProgramRoutineExerciseId'] as String?;
+        if (apreId == null || apreId.isEmpty) {
+          final legacyReId = payload['routineExerciseId'];
+          if (legacyReId != null) {
+            final localReId = legacyReId is int
+                ? legacyReId
+                : int.tryParse('$legacyReId');
+            if (localReId != null) {
+              final re = await _db.getRoutineExerciseById(localReId);
+              apreId = re?.remoteId;
+            }
+          }
         }
 
         // Skip if we can't resolve IDs
-        if (remoteSessionId == null || remoteReId == null) {
+        if (remoteSessionId == null || apreId == null || apreId.isEmpty) {
           AppLogger.warning(
             'Skipping set ${item.recordId} — unresolved IDs '
-            '(session: $remoteSessionId, re: $remoteReId)',
+            '(session: $remoteSessionId, apreId: $apreId)',
             tag: _tag,
           );
           continue;
@@ -318,7 +328,7 @@ class WorkoutSyncService {
         setsPayload.add({
           'localId': item.recordId,
           'workoutSessionId': remoteSessionId,
-          'routineExerciseId': remoteReId,
+          'assignedProgramRoutineExerciseId': apreId,
           'setNumber': payload['setNumber'],
           'repsCompleted': payload['repsCompleted'],
           if (payload['weightKg'] != null) 'weightKg': payload['weightKg'],

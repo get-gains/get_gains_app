@@ -114,11 +114,10 @@ class PerformedSets extends Table {
   TextColumn get remoteId => text().nullable()();
   IntColumn get workoutSessionId =>
       integer().references(WorkoutSessions, #id, onDelete: KeyAction.cascade)();
-  IntColumn get routineExerciseId => integer().references(
-    RoutineExercises,
-    #id,
-    onDelete: KeyAction.cascade,
-  )();
+
+  /// Server-side assigned_program_routine_exercise CUID.
+  /// Stored directly — no local FK lookup required.
+  TextColumn get assignedProgramRoutineExerciseId => text()();
   IntColumn get setNumber => integer()();
   IntColumn get repsCompleted => integer()();
   RealColumn get weightKg => real().nullable()();
@@ -360,7 +359,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Database schema version - increment when changing tables
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   /// Handle migrations when schema version changes
   @override
@@ -416,6 +415,70 @@ class AppDatabase extends _$AppDatabase {
         if (from < 8) {
           // v8: Add assigned programs cache table for program-first navigation
           await m.createTable(assignedPrograms);
+        }
+        if (from < 9) {
+          // v9: Replace int FK routineExerciseId with text APRE CUID.
+          // SQLite doesn't support DROP COLUMN on older versions, so we
+          // recreate the table via the temp-table-copy pattern.
+          await customStatement('''
+            CREATE TABLE performed_sets_new (
+              id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+              remote_id TEXT,
+              workout_session_id INTEGER NOT NULL
+                REFERENCES workout_sessions (id) ON DELETE CASCADE,
+              assigned_program_routine_exercise_id TEXT NOT NULL DEFAULT '',
+              set_number INTEGER NOT NULL,
+              reps_completed INTEGER NOT NULL,
+              weight_kg REAL,
+              rpe INTEGER,
+              notes TEXT,
+              is_completed INTEGER NOT NULL DEFAULT 0,
+              recorded_frames_key TEXT,
+              overall_score REAL,
+              created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+              updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+              is_synced INTEGER NOT NULL DEFAULT 0
+            )
+          ''');
+
+          // Copy data, resolving old int FK to remote CUID where possible.
+          await customStatement('''
+            INSERT INTO performed_sets_new (
+              id, remote_id, workout_session_id,
+              assigned_program_routine_exercise_id,
+              set_number, reps_completed, weight_kg, rpe, notes,
+              is_completed, recorded_frames_key, overall_score,
+              created_at, updated_at, is_synced
+            )
+            SELECT
+              ps.id, ps.remote_id, ps.workout_session_id,
+              COALESCE(re.remote_id, CAST(ps.routine_exercise_id AS TEXT)),
+              ps.set_number, ps.reps_completed, ps.weight_kg, ps.rpe, ps.notes,
+              ps.is_completed, ps.recorded_frames_key, ps.overall_score,
+              ps.created_at, ps.updated_at, ps.is_synced
+            FROM performed_sets ps
+            LEFT JOIN routine_exercises re ON re.id = ps.routine_exercise_id
+          ''');
+
+          await customStatement('DROP TABLE performed_sets');
+          await customStatement(
+            'ALTER TABLE performed_sets_new RENAME TO performed_sets',
+          );
+
+          // Clean up orphan sync-queue rows whose old routineExerciseId
+          // couldn't be resolved to a CUID (would 400 on the server).
+          await customStatement('''
+            DELETE FROM sync_queue
+            WHERE entity_table = 'performed_sets'
+              AND json_extract(payload, '\$.routineExerciseId') IS NOT NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM routine_exercises re
+                WHERE re.id = CAST(
+                  json_extract(payload, '\$.routineExerciseId') AS INTEGER
+                )
+                AND re.remote_id IS NOT NULL
+              )
+          ''');
         }
       },
       beforeOpen: (details) async {
@@ -745,7 +808,7 @@ class AppDatabase extends _$AppDatabase {
     return (select(performedSets)
           ..where((ps) => ps.workoutSessionId.equals(workoutSessionId))
           ..orderBy([
-            (ps) => OrderingTerm.asc(ps.routineExerciseId),
+            (ps) => OrderingTerm.asc(ps.assignedProgramRoutineExerciseId),
             (ps) => OrderingTerm.asc(ps.setNumber),
           ]))
         .get();
@@ -754,13 +817,15 @@ class AppDatabase extends _$AppDatabase {
   /// Get performed sets for a specific exercise in a session
   Future<List<PerformedSet>> getPerformedSetsForExercise(
     int workoutSessionId,
-    int routineExerciseId,
+    String assignedProgramRoutineExerciseId,
   ) {
     return (select(performedSets)
           ..where(
             (ps) =>
                 ps.workoutSessionId.equals(workoutSessionId) &
-                ps.routineExerciseId.equals(routineExerciseId),
+                ps.assignedProgramRoutineExerciseId.equals(
+                  assignedProgramRoutineExerciseId,
+                ),
           )
           ..orderBy([(ps) => OrderingTerm.asc(ps.setNumber)]))
         .get();
@@ -774,7 +839,7 @@ class AppDatabase extends _$AppDatabase {
   /// Log a completed set
   Future<int> logSet({
     required int workoutSessionId,
-    required int routineExerciseId,
+    required String assignedProgramRoutineExerciseId,
     required int setNumber,
     required int repsCompleted,
     double? weightKg,
@@ -786,7 +851,7 @@ class AppDatabase extends _$AppDatabase {
     return into(performedSets).insert(
       PerformedSetsCompanion.insert(
         workoutSessionId: workoutSessionId,
-        routineExerciseId: routineExerciseId,
+        assignedProgramRoutineExerciseId: assignedProgramRoutineExerciseId,
         setNumber: setNumber,
         repsCompleted: repsCompleted,
         weightKg: Value(weightKg),
