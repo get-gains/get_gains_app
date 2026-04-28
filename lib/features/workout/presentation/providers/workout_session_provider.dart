@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/utils/app_error.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../providers/auth_state_provider.dart';
 import '../../../../services/sync/workout_sync_service.dart';
 import '../../data/models/models.dart';
@@ -122,34 +123,45 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
   Future<void> _checkActiveSession() async {
     if (_userId == null) return;
 
+    // Ensure program cache is hydrated so routine lookup finds APRE CUIDs.
+    final cached = await _repository.getPrograms();
+    if (cached.valueOrNull?.isEmpty ?? true) {
+      await _repository.syncPrograms();
+    }
+
     final result = await _repository.getActiveSession(_userId!);
     if (!ref.mounted) return;
     result.when(
       success: (session) async {
-        if (session != null && session.routineId != null) {
-          final routineResult = await _repository.getRoutineByModelId(
-            session.routineId!,
-          );
-          if (!ref.mounted) return;
-          routineResult.when(
-            success: (routine) {
-              state = WorkoutSessionActive(
-                session: session,
-                routine: routine,
-                currentExerciseIndex: _calculateCurrentExerciseIndex(
-                  session,
-                  routine,
-                ),
-              );
-            },
-            failure: (_) {
-              state = WorkoutSessionActive(
-                session: session,
-                routine: null,
-                currentExerciseIndex: 0,
-              );
-            },
-          );
+        if (session != null) {
+          // Try APRE CUID first (matches program cache), then local int ID.
+          final routineKey =
+              session.assignedProgramRoutineId ?? session.routineId;
+          if (routineKey != null) {
+            final routineResult = await _repository.getRoutineByModelId(
+              routineKey,
+            );
+            if (!ref.mounted) return;
+            routineResult.when(
+              success: (routine) {
+                state = WorkoutSessionActive(
+                  session: session,
+                  routine: routine,
+                  currentExerciseIndex: _calculateCurrentExerciseIndex(
+                    session,
+                    routine,
+                  ),
+                );
+              },
+              failure: (_) {
+                state = WorkoutSessionActive(
+                  session: session,
+                  routine: null,
+                  currentExerciseIndex: 0,
+                );
+              },
+            );
+          }
         }
       },
       failure: (_) {},
@@ -158,8 +170,11 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
 
   /// Start a new workout session, or resume an existing active session
   /// for the same routine.
+  ///
+  /// When [routine] is provided it is used directly, skipping a repo lookup.
   Future<void> startSession({
     required String routineModelId,
+    RoutineModel? routine,
     String? assignedProgramId,
   }) async {
     if (_userId == null) {
@@ -171,6 +186,12 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
 
     state = const WorkoutSessionLoading();
 
+    // Refresh assigned programs so cached APRE CUIDs match the server.
+    // The runtime RoutineModel is hydrated from AssignedPrograms.routinesJson,
+    // not the local Routines table.
+    await _repository.syncPrograms();
+    if (!ref.mounted) return;
+
     // Check for an existing active session for the same routine first.
     // This prevents creating orphan sessions when the user leaves and
     // returns to the same workout.
@@ -180,27 +201,27 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
     if (activeSession != null && activeSession.routineId == routineModelId) {
       // Resume the existing session — all logged sets are already in the
       // model's performedSets (loaded from Drift by getActiveSession).
-      final routineResult = await _repository.getRoutineByModelId(
-        routineModelId,
-      );
+      final resolvedRoutine =
+          routine ??
+          (await _repository.getRoutineByModelId(routineModelId)).valueOrNull;
       if (!ref.mounted) return;
-      final routine = routineResult.valueOrNull;
 
       state = WorkoutSessionActive(
         session: activeSession,
-        routine: routine,
+        routine: resolvedRoutine,
         currentExerciseIndex: _calculateCurrentExerciseIndex(
           activeSession,
-          routine,
+          resolvedRoutine,
         ),
       );
       return;
     }
 
-    // Get routine first
-    final routineResult = await _repository.getRoutineByModelId(routineModelId);
+    // Resolve the routine if not provided
+    final resolvedRoutine =
+        routine ??
+        (await _repository.getRoutineByModelId(routineModelId)).valueOrNull;
     if (!ref.mounted) return;
-    final routine = routineResult.valueOrNull;
 
     // Start session
     final result = await _repository.startWorkoutSession(
@@ -215,7 +236,7 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
       success: (session) {
         state = WorkoutSessionActive(
           session: session,
-          routine: routine,
+          routine: resolvedRoutine,
           currentExerciseIndex: 0,
         );
       },
@@ -235,6 +256,11 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
     String? routineExerciseIdOverride,
     String? recordedFramesKey,
     double? overallScore,
+    String? exerciseNameSnapshot,
+    int? targetRepsMin,
+    int? targetRepsMax,
+    int? targetRestSeconds,
+    double? targetWeightKg,
   }) async {
     final currentState = state;
     if (currentState is! WorkoutSessionActive) return false;
@@ -261,6 +287,11 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
       notes: notes,
       recordedFramesKey: recordedFramesKey,
       overallScore: overallScore,
+      exerciseNameSnapshot: exerciseNameSnapshot,
+      targetRepsMin: targetRepsMin,
+      targetRepsMax: targetRepsMax,
+      targetRestSeconds: targetRestSeconds,
+      targetWeightKg: targetWeightKg,
     );
 
     var didLogSuccessfully = false;
@@ -308,7 +339,12 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
           currentExerciseIndex: newIndex,
         );
       },
-      failure: (_) {},
+      failure: (error) {
+        AppLogger.error(
+          'logSet failed: ${error.message}',
+          tag: 'WorkoutSession',
+        );
+      },
     );
 
     return didLogSuccessfully;
@@ -368,10 +404,19 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
     if (!ref.mounted) return;
 
     result.when(
-      success: (session) {
+      success: (session) async {
+        // Drain pending sync so the server has all sets and the coin reward
+        // is reflected when the completion screen reads the balance.
+        try {
+          await ref
+              .read(workoutSyncServiceProvider)
+              .syncAll()
+              .timeout(const Duration(seconds: 6));
+        } catch (_) {
+          // Offline — coins land on next sync cycle.
+        }
+        if (!ref.mounted) return;
         state = WorkoutSessionCompleted(session, routine: currentState.routine);
-        // Trigger sync so the server has the session for history
-        ref.read(workoutSyncServiceProvider).syncAll();
       },
       failure: (error) {
         // Restore previous state on error
@@ -406,6 +451,12 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
   Future<void> refreshActiveSession({int? preferredExerciseIndex}) async {
     if (_userId == null) return;
 
+    // Ensure program cache is hydrated so routine lookup finds APRE CUIDs.
+    final cached = await _repository.getPrograms();
+    if (cached.valueOrNull?.isEmpty ?? true) {
+      await _repository.syncPrograms();
+    }
+
     final result = await _repository.getActiveSession(_userId!);
     if (!ref.mounted) return;
 
@@ -417,9 +468,12 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
         }
 
         RoutineModel? routine;
-        if (session.routineId != null) {
+        // Try APRE CUID first (matches program cache), then local int ID.
+        final routineKey =
+            session.assignedProgramRoutineId ?? session.routineId;
+        if (routineKey != null) {
           final routineResult = await _repository.getRoutineByModelId(
-            session.routineId!,
+            routineKey,
           );
           if (!ref.mounted) return;
           routine = routineResult.valueOrNull;

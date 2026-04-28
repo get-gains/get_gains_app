@@ -23,7 +23,7 @@ abstract class WorkoutSessionModel with _$WorkoutSessionModel {
   const factory WorkoutSessionModel({
     required String id,
     required String userId,
-    String? assignedProgramId,
+    String? assignedProgramRoutineId,
     String? routineId,
     required DateTime startedAt,
     DateTime? completedAt,
@@ -39,6 +39,9 @@ abstract class WorkoutSessionModel with _$WorkoutSessionModel {
 
 /// Extension for workout session calculations
 extension WorkoutSessionModelX on WorkoutSessionModel {
+  /// Alias for backward-compat reads that reference the old name.
+  String? get assignedProgramId => assignedProgramRoutineId;
+
   /// Whether the session is still in progress
   bool get isInProgress => completedAt == null;
 
@@ -62,7 +65,9 @@ extension WorkoutSessionModelX on WorkoutSessionModel {
   double get totalVolume {
     final byExercise = <String, List<PerformedSetModel>>{};
     for (final set in performedSets) {
-      byExercise.putIfAbsent(set.routineExerciseId, () => []).add(set);
+      byExercise
+          .putIfAbsent(set.assignedProgramRoutineExerciseId, () => [])
+          .add(set);
     }
 
     double total = 0;
@@ -85,7 +90,9 @@ extension WorkoutSessionModelX on WorkoutSessionModel {
   /// Get sets for a specific routine exercise
   List<PerformedSetModel> setsForExercise(String routineExerciseId) =>
       performedSets
-          .where((set) => set.routineExerciseId == routineExerciseId)
+          .where(
+            (set) => set.assignedProgramRoutineExerciseId == routineExerciseId,
+          )
           .toList()
         ..sort((a, b) => a.setNumber.compareTo(b.setNumber));
 }

@@ -130,8 +130,8 @@ class WorkoutSyncService {
       final result = await _apiClient.post<Map<String, dynamic>>(
         ApiConstants.workoutSessions,
         data: {
-          if (session.assignedProgramId != null)
-            'assignedProgramId': session.assignedProgramId,
+          if (session.assignedProgramRoutineId != null)
+            'assignedProgramRoutineId': session.assignedProgramRoutineId,
         },
       );
 
@@ -215,8 +215,8 @@ class WorkoutSyncService {
         final result = await _apiClient.post<Map<String, dynamic>>(
           ApiConstants.workoutSessions,
           data: {
-            if (payload['assignedProgramId'] != null)
-              'assignedProgramId': payload['assignedProgramId'],
+            if (payload['assignedProgramRoutineId'] != null)
+              'assignedProgramRoutineId': payload['assignedProgramRoutineId'],
           },
         );
 
@@ -297,28 +297,32 @@ class WorkoutSyncService {
           }
         }
 
-        // Resolve local routine exercise ID to remote ID
-        final localReId = payload['routineExerciseId'] as int?;
-        String? remoteReId;
-        if (localReId != null) {
-          final re = await _db.getRoutineExerciseById(localReId);
-          remoteReId = re?.remoteId;
-        }
-
-        // Skip if we can't resolve IDs
-        if (remoteSessionId == null || remoteReId == null) {
+        // Read the APRE CUID directly from the payload.
+        // v9 migration resolved all legacy int FKs; only APRE CUIDs remain.
+        final apreId = payload['assignedProgramRoutineExerciseId'] as String?;
+        if (apreId == null || apreId.isEmpty) {
           AppLogger.warning(
-            'Skipping set ${item.recordId} — unresolved IDs '
-            '(session: $remoteSessionId, re: $remoteReId)',
+            'Skipping set ${item.recordId} — payload has no APRE CUID. Will retry.',
             tag: _tag,
           );
+          await _db.incrementRetryCount(item.id);
+          continue;
+        }
+
+        // Skip if we can't resolve session ID; bump retry for observability
+        if (remoteSessionId == null) {
+          AppLogger.warning(
+            'Skipping set ${item.recordId} — unresolved session ID. Will retry.',
+            tag: _tag,
+          );
+          await _db.incrementRetryCount(item.id);
           continue;
         }
 
         setsPayload.add({
           'localId': item.recordId,
           'workoutSessionId': remoteSessionId,
-          'routineExerciseId': remoteReId,
+          'assignedProgramRoutineExerciseId': apreId,
           'setNumber': payload['setNumber'],
           'repsCompleted': payload['repsCompleted'],
           if (payload['weightKg'] != null) 'weightKg': payload['weightKg'],
