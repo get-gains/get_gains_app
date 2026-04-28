@@ -527,6 +527,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 workoutsGoal: 4, // TODO: make configurable
                                 totalMinutes: stats.totalMinutes,
                                 streakDays: stats.streakDays,
+                                completedWeekdays: stats.completedWeekdays,
                               ),
                               loading: () => const WeeklyProgressCard(
                                 workoutsCompleted: 0,
