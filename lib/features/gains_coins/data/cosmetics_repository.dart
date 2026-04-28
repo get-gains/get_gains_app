@@ -9,6 +9,7 @@ import '../../../core/utils/logger.dart';
 import '../../../core/utils/result.dart';
 import '../../../services/api/api_client.dart';
 import '../../../services/database/app_database.dart';
+import 'cosmetics_api_json.dart';
 import 'models/equipped_cosmetic_model.dart';
 import 'models/user_cosmetic_model.dart';
 
@@ -76,7 +77,7 @@ class CosmeticsRepository {
               name: c.name,
               description: c.description,
               tier: c.tier,
-              category: c.category,
+              category: '',
               previewImageUrl: c.previewImageUrl,
               unityAssetRef: c.unityAssetRef,
               purchasedAt: uc.purchasedAt,
@@ -112,15 +113,35 @@ class CosmeticsRepository {
         try {
           final ownedList = (data['owned'] as List)
               .map(
-                (item) =>
-                    UserCosmeticModel.fromJson(item as Map<String, dynamic>),
+                (item) => UserCosmeticModel.fromJson(
+                  sanitizeUserCosmeticInventoryJson(
+                    item as Map<String, dynamic>,
+                  ),
+                ),
               )
               .toList();
 
-          final equippedMap = <String, String?>{};
+          final equippedMap = <String, String?>{
+            'HEADWEAR': null,
+            'TOP': null,
+            'BOTTOM': null,
+            'ACCESSORY': null,
+          };
           final equippedRaw = data['equipped'] as Map<String, dynamic>? ?? {};
-          for (final category in ['HEADWEAR', 'TOP', 'BOTTOM', 'ACCESSORY']) {
+          for (final category in equippedMap.keys.toList()) {
             equippedMap[category] = equippedRaw[category] as String?;
+          }
+
+          final equippedCosmeticsJson = data['equippedCosmetics'];
+          List<EquippedCosmeticModel>? equippedFromServer;
+          if (equippedCosmeticsJson is List) {
+            equippedFromServer = equippedCosmeticsJson
+                .map(
+                  (e) => EquippedCosmeticModel.fromJson(
+                    sanitizeEquippedCosmeticJson(e as Map<String, dynamic>),
+                  ),
+                )
+                .toList();
           }
 
           // Cache owned cosmetics locally
@@ -145,7 +166,6 @@ class CosmeticsRepository {
                     description: Value(item.description),
                     tier: item.tier,
                     coinCost: 0, // Not in inventory response
-                    category: item.category,
                     previewImageUrl: item.previewImageUrl,
                     unityAssetRef: item.unityAssetRef,
                     status: 'ACTIVE',
@@ -153,8 +173,22 @@ class CosmeticsRepository {
                 );
           }
 
-          // Cache equipped state
-          await _cacheEquippedState(equippedMap, ownedList);
+          // Cache equipped state (prefer generic equippedCosmetics list when present)
+          if (equippedFromServer != null && equippedFromServer.isNotEmpty) {
+            await _cacheEquippedFromResponse(
+              EquipResponse(
+                equipped: equippedMap,
+                equippedCosmetics: equippedFromServer,
+              ),
+            );
+            for (var i = 0; i < equippedFromServer.length; i++) {
+              final ec = equippedFromServer[i];
+              final key = ec.category.isNotEmpty ? ec.category : 'SLOT_$i';
+              equippedMap[key] = ec.cosmeticId;
+            }
+          } else {
+            await _cacheEquippedState(equippedMap, ownedList);
+          }
 
           AppLogger.info(
             'Synced ${ownedList.length} owned cosmetics',
@@ -269,10 +303,12 @@ class CosmeticsRepository {
         tag: 'CosmeticsRepo',
       );
 
-      final rows = await _db.select(_db.equippedCosmeticsTable).get();
+      final rows = await _db.select(_db.equippedCosmeticsTable).get()
+        ..sort((a, b) => a.equippedAt.compareTo(b.equippedAt));
 
       final items = <EquippedCosmeticModel>[];
-      for (final row in rows) {
+      for (var i = 0; i < rows.length; i++) {
+        final row = rows[i];
         // Get the unity asset ref from cosmetics table
         final cosmeticRows = await (_db.select(
           _db.cosmeticsTable,
@@ -285,7 +321,7 @@ class CosmeticsRepository {
         items.add(
           EquippedCosmeticModel(
             cosmeticId: row.cosmeticId,
-            category: row.category,
+            category: 'SLOT_$i',
             unityAssetRef: unityAssetRef,
             equippedAt: row.equippedAt,
           ),
@@ -322,7 +358,7 @@ class CosmeticsRepository {
           final equippedList = (data['equippedCosmetics'] as List)
               .map(
                 (item) => EquippedCosmeticModel.fromJson(
-                  item as Map<String, dynamic>,
+                  sanitizeEquippedCosmeticJson(item as Map<String, dynamic>),
                 ),
               )
               .toList();
@@ -334,9 +370,8 @@ class CosmeticsRepository {
                 .into(_db.equippedCosmeticsTable)
                 .insertOnConflictUpdate(
                   EquippedCosmeticsTableCompanion.insert(
-                    id: '${ec.category}_slot',
+                    id: ec.cosmeticId,
                     cosmeticId: ec.cosmeticId,
-                    category: ec.category,
                     equippedAt: ec.equippedAt,
                   ),
                 );
@@ -390,8 +425,9 @@ class CosmeticsRepository {
     final equippedCosmetics =
         (data['equippedCosmetics'] as List?)
             ?.map(
-              (item) =>
-                  EquippedCosmeticModel.fromJson(item as Map<String, dynamic>),
+              (item) => EquippedCosmeticModel.fromJson(
+                sanitizeEquippedCosmeticJson(item as Map<String, dynamic>),
+              ),
             )
             .toList() ??
         [];
@@ -410,9 +446,8 @@ class CosmeticsRepository {
           .into(_db.equippedCosmeticsTable)
           .insertOnConflictUpdate(
             EquippedCosmeticsTableCompanion.insert(
-              id: '${ec.category}_slot',
+              id: ec.cosmeticId,
               cosmeticId: ec.cosmeticId,
-              category: ec.category,
               equippedAt: ec.equippedAt,
             ),
           );
@@ -440,9 +475,8 @@ class CosmeticsRepository {
             .into(_db.equippedCosmeticsTable)
             .insertOnConflictUpdate(
               EquippedCosmeticsTableCompanion.insert(
-                id: '${entry.key}_slot',
+                id: cosmeticId,
                 cosmeticId: cosmeticId,
-                category: entry.key,
                 equippedAt: DateTime.now(),
               ),
             );

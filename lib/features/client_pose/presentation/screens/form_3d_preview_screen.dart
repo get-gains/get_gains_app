@@ -39,6 +39,9 @@ class _Form3DPreviewScreenState extends ConsumerState<Form3DPreviewScreen> {
   /// Swap LEFT_* / RIGHT_* arm landmarks in Unity (mirrored rig vs recording).
   bool _debugSwapArmLandmarks = UnityMessageContract.defaultPoseDebugSwapArmLandmarks;
 
+  /// Swap LEFT_* / RIGHT_* leg landmarks in Unity (hip through foot; rig vs recording).
+  bool _debugSwapLegLandmarks = UnityMessageContract.defaultPoseDebugSwapLegLandmarks;
+
   /// Show cyan stick figure on top of the humanoid for comparison.
   bool _debugForceStickOverlay =
       UnityMessageContract.defaultPoseDebugForceStickFigure;
@@ -49,13 +52,18 @@ class _Form3DPreviewScreenState extends ConsumerState<Form3DPreviewScreen> {
   /// Negate mapped world Z on nose/eyes/ears after head straightening (debug).
   bool _debugInvertHeadDepthZ = UnityMessageContract.defaultPoseDebugInvertHeadDepthZ;
 
+  /// Negate world Z on knee/ankle/foot (not hip) in Unity (debug).
+  bool _debugInvertLegDepthZ = UnityMessageContract.defaultPoseDebugInvertLegDepthZ;
+
   void _resetPoseDebugToDefaults(StateSetter setModalState) {
     setState(() {
       _debugSwapArmLandmarks = UnityMessageContract.defaultPoseDebugSwapArmLandmarks;
+      _debugSwapLegLandmarks = UnityMessageContract.defaultPoseDebugSwapLegLandmarks;
       _debugForceStickOverlay =
           UnityMessageContract.defaultPoseDebugForceStickFigure;
       _debugInvertArmDepthZ = UnityMessageContract.defaultPoseDebugInvertArmDepthZ;
       _debugInvertHeadDepthZ = UnityMessageContract.defaultPoseDebugInvertHeadDepthZ;
+      _debugInvertLegDepthZ = UnityMessageContract.defaultPoseDebugInvertLegDepthZ;
     });
     setModalState(() {});
     _sendPoseDebugToUnity();
@@ -132,9 +140,11 @@ class _Form3DPreviewScreenState extends ConsumerState<Form3DPreviewScreen> {
       UnityMessageContract.methodSetPoseDebugOptions,
       jsonEncode({
         'swapArmLandmarks': _debugSwapArmLandmarks,
+        'swapLegLandmarks': _debugSwapLegLandmarks,
         'forceShowStickFigure': _debugForceStickOverlay,
         'invertArmDepthZ': _debugInvertArmDepthZ,
         'invertHeadDepthZ': _debugInvertHeadDepthZ,
+        'invertLegDepthZ': _debugInvertLegDepthZ,
       }),
     );
   }
@@ -185,6 +195,21 @@ class _Form3DPreviewScreenState extends ConsumerState<Form3DPreviewScreen> {
                     ),
                     SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
+                      title: const Text('Swap leg landmarks (L/R)'),
+                      subtitle: const Text(
+                        'Swaps left/right leg tracking (hip through foot). On by default.',
+                      ),
+                      value: _debugSwapLegLandmarks,
+                      onChanged: _poseSent
+                          ? (v) {
+                              setModalState(() => _debugSwapLegLandmarks = v);
+                              setState(() => _debugSwapLegLandmarks = v);
+                              _sendPoseDebugToUnity();
+                            }
+                          : null,
+                    ),
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
                       title: const Text('Show skeleton overlay'),
                       subtitle: const Text(
                         'Keeps the cyan stick figure visible with the humanoid.',
@@ -225,6 +250,22 @@ class _Form3DPreviewScreenState extends ConsumerState<Form3DPreviewScreen> {
                           ? (v) {
                               setModalState(() => _debugInvertHeadDepthZ = v);
                               setState(() => _debugInvertHeadDepthZ = v);
+                              _sendPoseDebugToUnity();
+                            }
+                          : null,
+                    ),
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Invert leg depth (Z)'),
+                      subtitle: const Text(
+                        'Flips world Z on knee, ankle, and foot landmarks (not hips) '
+                        'so legs match depth like arms. On by default.',
+                      ),
+                      value: _debugInvertLegDepthZ,
+                      onChanged: _poseSent
+                          ? (v) {
+                              setModalState(() => _debugInvertLegDepthZ = v);
+                              setState(() => _debugInvertLegDepthZ = v);
                               _sendPoseDebugToUnity();
                             }
                           : null,

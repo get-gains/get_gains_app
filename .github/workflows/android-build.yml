@@ -73,8 +73,8 @@ jobs:
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: "temurin"
+          java-version: "17"
 
       - name: Install Flutter (to get Dart for FVM)
         uses: subosito/flutter-action@v2
@@ -146,4 +146,3 @@ jobs:
           name: debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 7
-

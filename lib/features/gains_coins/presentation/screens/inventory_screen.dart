@@ -747,10 +747,14 @@ class _InventoryItemCard extends ConsumerWidget {
     final bool success;
     final String message;
     if (isEquipped) {
-      success = await ref.read(inventoryProvider.notifier).unequip(item.cosmeticId);
+      success = await ref
+          .read(inventoryProvider.notifier)
+          .unequip(item.cosmeticId);
       message = success ? 'Unequipped ${item.name}' : 'Failed to unequip';
     } else {
-      success = await ref.read(inventoryProvider.notifier).equip(item.cosmeticId);
+      success = await ref
+          .read(inventoryProvider.notifier)
+          .equip(item.cosmeticId);
       message = success ? 'Equipped ${item.name}!' : 'Failed to equip';
     }
     if (context.mounted) {

@@ -242,7 +242,6 @@ class CosmeticsTable extends Table {
   TextColumn get description => text().nullable()();
   IntColumn get tier => integer()();
   IntColumn get coinCost => integer()();
-  TextColumn get category => text()(); // HEADWEAR, TOP, BOTTOM, ACCESSORY
   TextColumn get previewImageUrl => text()();
   TextColumn get unityAssetRef => text()();
   TextColumn get status => text()();
@@ -272,7 +271,6 @@ class EquippedCosmeticsTable extends Table {
 
   TextColumn get id => text()();
   TextColumn get cosmeticId => text()();
-  TextColumn get category => text()(); // Slot identifier
   DateTimeColumn get equippedAt => dateTime()();
 
   @override
@@ -409,6 +407,12 @@ class AppDatabase extends _$AppDatabase {
           await m.createTable(standaloneProgramRoutines);
         }
         if (from < 7) {
+          // v7: Remove deprecated `category` from cosmetics cache (aligns with server / generic slots).
+          // Local-only tables — safe to drop; app re-syncs catalog + inventory from API.
+          await m.drop(cosmeticsTable);
+          await m.drop(equippedCosmeticsTable);
+          await m.createTable(cosmeticsTable);
+          await m.createTable(equippedCosmeticsTable);
           // v7: Add pose-related columns to performed sets
           await m.addColumn(performedSets, performedSets.recordedFramesKey);
           await m.addColumn(performedSets, performedSets.overallScore);
