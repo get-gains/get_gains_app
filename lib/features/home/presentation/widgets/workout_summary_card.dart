@@ -32,6 +32,13 @@ class WorkoutSummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final iconColor = completedToday
+        ? AppColors.success
+        : (isDark ? AppColors.primaryDark : AppColors.primaryLight);
+    final iconBg = completedToday
+        ? AppColors.success.withValues(alpha: 0.12)
+        : iconColor.withValues(alpha: 0.1);
+
     return AppCard(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -43,20 +50,16 @@ class WorkoutSummaryCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color:
-                        (isDark
-                                ? AppColors.primaryDark
-                                : AppColors.primaryLight)
-                            .withValues(alpha: 0.1),
+                    color: iconBg,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
                     isPlaceholder
                         ? Icons.hourglass_empty
+                        : completedToday
+                        ? Icons.check_circle_outline
                         : Icons.fitness_center,
-                    color: isDark
-                        ? AppColors.primaryDark
-                        : AppColors.primaryLight,
+                    color: iconColor,
                     size: 24,
                   ),
                 ),
@@ -65,10 +68,44 @@ class WorkoutSummaryCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        routineName,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              routineName,
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          if (completedToday) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.success.withValues(
+                                  alpha: 0.12,
+                                ),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: AppColors.success.withValues(
+                                    alpha: 0.4,
+                                  ),
+                                ),
+                              ),
+                              child: Text(
+                                'Done',
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
+                                      color: AppColors.success,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       if (!isPlaceholder) ...[
                         const SizedBox(height: 4),
@@ -155,7 +192,7 @@ class WorkoutSummaryCard extends StatelessWidget {
                     )
                   : completedToday
                   ? AppButton.secondary(
-                      label: 'Workout Done Today ✓',
+                      label: 'Routine Done',
                       icon: Icons.check_circle_outline,
                       onPressed: null,
                     )

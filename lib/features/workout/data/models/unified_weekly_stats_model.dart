@@ -29,6 +29,10 @@ abstract class UnifiedWeeklyStats with _$UnifiedWeeklyStats {
     /// Per-source breakdown. Free users get standalone only;
     /// subscribed users get both standalone and coach entries.
     @Default([]) List<SourceStats> sources,
+
+    /// UTC ISO-8601 timestamps of each completed session's started_at this
+    /// week. Used by the UI to derive which local calendar days had workouts.
+    @Default([]) List<String> sessionDates,
   }) = _UnifiedWeeklyStats;
 
   factory UnifiedWeeklyStats.fromJson(Map<String, dynamic> json) =>
@@ -75,6 +79,11 @@ extension UnifiedWeeklyStatsX on UnifiedWeeklyStats {
 
   /// Whether the user has done any workouts this week.
   bool get hasActivity => workoutsCompleted > 0;
+
+  /// Set of local weekday indices (1=Mon … 7=Sun, matching [DateTime.weekday])
+  /// derived from [sessionDates] by converting each UTC timestamp to local time.
+  Set<int> get completedWeekdays =>
+      sessionDates.map((iso) => DateTime.parse(iso).toLocal().weekday).toSet();
 
   /// Get standalone source stats, if present.
   SourceStats? get standaloneStats =>

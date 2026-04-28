@@ -137,10 +137,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final todayAsync = ref.watch(activeTodayProvider);
     final weeklyAsync = ref.watch(unifiedWeeklyStatsProvider);
     final recentAsync = ref.watch(recentActivityProvider);
+    final profileAsync = ref.watch(profileProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Extract name from email or use default
+    // Prefer profile name, fall back to email prefix
     final email = authState.email ?? '';
-    final userName = email.isNotEmpty ? email.split('@').first : 'Athlete';
+    final emailPrefix = email.isNotEmpty ? email.split('@').first : 'Athlete';
+    final userName = profileAsync.asData?.value.name.isNotEmpty == true
+        ? profileAsync.asData!.value.name
+        : emailPrefix;
     final greeting = _getGreeting();
     final isCoach = isCoachAsync.asData?.value ?? false;
 
@@ -527,6 +531,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 workoutsGoal: 4, // TODO: make configurable
                                 totalMinutes: stats.totalMinutes,
                                 streakDays: stats.streakDays,
+                                completedWeekdays: stats.completedWeekdays,
                               ),
                               loading: () => const WeeklyProgressCard(
                                 workoutsCompleted: 0,

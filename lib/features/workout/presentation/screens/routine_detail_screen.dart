@@ -553,11 +553,11 @@ class _StartWorkoutButton extends ConsumerWidget {
     }
 
     if (isCompletedToday) {
-      return AppButton.outline(
-        label: 'Start Again',
-        icon: Icons.replay,
+      return AppButton.secondary(
+        label: 'Routine Done',
+        icon: Icons.check_circle_outline,
         isFullWidth: true,
-        onPressed: onStart,
+        onPressed: null,
       );
     }
 

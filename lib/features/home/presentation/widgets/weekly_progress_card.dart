@@ -13,12 +13,17 @@ class WeeklyProgressCard extends StatelessWidget {
     required this.workoutsGoal,
     required this.totalMinutes,
     required this.streakDays,
+    this.completedWeekdays,
   });
 
   final int workoutsCompleted;
   final int workoutsGoal;
   final int totalMinutes;
   final int streakDays;
+
+  /// Local weekday indices (1=Mon … 7=Sun) that had a completed workout.
+  /// When null, falls back to filling the first [workoutsCompleted] days.
+  final Set<int>? completedWeekdays;
 
   @override
   Widget build(BuildContext context) {
@@ -121,17 +126,26 @@ class WeeklyProgressCard extends StatelessWidget {
 
             // Day indicators
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: List.generate(7, (index) {
+                // index 0 = Monday … index 6 = Sunday
+                // DateTime.weekday: 1=Mon … 7=Sun
+                final weekday = index + 1;
                 final dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-                final isCompleted = index < workoutsCompleted;
-                final isToday = index == DateTime.now().weekday - 1;
+                final isCompleted = completedWeekdays != null
+                    ? completedWeekdays!.contains(weekday)
+                    : index < workoutsCompleted;
+                final isToday = weekday == DateTime.now().weekday;
 
-                return _DayIndicator(
-                  label: dayLabels[index],
-                  isCompleted: isCompleted,
-                  isToday: isToday,
-                  isDark: isDark,
+                return Expanded(
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: _DayIndicator(
+                      label: dayLabels[index],
+                      isCompleted: isCompleted,
+                      isToday: isToday,
+                      isDark: isDark,
+                    ),
+                  ),
                 );
               }),
             ),
@@ -220,8 +234,6 @@ class _DayIndicator extends StatelessWidget {
         : (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight);
 
     return Container(
-      width: 36,
-      height: 36,
       decoration: BoxDecoration(
         color: backgroundColor,
         shape: BoxShape.circle,
