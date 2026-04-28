@@ -276,20 +276,22 @@ class _ProfileContent extends StatelessWidget {
                       isDark: isDark,
                       onTap: () => context.push(AppRoutes.progress),
                     ),
-                    _divider(isDark),
-                    _NavLinkTile(
-                      icon: Icons.person_search,
-                      title: 'Find Coaches',
-                      isDark: isDark,
-                      onTap: () => context.push(AppRoutes.discoverCoaches),
-                    ),
-                    _divider(isDark),
-                    _NavLinkTile(
-                      icon: Icons.people,
-                      title: 'My Coaches',
-                      isDark: isDark,
-                      onTap: () => context.push(AppRoutes.subscribedCoaches),
-                    ),
+                    if (!isCoach) ...[
+                      _divider(isDark),
+                      _NavLinkTile(
+                        icon: Icons.person_search,
+                        title: 'Find Coaches',
+                        isDark: isDark,
+                        onTap: () => context.push(AppRoutes.discoverCoaches),
+                      ),
+                      _divider(isDark),
+                      _NavLinkTile(
+                        icon: Icons.people,
+                        title: 'My Coaches',
+                        isDark: isDark,
+                        onTap: () => context.push(AppRoutes.subscribedCoaches),
+                      ),
+                    ],
                     if (isCoach) ...[
                       _divider(isDark),
                       _NavLinkTile(

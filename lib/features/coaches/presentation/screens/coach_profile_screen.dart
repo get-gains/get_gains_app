@@ -40,11 +40,10 @@ class _CoachProfileScreenState extends ConsumerState<CoachProfileScreen> {
     super.initState();
     Future.microtask(() {
       ref.read(coachProfileProvider(widget.coachId).notifier).load();
-      // Load subscribed coaches if not already loaded so isSubscribedToCoach
-      // returns the correct value on first render (fixes double-tap subscribe bug).
-      if (ref.read(subscribedCoachesProvider) is SubscribedCoachesInitial) {
-        ref.read(subscribedCoachesProvider.notifier).loadCoaches();
-      }
+      // Always refresh subscribed coaches when opening the profile so the
+      // Subscribe/Unsubscribe button reflects the true server state on every
+      // visit — not just the first time (fixes stale-button-on-revisit bug).
+      ref.read(subscribedCoachesProvider.notifier).loadCoaches();
     });
   }
 

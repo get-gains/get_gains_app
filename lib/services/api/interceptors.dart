@@ -162,6 +162,9 @@ class AuthInterceptor extends Interceptor {
     const recoverableCodes = {
       ApiErrorCode.authTokenExpired,
       ApiErrorCode.authSessionExpired,
+      // Supabase often returns bad_jwt for expired tokens — attempt refresh
+      // before giving up. If the refresh also fails the user is logged out.
+      ApiErrorCode.authBadJwt,
       // unknown — server sent a code we don't recognise; safest to try refresh
       ApiErrorCode.unknown,
     };

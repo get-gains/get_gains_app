@@ -46,7 +46,11 @@ class SubscribedCoachesError extends SubscribedCoachesState {
 /// Manages the authenticated user's list of subscribed coaches.
 ///
 /// Each coach in the list includes a `subscribedAt` timestamp.
-@riverpod
+///
+/// keepAlive: true so state survives navigation — prevents the provider from
+/// being disposed when the user leaves a screen and returning to Initial,
+/// which would cause the Subscribe button to flash incorrectly on re-visit.
+@Riverpod(keepAlive: true)
 class SubscribedCoachesNotifier extends _$SubscribedCoachesNotifier {
   @override
   SubscribedCoachesState build() => const SubscribedCoachesInitial();

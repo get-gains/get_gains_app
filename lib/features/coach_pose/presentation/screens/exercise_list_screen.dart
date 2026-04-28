@@ -183,6 +183,87 @@ class _ExerciseListScreenState extends ConsumerState<ExerciseListScreen> {
                 extra: exercise,
               );
             },
+            trailing: PopupMenuButton<String>(
+              icon: Icon(
+                Icons.more_vert,
+                color: isDark
+                    ? AppColors.mutedForegroundDark
+                    : AppColors.mutedForegroundLight,
+              ),
+              onSelected: (value) async {
+                if (value == 'edit') {
+                  context.push(
+                    AppRoutes.editExercise.replaceFirst(':id', exercise.id),
+                    extra: exercise,
+                  );
+                } else if (value == 'delete') {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Delete Exercise?'),
+                      content: Text(
+                        'Are you sure you want to delete "${exercise.name}"? '
+                        'This action cannot be undone.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          style: TextButton.styleFrom(
+                            foregroundColor: isDark
+                                ? AppColors.error
+                                : AppColors.errorLight,
+                          ),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirmed == true && mounted) {
+                    await ref
+                        .read(exerciseListProvider.notifier)
+                        .deleteExercise(exercise.id);
+                  }
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit, size: 20),
+                      SizedBox(width: 8),
+                      Text('Edit'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.delete,
+                        size: 20,
+                        color: isDark ? AppColors.error : AppColors.errorLight,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Delete',
+                        style: TextStyle(
+                          color: isDark
+                              ? AppColors.error
+                              : AppColors.errorLight,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           );
         },
       ),

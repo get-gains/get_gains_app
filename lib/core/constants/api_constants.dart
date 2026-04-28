@@ -45,6 +45,7 @@ class ApiConstants {
   static const String workouts = '/workout';
   static const String exercises = '/workout/exercises';
   static const String routines = '/workout/routines';
+  static const String workoutPrograms = '/workout/programs';
   static const String workoutSessions = '/workout/sessions';
   static const String performedSets = '/workout/sets';
   static const String performedSetsSync = '/workout/sets/sync';
@@ -91,7 +92,11 @@ class ApiConstants {
   static const String subscribedCoaches = '/user/coaches/subscribed';
 
   // Pose Detection Endpoints
-  static const String poseResults = '/pose/results';
+  static const String poseFramesUploadUrl = '/pose/uploads/frames-url';
+
+  /// GET /pose/forms/:formId/download-url
+  static String poseFormDownloadUrl(String formId) =>
+      '/pose/forms/$formId/download-url';
 
   // Sync Endpoints
   static const String sync = '/sync';

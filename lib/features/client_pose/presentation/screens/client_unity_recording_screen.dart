@@ -16,7 +16,6 @@ import '../../../../providers/router_provider.dart';
 import '../../../../services/database/app_database.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../coach_pose/data/models/landmark_models.dart';
-import '../../../coach_pose/data/models/models.dart';
 import '../../../coach_pose/services/pose_detection_service.dart';
 import '../../../coach_pose/services/setup_validation_service.dart';
 import '../../../coach_pose/presentation/widgets/setup_checklist.dart';
@@ -74,6 +73,7 @@ class _ClientUnityRecordingScreenState
   bool _isCameraInitialized = false;
   bool _isCameraError = false;
   bool _isFlipping = false;
+  bool _isStoppingRecording = false;
   int _frameSkipCount = 0; // for setup validation stream throttle
 
   // ── Unity ───────────────────────────────────────────────────────────────
@@ -391,42 +391,41 @@ class _ClientUnityRecordingScreenState
 
   // ── Camera stream ────────────────────────────────────────────────────────
 
-  void _startImageStream() {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return;
-    }
-    _cameraController!.startImageStream((CameraImage image) {
-      final rotationDegrees = _getCameraRotationDegrees();
-      final captured = CapturedFrame.fromCameraImage(image, rotationDegrees);
-      ref
-          .read(clientRecordingProvider(widget.exerciseId).notifier)
-          .addCapturedFrame(captured);
-    });
-  }
-
-  int _getCameraRotationDegrees() {
-    if (_cameraController == null) return 0;
-    final o = _cameraController!.description.sensorOrientation;
-    return o == 90 || o == 180 || o == 270 ? o : 0;
-  }
-
-  void _stopImageStream() {
-    if (_cameraController != null &&
-        _cameraController!.value.isStreamingImages) {
-      _cameraController!.stopImageStream();
-    }
+  // Setup phase keeps startImageStream for live setup-validation preview.
+  void _startSetupImageStream() {
+    // Reuse _startSetupStream which is already camera-based.
   }
 
   // ── Recording actions ────────────────────────────────────────────────────
 
   void _onStartRecording() {
     _isNavigatingAfterLog = false;
-    // Stop the setup validation stream before starting the recording stream
+    // Stop the setup validation stream before starting video recording
     _stopSetupStream();
-    ref
-        .read(clientRecordingProvider(widget.exerciseId).notifier)
-        .startRecording();
-    _startImageStream();
+    final notifier = ref.read(
+      clientRecordingProvider(widget.exerciseId).notifier,
+    );
+    notifier.setWorkoutContext(
+      workoutSessionId: widget.workoutSessionId,
+      setNumber: _workoutSetNumber,
+    );
+    notifier.startRecording();
+    // Start video recording
+    _cameraController
+        ?.startVideoRecording()
+        .then((_) {
+          AppLogger.info(
+            'Video recording started',
+            tag: 'ClientUnityRecording',
+          );
+        })
+        .catchError((Object e) {
+          AppLogger.error(
+            'Failed to start video recording',
+            tag: 'ClientUnityRecording',
+            error: e,
+          );
+        });
     // Switch Unity skeleton color to green for client's live pose
     if (_isUnityLoaded) {
       sendToUnity(
@@ -443,10 +442,29 @@ class _ClientUnityRecordingScreenState
   }
 
   Future<void> _onStopRecording() async {
-    _stopImageStream();
-    await ref
-        .read(clientRecordingProvider(widget.exerciseId).notifier)
-        .stopRecordingAndCompare();
+    if (_isStoppingRecording) return;
+    _isStoppingRecording = true;
+
+    final notifier = ref.read(
+      clientRecordingProvider(widget.exerciseId).notifier,
+    );
+    notifier.stopRecording();
+
+    try {
+      final file = await _cameraController!.stopVideoRecording();
+      notifier.setRecordedVideo(file.path);
+    } catch (e) {
+      AppLogger.error(
+        'Failed to stop video recording',
+        tag: 'ClientUnityRecording',
+        error: e,
+      );
+      notifier.setRecordingError(
+        'Could not finalize recording. Please try again.',
+      );
+    } finally {
+      _isStoppingRecording = false;
+    }
   }
 
   void _onTryAgain() {
@@ -537,7 +555,6 @@ class _ClientUnityRecordingScreenState
     WakelockPlus.disable();
     _autoStartTimer?.cancel();
     _stopSetupStream();
-    _stopImageStream();
     _cameraController?.dispose();
     _weightController.dispose();
     _repsController.dispose();
@@ -557,8 +574,14 @@ class _ClientUnityRecordingScreenState
       if (next is ClientRecordingReady && _isUnityLoaded) {
         _sendReferenceFramesToUnity();
       }
-      if (prev is ClientRecordingActive && next is ClientRecordingProcessing) {
-        _stopImageStream();
+
+      final autoStopTriggered =
+          next is ClientRecordingActive &&
+          next.autoStopRequested &&
+          (prev is! ClientRecordingActive || !prev.autoStopRequested);
+
+      if (autoStopTriggered) {
+        unawaited(_onStopRecording());
       }
     });
 
@@ -1800,10 +1823,15 @@ class _ClientUnityRecordingScreenState
   Future<void> _logSetAndContinue(ClientRecordingComplete state) async {
     if (_isLoggingSet || _isNavigatingAfterLog) return;
 
+    final reps = int.tryParse(_repsController.text) ?? 0;
+    if (reps <= 0) {
+      AppToast.error(context, 'Please enter reps before logging.');
+      return;
+    }
+
     setState(() => _isLoggingSet = true);
 
     final weight = double.tryParse(_weightController.text);
-    final reps = int.tryParse(_repsController.text) ?? 0;
     final sessionState = ref.read(workoutSessionProvider);
     final exercises =
         widget.routineExercises ??
@@ -1876,6 +1904,12 @@ class _ClientUnityRecordingScreenState
             reps: reps,
             weight: weight,
             routineExerciseIdOverride: routineExerciseIdForLookup,
+            recordedFramesKey: state.recordedFramesKey,
+            overallScore: state.result.overallScore,
+            exerciseNameSnapshot: currentRoutineExercise?.exercise?.name,
+            targetRepsMin: currentRoutineExercise?.repsMin,
+            targetRepsMax: currentRoutineExercise?.repsMax,
+            targetRestSeconds: currentRoutineExercise?.restSeconds,
           );
     } catch (e) {
       AppLogger.warning('Failed to log set: $e', tag: 'ClientUnityRecording');
@@ -1887,7 +1921,16 @@ class _ClientUnityRecordingScreenState
     if (!mounted) return;
     setState(() => _isLoggingSet = false);
 
-    if (!didLogSuccessfully) return;
+    if (!didLogSuccessfully) {
+      AppLogger.warning(
+        'logSet returned false — session state: ${ref.read(workoutSessionProvider).runtimeType}',
+        tag: 'ClientUnityRecording',
+      );
+      if (mounted) {
+        AppToast.error(context, 'Failed to log set. Please try again.');
+      }
+      return;
+    }
 
     _isNavigatingAfterLog = true;
     _workoutSetNumber = setNumber + 1;
