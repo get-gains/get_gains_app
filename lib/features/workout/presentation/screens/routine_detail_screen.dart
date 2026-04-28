@@ -62,7 +62,7 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
   Future<void> _startWorkout(RoutineModel routine, {int startIndex = 0}) async {
     await ref
         .read(workoutSessionProvider.notifier)
-        .startSession(routineModelId: routine.id);
+        .startSession(routineModelId: routine.id, routine: routine);
 
     if (!mounted) return;
 

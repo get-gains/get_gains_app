@@ -130,8 +130,8 @@ class WorkoutSyncService {
       final result = await _apiClient.post<Map<String, dynamic>>(
         ApiConstants.workoutSessions,
         data: {
-          if (session.assignedProgramId != null)
-            'assignedProgramRoutineId': session.assignedProgramId,
+          if (session.assignedProgramRoutineId != null)
+            'assignedProgramRoutineId': session.assignedProgramRoutineId,
         },
       );
 
@@ -298,30 +298,24 @@ class WorkoutSyncService {
         }
 
         // Read the APRE CUID directly from the payload.
-        // New payloads use 'assignedProgramRoutineExerciseId'; legacy
-        // payloads may still carry 'routineExerciseId' as an int that
-        // needs resolution via the local routine_exercises table.
-        String? apreId = payload['assignedProgramRoutineExerciseId'] as String?;
+        // v9 migration resolved all legacy int FKs; only APRE CUIDs remain.
+        final apreId = payload['assignedProgramRoutineExerciseId'] as String?;
         if (apreId == null || apreId.isEmpty) {
-          final legacyReId = payload['routineExerciseId'];
-          if (legacyReId != null) {
-            final localReId = legacyReId is int
-                ? legacyReId
-                : int.tryParse('$legacyReId');
-            if (localReId != null) {
-              final re = await _db.getRoutineExerciseById(localReId);
-              apreId = re?.remoteId;
-            }
-          }
-        }
-
-        // Skip if we can't resolve IDs
-        if (remoteSessionId == null || apreId == null || apreId.isEmpty) {
           AppLogger.warning(
-            'Skipping set ${item.recordId} — unresolved IDs '
-            '(session: $remoteSessionId, apreId: $apreId)',
+            'Skipping set ${item.recordId} — payload has no APRE CUID. Will retry.',
             tag: _tag,
           );
+          await _db.incrementRetryCount(item.id);
+          continue;
+        }
+
+        // Skip if we can't resolve session ID; bump retry for observability
+        if (remoteSessionId == null) {
+          AppLogger.warning(
+            'Skipping set ${item.recordId} — unresolved session ID. Will retry.',
+            tag: _tag,
+          );
+          await _db.incrementRetryCount(item.id);
           continue;
         }
 

@@ -94,7 +94,7 @@ class WorkoutSessions extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get remoteId => text().nullable()();
   TextColumn get userId => text()();
-  TextColumn get assignedProgramId => text().nullable()();
+  TextColumn get assignedProgramRoutineId => text().nullable()();
   IntColumn get routineId => integer().nullable().references(
     Routines,
     #id,
@@ -126,6 +126,11 @@ class PerformedSets extends Table {
   BoolColumn get isCompleted => boolean().withDefault(const Constant(false))();
   TextColumn get recordedFramesKey => text().nullable()();
   RealColumn get overallScore => real().nullable()();
+  TextColumn get exerciseNameSnapshot => text().nullable()();
+  IntColumn get targetRepsMin => integer().nullable()();
+  IntColumn get targetRepsMax => integer().nullable()();
+  IntColumn get targetRestSeconds => integer().nullable()();
+  RealColumn get targetWeightKg => real().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   BoolColumn get isSynced => boolean().withDefault(const Constant(false))();
@@ -359,7 +364,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Database schema version - increment when changing tables
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 11;
 
   /// Handle migrations when schema version changes
   @override
@@ -479,6 +484,21 @@ class AppDatabase extends _$AppDatabase {
                 AND re.remote_id IS NOT NULL
               )
           ''');
+        }
+        if (from < 10) {
+          // v10: Add snapshot columns to performed_sets for historical durability
+          await m.addColumn(performedSets, performedSets.exerciseNameSnapshot);
+          await m.addColumn(performedSets, performedSets.targetRepsMin);
+          await m.addColumn(performedSets, performedSets.targetRepsMax);
+          await m.addColumn(performedSets, performedSets.targetRestSeconds);
+          await m.addColumn(performedSets, performedSets.targetWeightKg);
+        }
+        if (from < 11) {
+          // v11: Rename WorkoutSessions.assigned_program_id → assigned_program_routine_id
+          await customStatement(
+            'ALTER TABLE workout_sessions '
+            'RENAME COLUMN assigned_program_id TO assigned_program_routine_id',
+          );
         }
       },
       beforeOpen: (details) async {
@@ -847,6 +867,11 @@ class AppDatabase extends _$AppDatabase {
     String? recordedFramesKey,
     double? overallScore,
     String? notes,
+    String? exerciseNameSnapshot,
+    int? targetRepsMin,
+    int? targetRepsMax,
+    int? targetRestSeconds,
+    double? targetWeightKg,
   }) {
     return into(performedSets).insert(
       PerformedSetsCompanion.insert(
@@ -860,6 +885,11 @@ class AppDatabase extends _$AppDatabase {
         recordedFramesKey: Value(recordedFramesKey),
         overallScore: Value(overallScore),
         isCompleted: const Value(true),
+        exerciseNameSnapshot: Value(exerciseNameSnapshot),
+        targetRepsMin: Value(targetRepsMin),
+        targetRepsMax: Value(targetRepsMax),
+        targetRestSeconds: Value(targetRestSeconds),
+        targetWeightKg: Value(targetWeightKg),
       ),
     );
   }

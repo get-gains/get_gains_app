@@ -205,6 +205,12 @@ class ExerciseLogNotifier extends _$ExerciseLogNotifier {
       routineExerciseIdOverride: state!.routineExercise.id,
       recordedFramesKey: recordedFramesKey,
       overallScore: overallScore,
+      // Snapshot the exercise prescription at log time so historical
+      // sessions survive coach edits to the program.
+      exerciseNameSnapshot: state!.routineExercise.exercise?.name,
+      targetRepsMin: state!.routineExercise.repsMin,
+      targetRepsMax: state!.routineExercise.repsMax,
+      targetRestSeconds: state!.routineExercise.restSeconds,
     );
 
     // Mark as completed

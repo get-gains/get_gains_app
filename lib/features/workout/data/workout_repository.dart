@@ -310,17 +310,57 @@ class WorkoutRepository {
     }
   }
 
-  /// Get routine by model ID (remote CUID or local int string)
+  /// Get routine by model ID (remote CUID or local int string).
+  ///
+  /// Checks the assigned-program cache first (APRE-CUID-bearing routines),
+  /// then falls back to the local Routines table for standalone/coach-template
+  /// flows.
   Future<Result<RoutineModel?, AppError>> getRoutineByModelId(
     String modelId,
   ) async {
     try {
+      // 1. Try the assigned-program cache (correct APRE CUIDs).
+      final cached = await getRoutineFromCachedPrograms(modelId);
+      if (cached != null) return Success(cached);
+
+      // 2. Fall back to local Routines table (standalone / coach templates).
       final localId = await _resolveLocalRoutineId(modelId);
       if (localId == null) return const Success(null);
       return getRoutineById(localId);
     } catch (e) {
       AppLogger.error('Failed to fetch routine', tag: 'WorkoutRepo', error: e);
       return Failure(DatabaseError(message: 'Failed to load routine: $e'));
+    }
+  }
+
+  /// Search the local AssignedPrograms cache for a routine whose id matches
+  /// [routineModelId]. Returns null if not found in any cached program.
+  Future<RoutineModel?> getRoutineFromCachedPrograms(
+    String routineModelId,
+  ) async {
+    try {
+      final rows = await _db.getAssignedPrograms();
+      for (final row in rows) {
+        final program = AssignedProgramModelX.fromDbRow(
+          remoteId: row.remoteId,
+          name: row.name,
+          description: row.description,
+          isActive: row.isActive,
+          startDate: row.startDate,
+          endDate: row.endDate,
+          routinesJson: row.routinesJson,
+        );
+        for (final routine in program.routines) {
+          if (routine.id == routineModelId) return routine;
+        }
+      }
+      return null;
+    } catch (e) {
+      AppLogger.warning(
+        'Failed to search program cache for routine $routineModelId: $e',
+        tag: 'WorkoutRepo',
+      );
+      return null;
     }
   }
 
@@ -341,9 +381,9 @@ class WorkoutRepository {
       // Eagerly sync if remoteId is missing so pose-frame uploads work.
       if (session.remoteId == null) {
         // Resolve the assigned_program_routine.id for the server request.
-        // New sessions store it in assignedProgramId; legacy sessions
+        // New sessions store it in assignedProgramRoutineId; legacy sessions
         // created before the fix may only have routineId set.
-        String? programRoutineId = session.assignedProgramId;
+        String? programRoutineId = session.assignedProgramRoutineId;
         if (programRoutineId == null && session.routineId != null) {
           final routine = await _db.getRoutineById(session.routineId!);
           programRoutineId = routine?.remoteId;
@@ -574,7 +614,7 @@ class WorkoutRepository {
           // Store the assigned_program_routine.id (routineModelId) so that
           // background sync and _autoCreateSession can create the server
           // session with the correct identifier.
-          assignedProgramId: Value(routineModelId),
+          assignedProgramRoutineId: Value(routineModelId),
           startedAt: DateTime.now(),
         ),
       );
@@ -808,7 +848,7 @@ class WorkoutRepository {
           WorkoutSessionSummary(
             id: session.remoteId ?? session.id.toString(),
             userId: session.userId,
-            assignedProgramId: session.assignedProgramId,
+            assignedProgramId: session.assignedProgramRoutineId,
             routineId: session.routineId?.toString(),
             startedAt: session.startedAt,
             completedAt: session.completedAt,
@@ -853,6 +893,11 @@ class WorkoutRepository {
     String? notes,
     String? recordedFramesKey,
     double? overallScore,
+    String? exerciseNameSnapshot,
+    int? targetRepsMin,
+    int? targetRepsMax,
+    int? targetRestSeconds,
+    double? targetWeightKg,
   }) async {
     try {
       final workoutSessionId = await resolveLocalWorkoutSessionId(
@@ -883,6 +928,11 @@ class WorkoutRepository {
         notes: notes,
         recordedFramesKey: recordedFramesKey,
         overallScore: overallScore,
+        exerciseNameSnapshot: exerciseNameSnapshot,
+        targetRepsMin: targetRepsMin,
+        targetRepsMax: targetRepsMax,
+        targetRestSeconds: targetRestSeconds,
+        targetWeightKg: targetWeightKg,
       );
 
       // Add to sync queue
@@ -910,7 +960,7 @@ class WorkoutRepository {
         PerformedSetModel(
           id: setId.toString(),
           workoutSessionId: workoutSessionId.toString(),
-          routineExerciseId: routineExerciseModelId,
+          assignedProgramRoutineExerciseId: routineExerciseModelId,
           setNumber: setNumber,
           repsCompleted: repsCompleted,
           weightKg: weightKg,
@@ -919,6 +969,11 @@ class WorkoutRepository {
           recordedFramesKey: recordedFramesKey,
           overallScore: overallScore,
           isCompleted: true,
+          exerciseNameSnapshot: exerciseNameSnapshot,
+          targetRepsMin: targetRepsMin,
+          targetRepsMax: targetRepsMax,
+          targetRestSeconds: targetRestSeconds,
+          targetWeightKg: targetWeightKg,
           createdAt: DateTime.now(),
         ),
       );
@@ -974,7 +1029,7 @@ class WorkoutRepository {
         PerformedSetModel(
           id: setId.toString(),
           workoutSessionId: '',
-          routineExerciseId: '',
+          assignedProgramRoutineExerciseId: '',
           setNumber: 0,
           repsCompleted: repsCompleted ?? 0,
           weightKg: weightKg,
@@ -1017,13 +1072,19 @@ class WorkoutRepository {
             (s) => PerformedSetModel(
               id: s.remoteId ?? s.id.toString(),
               workoutSessionId: s.workoutSessionId.toString(),
-              routineExerciseId: s.assignedProgramRoutineExerciseId,
+              assignedProgramRoutineExerciseId:
+                  s.assignedProgramRoutineExerciseId,
               setNumber: s.setNumber,
               repsCompleted: s.repsCompleted,
               weightKg: s.weightKg,
               rpe: s.rpe,
               notes: s.notes,
               isCompleted: s.isCompleted,
+              exerciseNameSnapshot: s.exerciseNameSnapshot,
+              targetRepsMin: s.targetRepsMin,
+              targetRepsMax: s.targetRepsMax,
+              targetRestSeconds: s.targetRestSeconds,
+              targetWeightKg: s.targetWeightKg,
               createdAt: s.createdAt,
               updatedAt: s.updatedAt,
             ),
@@ -1111,7 +1172,7 @@ class WorkoutRepository {
     return WorkoutSessionModel(
       id: session.remoteId ?? session.id.toString(),
       userId: session.userId,
-      assignedProgramId: session.assignedProgramId,
+      assignedProgramRoutineId: session.assignedProgramRoutineId,
       routineId: session.routineId?.toString(),
       startedAt: session.startedAt,
       completedAt: session.completedAt,
@@ -1121,13 +1182,19 @@ class WorkoutRepository {
             (s) => PerformedSetModel(
               id: s.remoteId ?? s.id.toString(),
               workoutSessionId: s.workoutSessionId.toString(),
-              routineExerciseId: s.assignedProgramRoutineExerciseId,
+              assignedProgramRoutineExerciseId:
+                  s.assignedProgramRoutineExerciseId,
               setNumber: s.setNumber,
               repsCompleted: s.repsCompleted,
               weightKg: s.weightKg,
               rpe: s.rpe,
               notes: s.notes,
               isCompleted: s.isCompleted,
+              exerciseNameSnapshot: s.exerciseNameSnapshot,
+              targetRepsMin: s.targetRepsMin,
+              targetRepsMax: s.targetRepsMax,
+              targetRestSeconds: s.targetRestSeconds,
+              targetWeightKg: s.targetWeightKg,
               createdAt: s.createdAt,
               updatedAt: s.updatedAt,
             ),
