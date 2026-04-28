@@ -55,6 +55,7 @@ abstract class TodayWorkoutDetails with _$TodayWorkoutDetails {
     String? routineName,
     @Default(0) int exerciseCount,
     @Default(0) int estimatedMinutes,
+    @Default(false) bool completedToday,
   }) = _TodayWorkoutDetails;
 
   factory TodayWorkoutDetails.fromJson(Map<String, dynamic> json) =>
@@ -72,6 +73,7 @@ extension TodayWorkoutDetailsX on TodayWorkoutDetails {
 
     return TodayRoutineModel(
       isRestDay: false,
+      completedToday: completedToday,
       today: TodayRoutineDetails(
         programRoutineId: programRoutineId!,
         dayOfWeek: resolvedDayOfWeek,

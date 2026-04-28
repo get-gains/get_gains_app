@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../data/models/models.dart';
+import '../providers/workout_session_provider.dart';
 
 /// My Program Detail Screen
 ///
@@ -13,10 +15,7 @@ import '../../data/models/models.dart';
 /// exercise count, and estimated duration.
 /// Tapping a routine navigates to the existing [RoutineDetailScreen].
 class MyProgramDetailScreen extends StatelessWidget {
-  const MyProgramDetailScreen({
-    super.key,
-    required this.program,
-  });
+  const MyProgramDetailScreen({super.key, required this.program});
 
   final AssignedProgramModel program;
 
@@ -35,10 +34,7 @@ class MyProgramDetailScreen extends StatelessWidget {
             expandedHeight: 160,
             pinned: true,
             flexibleSpace: FlexibleSpaceBar(
-              title: Text(
-                program.name,
-                style: const TextStyle(fontSize: 18),
-              ),
+              title: Text(program.name, style: const TextStyle(fontSize: 18)),
               background: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -105,8 +101,9 @@ class MyProgramDetailScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                   Text(
                     'Routines',
-                    style: Theme.of(context).textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
@@ -126,26 +123,20 @@ class MyProgramDetailScreen extends StatelessWidget {
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final routine = program.routines[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _RoutineCard(
-                        routine: routine,
-                        isDark: isDark,
-                        onTap: () => context.push(
-                          AppRoutes.routineDetail.replaceFirst(
-                            ':id',
-                            routine.id,
-                          ),
-                          extra: routine,
-                        ),
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final routine = program.routines[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _RoutineCard(
+                      routine: routine,
+                      isDark: isDark,
+                      onTap: () => context.push(
+                        AppRoutes.routineDetail.replaceFirst(':id', routine.id),
+                        extra: routine,
                       ),
-                    );
-                  },
-                  childCount: program.routines.length,
-                ),
+                    ),
+                  );
+                }, childCount: program.routines.length),
               ),
             ),
 
@@ -158,7 +149,7 @@ class MyProgramDetailScreen extends StatelessWidget {
 
 // ─── Routine Card ─────────────────────────────────────────────────────────────
 
-class _RoutineCard extends StatelessWidget {
+class _RoutineCard extends ConsumerWidget {
   const _RoutineCard({
     required this.routine,
     required this.isDark,
@@ -170,9 +161,16 @@ class _RoutineCard extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final primaryColor =
-        isDark ? AppColors.primaryDark : AppColors.primaryLight;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final primaryColor = isDark
+        ? AppColors.primaryDark
+        : AppColors.primaryLight;
+    final completedToday =
+        ref
+            .watch(todayCompletedSessionProvider(routine.id))
+            .value
+            ?.isCompleted ??
+        false;
 
     return AppCard.elevated(
       onTap: onTap,
@@ -181,11 +179,41 @@ class _RoutineCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Name
-            Text(
-              routine.name,
-              style: Theme.of(context).textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.bold),
+            // Name + Done badge
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    routine.name,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                if (completedToday) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: AppColors.success.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Text(
+                      'Done',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: AppColors.success,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
 
             if (routine.description.isNotEmpty) ...[
@@ -260,11 +288,7 @@ class _RoutineCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 4),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: 12,
-                  color: primaryColor,
-                ),
+                Icon(Icons.arrow_forward_ios, size: 12, color: primaryColor),
               ],
             ),
           ],
@@ -325,11 +349,7 @@ class _MiniStat extends StatelessWidget {
 }
 
 class _Chip extends StatelessWidget {
-  const _Chip({
-    required this.icon,
-    required this.label,
-    required this.isDark,
-  });
+  const _Chip({required this.icon, required this.label, required this.isDark});
 
   final IconData icon;
   final String label;
