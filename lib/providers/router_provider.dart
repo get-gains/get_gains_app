@@ -28,6 +28,8 @@ import '../features/programs/screens/program_screen.dart';
 import '../features/programs/screens/program_details_screen.dart';
 import '../features/programs/screens/calendar_screen.dart';
 import '../features/programs/screens/create_program_screen.dart';
+import '../features/self_program/presentation/screens/self_program_builder_screen.dart';
+import '../features/self_program/presentation/screens/self_program_list_screen.dart';
 
 import 'deep_link_provider.dart';
 
@@ -65,6 +67,10 @@ class AppRoutes {
   // Client My Program routes (program-first navigation)
   static const String myProgram = '/my-program';
   static const String myProgramDetail = '/my-program/:programId';
+
+  // Self Program routes (free tier)
+  static const String selfPrograms = '/self-programs';
+  static const String selfProgramBuilder = '/self-programs/builder';
 
   // Coach Hub
   static const String coachHub = '/coach/hub';
@@ -322,6 +328,17 @@ GoRouter router(Ref ref) {
           // If navigated without extra (e.g. deep-link), fallback gracefully.
           if (program == null) return const MyProgramListScreen();
           return MyProgramDetailScreen(program: program);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.selfPrograms,
+        builder: (context, state) => const SelfProgramListScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.selfProgramBuilder,
+        builder: (context, state) {
+          final programId = state.uri.queryParameters['programId'];
+          return SelfProgramBuilderScreen(programId: programId);
         },
       ),
       GoRoute(

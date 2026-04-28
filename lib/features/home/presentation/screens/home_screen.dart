@@ -138,6 +138,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final weeklyAsync = ref.watch(unifiedWeeklyStatsProvider);
     final recentAsync = ref.watch(recentActivityProvider);
     final profileAsync = ref.watch(profileProvider);
+    final subscriptionTier = ref.watch(subscriptionTierProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Prefer profile name, fall back to email prefix
     final email = authState.email ?? '';
@@ -250,7 +251,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
                                 ),
-                                onTap: () => context.push(AppRoutes.myProgram),
+                                onTap: () {
+                                  if (isCoach || subscriptionTier != SubscriptionTier.free) {
+                                    context.push(AppRoutes.myProgram);
+                                  } else {
+                                    context.push(AppRoutes.selfPrograms);
+                                  }
+                                },
                               ),
                             ),
                           ),
@@ -474,7 +481,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         title: 'Today\'s Focus',
                         isDark: isDark,
                         action: TextButton(
-                          onPressed: () => context.push(AppRoutes.myProgram),
+                          onPressed: () {
+                            if (isCoach || subscriptionTier != SubscriptionTier.free) {
+                              context.push(AppRoutes.myProgram);
+                            } else {
+                              context.push(AppRoutes.selfPrograms);
+                            }
+                          },
                           child: const Text('See All'),
                         ),
                       ),
@@ -505,14 +518,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               completedToday: today.completedToday,
                               onStartPressed: today.completedToday
                                   ? null
-                                  : () => context.push(AppRoutes.myProgram),
+                                  : () {
+                                      if (isCoach || subscriptionTier != SubscriptionTier.free) {
+                                        context.push(AppRoutes.myProgram);
+                                      } else {
+                                        context.push(AppRoutes.selfPrograms);
+                                      }
+                                    },
                             );
                           }
                           // No active programs at all — show Start a Program CTA
-                          return _StartProgramCta(isDark: isDark);
+                          return _StartProgramCta(
+                            isDark: isDark,
+                            isFreeTier: subscriptionTier == SubscriptionTier.free,
+                          );
                         },
                         loading: () => _buildTodaySkeleton(isDark),
-                        error: (_, __) => _StartProgramCta(isDark: isDark),
+                        error: (_, __) => _StartProgramCta(
+                          isDark: isDark,
+                          isFreeTier: subscriptionTier == SubscriptionTier.free,
+                        ),
                       ),
 
                       const SizedBox(height: 24),
@@ -726,9 +751,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
 /// CTA shown when user has no active programs at all (T038).
 class _StartProgramCta extends StatelessWidget {
-  const _StartProgramCta({required this.isDark});
+  const _StartProgramCta({required this.isDark, required this.isFreeTier});
 
   final bool isDark;
+  final bool isFreeTier;
 
   @override
   Widget build(BuildContext context) {
@@ -771,22 +797,26 @@ class _StartProgramCta extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Create a standalone workout program or find a coach to get personalized training.',
+              isFreeTier
+                  ? 'Create a standalone workout program or find a coach to get personalized training.'
+                  : 'Find a coach to get personalized training.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: isDark
                     ? AppColors.textSecondaryDark
                     : AppColors.textSecondaryLight,
               ),
             ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: AppButton.primary(
-                label: 'Browse Workouts',
-                icon: Icons.arrow_forward,
-                onPressed: () => context.push(AppRoutes.myProgram),
+            if (isFreeTier) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: AppButton.primary(
+                  label: 'Build My Program',
+                  icon: Icons.build,
+                  onPressed: () => context.push(AppRoutes.selfPrograms),
+                ),
               ),
-            ),
+            ]
           ],
         ),
       ),
