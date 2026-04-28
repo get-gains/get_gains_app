@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/constants/api_constants.dart';
+import '../../../core/errors/api_error_codes.dart';
 import '../../../core/utils/app_error.dart';
 import '../../../core/utils/logger.dart';
 import '../../../core/utils/result.dart';
@@ -309,11 +310,20 @@ class WorkoutRepository {
     }
   }
 
-  /// Get routine by model ID (remote CUID or local int string)
+  /// Get routine by model ID (remote CUID or local int string).
+  ///
+  /// Checks the assigned-program cache first (APRE-CUID-bearing routines),
+  /// then falls back to the local Routines table for standalone/coach-template
+  /// flows.
   Future<Result<RoutineModel?, AppError>> getRoutineByModelId(
     String modelId,
   ) async {
     try {
+      // 1. Try the assigned-program cache (correct APRE CUIDs).
+      final cached = await getRoutineFromCachedPrograms(modelId);
+      if (cached != null) return Success(cached);
+
+      // 2. Fall back to local Routines table (standalone / coach templates).
       final localId = await _resolveLocalRoutineId(modelId);
       if (localId == null) return const Success(null);
       return getRoutineById(localId);
@@ -323,15 +333,112 @@ class WorkoutRepository {
     }
   }
 
+  /// Search the local AssignedPrograms cache for a routine whose id matches
+  /// [routineModelId]. Returns null if not found in any cached program.
+  Future<RoutineModel?> getRoutineFromCachedPrograms(
+    String routineModelId,
+  ) async {
+    try {
+      final rows = await _db.getAssignedPrograms();
+      for (final row in rows) {
+        final program = AssignedProgramModelX.fromDbRow(
+          remoteId: row.remoteId,
+          name: row.name,
+          description: row.description,
+          isActive: row.isActive,
+          startDate: row.startDate,
+          endDate: row.endDate,
+          routinesJson: row.routinesJson,
+        );
+        for (final routine in program.routines) {
+          if (routine.id == routineModelId) return routine;
+        }
+      }
+      return null;
+    } catch (e) {
+      AppLogger.warning(
+        'Failed to search program cache for routine $routineModelId: $e',
+        tag: 'WorkoutRepo',
+      );
+      return null;
+    }
+  }
+
   // ============== Workout Session Operations ==============
 
-  /// Get active workout session for a user
+  /// Get active workout session for a user.
+  ///
+  /// If the session has no [remoteId] yet (server sync pending), attempts
+  /// an eager sync so that the model's `id` resolves to the server ID
+  /// before the caller navigates to recording/upload screens.
   Future<Result<WorkoutSessionModel?, AppError>> getActiveSession(
     String userId,
   ) async {
     try {
       final session = await _db.getActiveWorkoutSession(userId);
       if (session == null) return const Success(null);
+
+      // Eagerly sync if remoteId is missing so pose-frame uploads work.
+      if (session.remoteId == null) {
+        // Resolve the assigned_program_routine.id for the server request.
+        // New sessions store it in assignedProgramRoutineId; legacy sessions
+        // created before the fix may only have routineId set.
+        String? programRoutineId = session.assignedProgramRoutineId;
+        if (programRoutineId == null && session.routineId != null) {
+          final routine = await _db.getRoutineById(session.routineId!);
+          programRoutineId = routine?.remoteId;
+        }
+
+        if (programRoutineId != null) {
+          try {
+            final serverResult = await _apiClient.post<Map<String, dynamic>>(
+              ApiConstants.workoutSessions,
+              data: {'assignedProgramRoutineId': programRoutineId},
+            );
+            await serverResult.when(
+              success: (data) async {
+                final sessionJson = data['session'] as Map<String, dynamic>;
+                final remoteId = sessionJson['id'] as String;
+                await _db.updateWorkoutSessionRemoteId(session.id, remoteId);
+                AppLogger.info(
+                  'Eagerly synced resumed session ${session.id} → $remoteId',
+                  tag: 'WorkoutRepo',
+                );
+              },
+              failure: (error) async {
+                if (error.code == ApiErrorCode.workoutSessionAlreadyActive) {
+                  final activeResult = await _apiClient
+                      .get<Map<String, dynamic>>(
+                        '${ApiConstants.workoutSessions}/active',
+                      );
+                  final activeData = activeResult.valueOrNull;
+                  final activeSession =
+                      activeData?['session'] as Map<String, dynamic>?;
+                  if (activeSession != null) {
+                    final remoteId = activeSession['id'] as String;
+                    await _db.updateWorkoutSessionRemoteId(
+                      session.id,
+                      remoteId,
+                    );
+                    AppLogger.info(
+                      'Resolved active session on resume ${session.id} → $remoteId',
+                      tag: 'WorkoutRepo',
+                    );
+                  }
+                }
+              },
+            );
+          } catch (_) {
+            // Best-effort — sync queue will handle it eventually
+          }
+        }
+        // Re-fetch so the model picks up the newly set remoteId
+        final updated = await _db.getWorkoutSessionById(session.id);
+        if (updated != null) {
+          final sets = await _db.getPerformedSets(updated.id);
+          return Success(await _mapWorkoutSession(updated, sets));
+        }
+      }
 
       final sets = await _db.getPerformedSets(session.id);
       return Success(await _mapWorkoutSession(session, sets));
@@ -342,6 +449,110 @@ class WorkoutRepository {
         error: e,
       );
       return Failure(DatabaseError(message: 'Failed to get session: $e'));
+    }
+  }
+
+  // ============== Program Operations ==============
+
+  /// Sync assigned programs from server and cache to local DB.
+  ///
+  /// Returns [Success] with the parsed list on success,
+  /// or [Failure] on network/parse error (caller should fall back to local DB).
+  Future<Result<List<AssignedProgramModel>, AppError>> syncPrograms() async {
+    AppLogger.debug('Syncing programs from server', tag: 'WorkoutRepo');
+
+    final result = await _apiClient.get<Map<String, dynamic>>(
+      ApiConstants.workoutPrograms,
+    );
+
+    return result.when(
+      success: (data) async {
+        try {
+          final programsList = <AssignedProgramModel>[];
+          final programsJson = data['programs'] as List;
+
+          for (final programJson in programsJson) {
+            try {
+              final program = AssignedProgramModel.fromJson(
+                programJson as Map<String, dynamic>,
+              );
+              programsList.add(program);
+            } catch (e) {
+              AppLogger.error(
+                'Failed to parse individual program',
+                tag: 'WorkoutRepo',
+                error: e,
+              );
+              continue;
+            }
+          }
+
+          // Full replace: clear old cache, write fresh data
+          await _db.replaceAssignedPrograms(
+            programsList
+                .map(
+                  (p) => AssignedProgramsCompanion.insert(
+                    remoteId: p.id,
+                    name: p.name,
+                    description: Value(p.description),
+                    isActive: Value(p.isActive),
+                    startDate: Value(p.startDate),
+                    endDate: Value(p.endDate),
+                    routinesJson: Value(p.routinesJson),
+                  ),
+                )
+                .toList(),
+          );
+
+          AppLogger.info(
+            'Synced ${programsList.length} programs',
+            tag: 'WorkoutRepo',
+          );
+          return Success(programsList);
+        } catch (e, stackTrace) {
+          AppLogger.error(
+            'Failed to parse programs',
+            tag: 'WorkoutRepo',
+            error: e,
+          );
+          AppLogger.debug('Stack trace: $stackTrace', tag: 'WorkoutRepo');
+          return Failure(
+            DatabaseError(message: 'Failed to parse programs: $e'),
+          );
+        }
+      },
+      failure: (error) => Failure(error),
+    );
+  }
+
+  /// Get all assigned programs from local DB (offline-first).
+  Future<Result<List<AssignedProgramModel>, AppError>> getPrograms() async {
+    try {
+      AppLogger.debug('Fetching programs from local DB', tag: 'WorkoutRepo');
+      final rows = await _db.getAssignedPrograms();
+
+      final models = rows
+          .map(
+            (row) => AssignedProgramModelX.fromDbRow(
+              remoteId: row.remoteId,
+              name: row.name,
+              description: row.description,
+              isActive: row.isActive,
+              startDate: row.startDate,
+              endDate: row.endDate,
+              routinesJson: row.routinesJson,
+            ),
+          )
+          .toList();
+
+      return Success(models);
+    } catch (e) {
+      AppLogger.error(
+        'Failed to load programs from local DB',
+        tag: 'WorkoutRepo',
+        error: e,
+      );
+      return Failure(DatabaseError(message: 'Failed to load programs: $e'));
     }
   }
 
@@ -360,19 +571,19 @@ class WorkoutRepository {
     return routine?.id;
   }
 
-  /// Resolve a RoutineExerciseModel.id (remote CUID or local int string) to
-  /// the local auto-increment integer ID used by the Drift RoutineExercises table.
-  Future<int?> _resolveLocalRoutineExerciseId(String modelId) async {
+  /// Resolve a WorkoutSessionModel.id (remote CUID or local int string) to
+  /// the local auto-increment integer ID used by the Drift WorkoutSessions table.
+  Future<int?> resolveLocalWorkoutSessionId(String modelId) async {
     // 1. Try parsing as local integer ID
     final localId = int.tryParse(modelId);
     if (localId != null) {
-      final re = await _db.getRoutineExerciseById(localId);
-      if (re != null) return localId;
+      final session = await _db.getWorkoutSessionById(localId);
+      if (session != null) return localId;
     }
 
     // 2. Fall back to looking up by remoteId
-    final re = await _db.getRoutineExerciseByRemoteId(modelId);
-    return re?.id;
+    final session = await _db.getWorkoutSessionByRemoteId(modelId);
+    return session?.id;
   }
 
   /// Start a new workout session
@@ -400,23 +611,85 @@ class WorkoutRepository {
         WorkoutSessionsCompanion.insert(
           userId: userId,
           routineId: Value(localRoutineId),
-          assignedProgramId: Value(assignedProgramId),
+          // Store the assigned_program_routine.id (routineModelId) so that
+          // background sync and _autoCreateSession can create the server
+          // session with the correct identifier.
+          assignedProgramRoutineId: Value(routineModelId),
           startedAt: DateTime.now(),
         ),
       );
 
-      // Add to sync queue so the session is created on the server
-      await _db.addToSyncQueue(
-        SyncQueueCompanion.insert(
-          entityTable: 'workout_sessions',
-          recordId: sessionId.toString(),
-          operation: 'create',
-          payload: jsonEncode({
-            'sessionId': sessionId,
-            'assignedProgramId': assignedProgramId,
-          }),
-        ),
-      );
+      // Eagerly sync the session to the server so that remoteId is
+      // available before the user navigates to the recording screen.
+      // If this fails (e.g. offline), fall back to the async sync queue.
+      // NOTE: routineModelId is the assigned_program_routine.id from the
+      // server's getPrograms response — exactly what the server expects.
+      bool syncedEagerly = false;
+      if (routineModelId != null) {
+        try {
+          final serverResult = await _apiClient.post<Map<String, dynamic>>(
+            ApiConstants.workoutSessions,
+            data: {'assignedProgramRoutineId': routineModelId},
+          );
+          await serverResult.when(
+            success: (data) async {
+              final sessionJson = data['session'] as Map<String, dynamic>;
+              final remoteId = sessionJson['id'] as String;
+              await _db.updateWorkoutSessionRemoteId(sessionId, remoteId);
+              syncedEagerly = true;
+              AppLogger.info(
+                'Eagerly synced session $sessionId → $remoteId',
+                tag: 'WorkoutRepo',
+              );
+            },
+            failure: (error) async {
+              // 409 — server already has an active session; fetch its ID
+              if (error.code == ApiErrorCode.workoutSessionAlreadyActive) {
+                final activeResult = await _apiClient.get<Map<String, dynamic>>(
+                  '${ApiConstants.workoutSessions}/active',
+                );
+                final activeData = activeResult.valueOrNull;
+                final activeSession =
+                    activeData?['session'] as Map<String, dynamic>?;
+                if (activeSession != null) {
+                  final remoteId = activeSession['id'] as String;
+                  await _db.updateWorkoutSessionRemoteId(sessionId, remoteId);
+                  syncedEagerly = true;
+                  AppLogger.info(
+                    'Resolved existing active session $sessionId → $remoteId',
+                    tag: 'WorkoutRepo',
+                  );
+                }
+              } else {
+                AppLogger.warning(
+                  'Eager session sync failed, will retry via queue: ${error.message}',
+                  tag: 'WorkoutRepo',
+                );
+              }
+            },
+          );
+        } catch (e) {
+          AppLogger.warning(
+            'Eager session sync threw, will retry via queue: $e',
+            tag: 'WorkoutRepo',
+          );
+        }
+      }
+
+      // If eager sync failed, enqueue for deferred background sync
+      if (!syncedEagerly) {
+        await _db.addToSyncQueue(
+          SyncQueueCompanion.insert(
+            entityTable: 'workout_sessions',
+            recordId: sessionId.toString(),
+            operation: 'create',
+            payload: jsonEncode({
+              'sessionId': sessionId,
+              'assignedProgramRoutineId': routineModelId,
+            }),
+          ),
+        );
+      }
 
       final session = await _db.getWorkoutSessionById(sessionId);
       if (session == null) {
@@ -575,7 +848,7 @@ class WorkoutRepository {
           WorkoutSessionSummary(
             id: session.remoteId ?? session.id.toString(),
             userId: session.userId,
-            assignedProgramId: session.assignedProgramId,
+            assignedProgramId: session.assignedProgramRoutineId,
             routineId: session.routineId?.toString(),
             startedAt: session.startedAt,
             completedAt: session.completedAt,
@@ -618,10 +891,18 @@ class WorkoutRepository {
     double? weightKg,
     int? rpe,
     String? notes,
+    String? recordedFramesKey,
+    double? overallScore,
+    String? exerciseNameSnapshot,
+    int? targetRepsMin,
+    int? targetRepsMax,
+    int? targetRestSeconds,
+    double? targetWeightKg,
   }) async {
     try {
-      // Resolve model IDs to local integer IDs
-      final workoutSessionId = int.tryParse(workoutSessionModelId);
+      final workoutSessionId = await resolveLocalWorkoutSessionId(
+        workoutSessionModelId,
+      );
       if (workoutSessionId == null) {
         return Failure(
           DatabaseError(
@@ -630,33 +911,28 @@ class WorkoutRepository {
         );
       }
 
-      final localRoutineExerciseId = await _resolveLocalRoutineExerciseId(
-        routineExerciseModelId,
-      );
-      if (localRoutineExerciseId == null) {
-        return Failure(
-          DatabaseError(
-            message:
-                'Could not resolve routine exercise ID: $routineExerciseModelId',
-          ),
-        );
-      }
-
       AppLogger.debug(
-        'Logging set: session=$workoutSessionId, exercise=$localRoutineExerciseId '
-        '(modelId=$routineExerciseModelId), '
+        'Logging set: session=$workoutSessionId, '
+        'apreId=$routineExerciseModelId, '
         'set=$setNumber, reps=$repsCompleted, weight=$weightKg',
         tag: 'WorkoutRepo',
       );
 
       final setId = await _db.logSet(
         workoutSessionId: workoutSessionId,
-        routineExerciseId: localRoutineExerciseId,
+        assignedProgramRoutineExerciseId: routineExerciseModelId,
         setNumber: setNumber,
         repsCompleted: repsCompleted,
         weightKg: weightKg,
         rpe: rpe,
         notes: notes,
+        recordedFramesKey: recordedFramesKey,
+        overallScore: overallScore,
+        exerciseNameSnapshot: exerciseNameSnapshot,
+        targetRepsMin: targetRepsMin,
+        targetRepsMax: targetRepsMax,
+        targetRestSeconds: targetRestSeconds,
+        targetWeightKg: targetWeightKg,
       );
 
       // Add to sync queue
@@ -667,12 +943,15 @@ class WorkoutRepository {
           operation: 'create',
           payload: jsonEncode({
             'workoutSessionId': workoutSessionId,
-            'routineExerciseId': localRoutineExerciseId,
+            'assignedProgramRoutineExerciseId': routineExerciseModelId,
             'setNumber': setNumber,
             'repsCompleted': repsCompleted,
             'weightKg': weightKg,
             'rpe': rpe,
             'notes': notes,
+            if (recordedFramesKey != null)
+              'recordedFramesKey': recordedFramesKey,
+            if (overallScore != null) 'overallScore': overallScore,
           }),
         ),
       );
@@ -681,13 +960,20 @@ class WorkoutRepository {
         PerformedSetModel(
           id: setId.toString(),
           workoutSessionId: workoutSessionId.toString(),
-          routineExerciseId: routineExerciseModelId,
+          assignedProgramRoutineExerciseId: routineExerciseModelId,
           setNumber: setNumber,
           repsCompleted: repsCompleted,
           weightKg: weightKg,
           rpe: rpe,
           notes: notes,
+          recordedFramesKey: recordedFramesKey,
+          overallScore: overallScore,
           isCompleted: true,
+          exerciseNameSnapshot: exerciseNameSnapshot,
+          targetRepsMin: targetRepsMin,
+          targetRepsMax: targetRepsMax,
+          targetRestSeconds: targetRestSeconds,
+          targetWeightKg: targetWeightKg,
           createdAt: DateTime.now(),
         ),
       );
@@ -743,7 +1029,7 @@ class WorkoutRepository {
         PerformedSetModel(
           id: setId.toString(),
           workoutSessionId: '',
-          routineExerciseId: '',
+          assignedProgramRoutineExerciseId: '',
           setNumber: 0,
           repsCompleted: repsCompleted ?? 0,
           weightKg: weightKg,
@@ -773,33 +1059,37 @@ class WorkoutRepository {
   /// Get sets for a specific exercise in a session
   Future<Result<List<PerformedSetModel>, AppError>> getSetsForExercise({
     required int workoutSessionId,
-    required int routineExerciseId,
+    required String assignedProgramRoutineExerciseId,
   }) async {
     try {
       final sets = await _db.getPerformedSetsForExercise(
         workoutSessionId,
-        routineExerciseId,
+        assignedProgramRoutineExerciseId,
       );
 
-      final mappedSets = <PerformedSetModel>[];
-      for (final s in sets) {
-        final re = await _db.getRoutineExerciseById(s.routineExerciseId);
-        mappedSets.add(
-          PerformedSetModel(
-            id: s.remoteId ?? s.id.toString(),
-            workoutSessionId: s.workoutSessionId.toString(),
-            routineExerciseId: re?.remoteId ?? s.routineExerciseId.toString(),
-            setNumber: s.setNumber,
-            repsCompleted: s.repsCompleted,
-            weightKg: s.weightKg,
-            rpe: s.rpe,
-            notes: s.notes,
-            isCompleted: s.isCompleted,
-            createdAt: s.createdAt,
-            updatedAt: s.updatedAt,
-          ),
-        );
-      }
+      final mappedSets = sets
+          .map(
+            (s) => PerformedSetModel(
+              id: s.remoteId ?? s.id.toString(),
+              workoutSessionId: s.workoutSessionId.toString(),
+              assignedProgramRoutineExerciseId:
+                  s.assignedProgramRoutineExerciseId,
+              setNumber: s.setNumber,
+              repsCompleted: s.repsCompleted,
+              weightKg: s.weightKg,
+              rpe: s.rpe,
+              notes: s.notes,
+              isCompleted: s.isCompleted,
+              exerciseNameSnapshot: s.exerciseNameSnapshot,
+              targetRepsMin: s.targetRepsMin,
+              targetRepsMax: s.targetRepsMax,
+              targetRestSeconds: s.targetRestSeconds,
+              targetWeightKg: s.targetWeightKg,
+              createdAt: s.createdAt,
+              updatedAt: s.updatedAt,
+            ),
+          )
+          .toList();
 
       return Success(mappedSets);
     } catch (e) {
@@ -879,21 +1169,10 @@ class WorkoutRepository {
     WorkoutSession session,
     List<PerformedSet> sets,
   ) async {
-    // Build a lookup of local routine_exercise ID → model-level ID
-    // so that setsForExercise() matching works correctly.
-    final reIdMap = <int, String>{};
-    for (final s in sets) {
-      if (!reIdMap.containsKey(s.routineExerciseId)) {
-        final re = await _db.getRoutineExerciseById(s.routineExerciseId);
-        reIdMap[s.routineExerciseId] =
-            re?.remoteId ?? s.routineExerciseId.toString();
-      }
-    }
-
     return WorkoutSessionModel(
       id: session.remoteId ?? session.id.toString(),
       userId: session.userId,
-      assignedProgramId: session.assignedProgramId,
+      assignedProgramRoutineId: session.assignedProgramRoutineId,
       routineId: session.routineId?.toString(),
       startedAt: session.startedAt,
       completedAt: session.completedAt,
@@ -903,15 +1182,19 @@ class WorkoutRepository {
             (s) => PerformedSetModel(
               id: s.remoteId ?? s.id.toString(),
               workoutSessionId: s.workoutSessionId.toString(),
-              routineExerciseId:
-                  reIdMap[s.routineExerciseId] ??
-                  s.routineExerciseId.toString(),
+              assignedProgramRoutineExerciseId:
+                  s.assignedProgramRoutineExerciseId,
               setNumber: s.setNumber,
               repsCompleted: s.repsCompleted,
               weightKg: s.weightKg,
               rpe: s.rpe,
               notes: s.notes,
               isCompleted: s.isCompleted,
+              exerciseNameSnapshot: s.exerciseNameSnapshot,
+              targetRepsMin: s.targetRepsMin,
+              targetRepsMax: s.targetRepsMax,
+              targetRestSeconds: s.targetRestSeconds,
+              targetWeightKg: s.targetWeightKg,
               createdAt: s.createdAt,
               updatedAt: s.updatedAt,
             ),

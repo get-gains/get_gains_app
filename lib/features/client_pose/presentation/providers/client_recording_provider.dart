@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/utils/logger.dart';
+import '../../../../services/pose/frames_blob.dart';
+import '../../../../services/pose/frames_upload_service.dart';
+import '../../../../services/pose/video_frame_extractor.dart';
 import '../../../coach_pose/data/models/models.dart';
 import '../../../coach_pose/services/feature_extractor.dart';
 import '../../../coach_pose/services/landmark_preprocessor.dart';
@@ -39,7 +43,6 @@ class ClientRecordingReady extends ClientRecordingState {
     required this.exerciseName,
     required this.referenceFrames,
     required this.referenceFeatureFrames,
-    required this.poseConfig,
     required this.formId,
     required this.cameraAngle,
     this.coachName,
@@ -48,7 +51,6 @@ class ClientRecordingReady extends ClientRecordingState {
   final String exerciseName;
   final List<LandmarkFrame> referenceFrames;
   final List<FeatureFrame> referenceFeatureFrames;
-  final PoseConfigModel? poseConfig;
   final String formId;
   final String cameraAngle;
   final String? coachName;
@@ -67,8 +69,8 @@ class ClientRecordingActive extends ClientRecordingState {
     required this.repCount,
     required this.recordingDurationMs,
     required this.referenceDurationMs,
-    this.poseConfig,
     this.coachName,
+    this.autoStopRequested = false,
   });
 
   final String exerciseName;
@@ -81,8 +83,8 @@ class ClientRecordingActive extends ClientRecordingState {
   final int repCount;
   final int recordingDurationMs;
   final int referenceDurationMs;
-  final PoseConfigModel? poseConfig;
   final String? coachName;
+  final bool autoStopRequested;
 }
 
 /// Recording stopped, processing comparison
@@ -101,6 +103,7 @@ class ClientRecordingComplete extends ClientRecordingState {
     required this.result,
     required this.repCount,
     this.uploadSuccess = false,
+    this.recordedFramesKey,
     this.referenceLandmarkFrames = const [],
     this.clientLandmarkFrames = const [],
     this.exerciseName,
@@ -109,6 +112,7 @@ class ClientRecordingComplete extends ClientRecordingState {
   final ComparisonResultModel result;
   final int repCount;
   final bool uploadSuccess;
+  final String? recordedFramesKey;
   final List<LandmarkFrame> referenceLandmarkFrames;
   final List<LandmarkFrame> clientLandmarkFrames;
   final String? exerciseName;
@@ -121,15 +125,15 @@ class ClientRecordingError extends ClientRecordingState {
 }
 
 /// Manages the full client recording + comparison pipeline:
-/// load reference form → setup → record → process → compare → upload.
+/// load reference form → setup → record (video) → extract frames →
+/// MLKit batch → compare → upload blob to S3.
 @riverpod
 class ClientRecording extends _$ClientRecording {
   late final FeatureExtractor _featureExtractor;
   late final LandmarkPreprocessor _preprocessor;
   late final FormComparisonService _comparisonService;
 
-  // Recording state: raw capture only during recording; no live MLKit or rep counter
-  final List<CapturedFrame> _capturedFramesBuffer = [];
+  // Recording state
   final List<LandmarkFrame> _clientLandmarks = [];
   final List<LandmarkFrame> _clientNormalizedLandmarks = [];
   final List<FeatureFrame> _clientFeatures = [];
@@ -140,10 +144,23 @@ class ClientRecording extends _$ClientRecording {
   String? _cameraAngle;
   String? _exerciseName;
   String? _coachName;
-  PoseConfigModel? _poseConfig;
+  String? _videoFilePath;
   int _recordingStartMs = 0;
   int _referenceDurationMs = 0;
   Timer? _elapsedTimer;
+
+  // Workout context — set by the screen before recording starts.
+  String? _workoutSessionId;
+  int _setNumber = 1;
+
+  /// Set the active workout session context for S3 frame uploads.
+  void setWorkoutContext({
+    required String? workoutSessionId,
+    int setNumber = 1,
+  }) {
+    _workoutSessionId = workoutSessionId;
+    _setNumber = setNumber;
+  }
 
   @override
   ClientRecordingState build(String exerciseId) {
@@ -153,7 +170,10 @@ class ClientRecording extends _$ClientRecording {
     return const ClientRecordingInitial();
   }
 
-  /// Step 1: Load the reference form from the server
+  /// Step 1: Load the reference form from the server.
+  ///
+  /// The repo now fetches each form's frames blob from S3 via presigned
+  /// download URL and merges them into `data['formsBlobs']`.
   Future<void> loadReferenceForm() async {
     state = const ClientRecordingLoadingForm();
 
@@ -182,73 +202,92 @@ class ClientRecording extends _$ClientRecording {
 
           final form = forms.first as Map<String, dynamic>;
           _formId = form['id'] as String;
-          _cameraAngle = form['cameraAngle'] as String;
+          _cameraAngle =
+              (form['camera_angle'] ?? form['cameraAngle']) as String?;
           _exerciseName = data['exerciseName'] as String?;
           _coachName = form['coachName'] as String?;
 
-          // Parse reference landmark frames
-          final landmarkFramesJson = form['landmarkFrames'] as List? ?? [];
-          final referenceFrames = landmarkFramesJson
-              .map((f) => LandmarkFrame.fromJson(f as Map<String, dynamic>))
-              .toList();
+          // Parse reference data from the cached blob (fetched by repo)
+          final formsBlobs = data['formsBlobs'] as Map<String, dynamic>?;
+          final blobJson = formsBlobs?[_formId!] as Map<String, dynamic>?;
+          final coachBlob = repo.parseCoachBlob(blobJson);
 
-          // Parse or extract feature frames
-          final featureFramesJson = form['featureFrames'] as List? ?? [];
+          List<LandmarkFrame> referenceFrames;
           List<FeatureFrame> referenceFeatureFrames;
-          if (featureFramesJson.isNotEmpty) {
-            referenceFeatureFrames = featureFramesJson
-                .map((f) => FeatureFrame.fromJson(f as Map<String, dynamic>))
-                .toList();
+
+          if (coachBlob != null) {
+            // Reject old-format references — z normalization changed in v3
+            if (coachBlob.version < 3) {
+              state = const ClientRecordingError(
+                'This reference form was recorded with an older app version '
+                'and is no longer compatible. Ask your coach to re-record it.',
+              );
+              return;
+            }
+
+            referenceFrames = coachBlob.landmarkFrames;
+            referenceFeatureFrames = coachBlob.featureFrames;
+
+            // Use relevant angles from the blob if available
+            if (coachBlob.relevantAngles != null &&
+                coachBlob.relevantAngles!.isNotEmpty) {
+              _relevantAngles = coachBlob.relevantAngles!;
+            } else {
+              _relevantAngles = FeatureExtractor.detectRelevantAngles(
+                referenceFeatureFrames,
+              );
+            }
+
+            // Duration from blob
+            if (coachBlob.durationMs > 0) {
+              _referenceDurationMs = coachBlob.durationMs + 500;
+            } else if (referenceFrames.isNotEmpty) {
+              _referenceDurationMs =
+                  ((referenceFrames.length / 30) * 1000).round() + 500;
+            }
           } else {
-            // Extract features from landmarks
-            referenceFeatureFrames = referenceFrames
-                .map((lf) => _featureExtractor.extractFrame(lf))
+            // Fallback: try parsing inline frames from form JSON (legacy cache)
+            final landmarkFramesJson = form['landmarkFrames'] as List? ?? [];
+            referenceFrames = landmarkFramesJson
+                .map((f) => LandmarkFrame.fromJson(f as Map<String, dynamic>))
                 .toList();
+
+            final featureFramesJson = form['featureFrames'] as List? ?? [];
+            if (featureFramesJson.isNotEmpty) {
+              referenceFeatureFrames = featureFramesJson
+                  .map((f) => FeatureFrame.fromJson(f as Map<String, dynamic>))
+                  .toList();
+            } else {
+              referenceFeatureFrames = referenceFrames
+                  .map((lf) => _featureExtractor.extractFrame(lf))
+                  .toList();
+            }
+
+            final relevantAnglesJson = form['relevantAngles'] as List?;
+            if (relevantAnglesJson != null && relevantAnglesJson.isNotEmpty) {
+              _relevantAngles = relevantAnglesJson.cast<String>();
+            } else {
+              _relevantAngles = FeatureExtractor.detectRelevantAngles(
+                referenceFeatureFrames,
+              );
+            }
+
+            final formDurationMs = form['durationMs'] as int?;
+            if (formDurationMs != null && formDurationMs > 0) {
+              _referenceDurationMs = formDurationMs + 500;
+            } else if (referenceFrames.isNotEmpty) {
+              _referenceDurationMs =
+                  ((referenceFrames.length / 30) * 1000).round() + 500;
+            }
           }
+
           _referenceFeatures = referenceFeatureFrames;
           _referenceLandmarks = referenceFrames;
 
-          // Parse relevant angles from the form (hybrid vertex-dilution fix)
-          final relevantAnglesJson = form['relevantAngles'] as List?;
-          if (relevantAnglesJson != null && relevantAnglesJson.isNotEmpty) {
-            _relevantAngles = relevantAnglesJson.cast<String>();
-          } else {
-            // Fallback: auto-detect from reference feature frames
-            _relevantAngles = FeatureExtractor.detectRelevantAngles(
-              referenceFeatureFrames,
-            );
-          }
           AppLogger.info(
             'Relevant angles for comparison: $_relevantAngles',
             tag: 'ClientRecording',
           );
-
-          // Parse pose config if available
-          final configJson = data['poseConfig'] as Map<String, dynamic>?;
-          if (configJson != null) {
-            try {
-              _poseConfig = PoseConfigModel.fromJson({
-                'id': '',
-                'exerciseId': exerciseId,
-                ...configJson,
-              });
-            } catch (e) {
-              AppLogger.warning(
-                'Failed to parse pose config: $e',
-                tag: 'ClientRecording',
-              );
-            }
-          }
-
-          // Compute reference duration for auto-stop
-          final formDurationMs = form['durationMs'] as int?;
-          if (formDurationMs != null && formDurationMs > 0) {
-            _referenceDurationMs = formDurationMs + 500; // 500ms buffer
-          } else if (referenceFrames.isNotEmpty) {
-            // Fallback: derive from frame count at 30 FPS
-            _referenceDurationMs =
-                ((referenceFrames.length / 30) * 1000).round() + 500;
-          }
           AppLogger.info(
             'Reference form duration: ${_referenceDurationMs}ms '
             '(${referenceFrames.length} frames)',
@@ -259,7 +298,6 @@ class ClientRecording extends _$ClientRecording {
             exerciseName: _exerciseName ?? 'Exercise',
             referenceFrames: referenceFrames,
             referenceFeatureFrames: referenceFeatureFrames,
-            poseConfig: _poseConfig,
             formId: _formId!,
             cameraAngle: _cameraAngle ?? 'FRONT',
             coachName: _coachName,
@@ -281,12 +319,13 @@ class ClientRecording extends _$ClientRecording {
     }
   }
 
-  /// Step 2: Start recording (capture only; no live MLKit or rep counter)
+  /// Step 2: Start recording. The screen starts video recording via
+  /// [CameraController.startVideoRecording]; the provider just runs timers.
   void startRecording() {
-    _capturedFramesBuffer.clear();
     _clientLandmarks.clear();
     _clientNormalizedLandmarks.clear();
     _clientFeatures.clear();
+    _videoFilePath = null;
     _recordingStartMs = DateTime.now().millisecondsSinceEpoch;
     _elapsedTimer?.cancel();
 
@@ -301,7 +340,6 @@ class ClientRecording extends _$ClientRecording {
       repCount: 0,
       recordingDurationMs: 0,
       referenceDurationMs: _referenceDurationMs,
-      poseConfig: _poseConfig,
       coachName: _coachName,
     );
 
@@ -320,7 +358,7 @@ class ClientRecording extends _$ClientRecording {
           'reference ${_referenceDurationMs}ms',
           tag: 'ClientRecording',
         );
-        stopRecordingAndCompare();
+        stopRecording();
         return;
       }
 
@@ -335,56 +373,128 @@ class ClientRecording extends _$ClientRecording {
         repCount: active.repCount,
         recordingDurationMs: elapsedMs,
         referenceDurationMs: _referenceDurationMs,
-        poseConfig: active.poseConfig,
         coachName: active.coachName,
+        autoStopRequested: active.autoStopRequested,
       );
     });
   }
 
-  /// Add a raw camera frame during recording (no MLKit). Post-processing runs after stop.
-  void addCapturedFrame(CapturedFrame frame) {
-    if (state is! ClientRecordingActive) return;
-    _capturedFramesBuffer.add(frame);
-  }
-
-  /// Step 4: Stop recording and run comparison.
+  /// Signal to stop recording.
   ///
-  /// Same quality as coach: batch MLKit on captured frames, then normalize, features, DTW.
-  ///   1. Run MLKit on each captured frame (post-record, high sampling)
-  ///   2. Upsample to 30 FPS if needed
-  ///   3. Trim to reference length, batch normalise, extract features, DTW, upload
-  Future<void> stopRecordingAndCompare() async {
+  /// The screen owns [CameraController] and listens for this flag to call
+  /// `stopVideoRecording()` exactly once, then forwards the output via
+  /// [setRecordedVideo].
+  void stopRecording() {
     if (state is! ClientRecordingActive) return;
-    final activeState = state as ClientRecordingActive;
+    final active = state as ClientRecordingActive;
+    if (active.autoStopRequested) return;
+
     _elapsedTimer?.cancel();
     _elapsedTimer = null;
 
+    state = ClientRecordingActive(
+      exerciseName: active.exerciseName,
+      formId: active.formId,
+      cameraAngle: active.cameraAngle,
+      referenceLandmarkFrames: active.referenceLandmarkFrames,
+      referenceFeatureFrames: active.referenceFeatureFrames,
+      clientLandmarkFrames: active.clientLandmarkFrames,
+      clientFeatureFrames: active.clientFeatureFrames,
+      repCount: active.repCount,
+      recordingDurationMs: active.recordingDurationMs,
+      referenceDurationMs: active.referenceDurationMs,
+      coachName: active.coachName,
+      autoStopRequested: true,
+    );
+  }
+
+  /// Called by the screen after [CameraController.stopVideoRecording] returns.
+  /// Transitions to processing and kicks off the video → ffmpeg → MLKit pipeline.
+  void setRecordedVideo(String path) {
+    _videoFilePath = path;
+
+    final endMs = DateTime.now().millisecondsSinceEpoch;
+    final durationMs = endMs - _recordingStartMs;
+
     state = const ClientRecordingProcessing(
       progress: 0.0,
-      message: 'Detecting pose...',
+      message: 'Extracting frames...',
     );
 
-    try {
-      final recordingDurationMs =
-          DateTime.now().millisecondsSinceEpoch - _recordingStartMs;
-      final captured = List<CapturedFrame>.from(_capturedFramesBuffer);
-      _capturedFramesBuffer.clear();
+    AppLogger.info(
+      'Recording stopped. Video at $path, ${durationMs}ms',
+      tag: 'ClientRecording',
+    );
 
-      // Batch MLKit on captured frames (same as coach — high-quality pose data from full capture rate)
+    _processVideo(durationMs);
+  }
+
+  /// Called by the screen if camera stop fails.
+  void setRecordingError(String message) {
+    state = ClientRecordingError(message);
+  }
+
+  /// Legacy entry point — stop recording and run comparison directly.
+  /// Now just signals the screen to stop video recording; the actual
+  /// processing starts when [setRecordedVideo] is called.
+  Future<void> stopRecordingAndCompare() async {
+    stopRecording();
+  }
+
+  /// Extract frames from video via ffmpeg, run MLKit on each, then compare.
+  Future<void> _processVideo(int recordingDurationMs) async {
+    final videoPath = _videoFilePath;
+    if (videoPath == null) {
+      state = const ClientRecordingError(
+        'No video file available for processing.',
+      );
+      return;
+    }
+
+    List<File> extractedFrames = [];
+    try {
+      final extractor = ref.read(videoFrameExtractorProvider);
       final poseService = ref.read(poseDetectionServiceProvider);
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final dir = await extractor.createTempFrameDir('client-$exerciseId-$ts');
+
+      state = const ClientRecordingProcessing(
+        progress: 0.05,
+        message: 'Extracting frames...',
+      );
+
+      extractedFrames = await extractor.extractFrames(
+        videoPath: videoPath,
+        targetFps: 30,
+        outputDirPath: dir,
+      );
+
+      AppLogger.info(
+        'Extracted ${extractedFrames.length} frames from video',
+        tag: 'ClientRecording',
+      );
+
+      state = const ClientRecordingProcessing(
+        progress: 0.1,
+        message: 'Detecting pose...',
+      );
+
+      // Run MLKit on each extracted frame sequentially
       final startMs = _recordingStartMs;
       final rawLandmarks = <LandmarkFrame>[];
-      for (var i = 0; i < captured.length; i++) {
+      for (var i = 0; i < extractedFrames.length; i++) {
         state = ClientRecordingProcessing(
-          progress: 0.05 + 0.25 * (i / math.max(1, captured.length)),
+          progress: 0.1 + 0.2 * (i / math.max(1, extractedFrames.length)),
           message: 'Detecting pose...',
         );
         final timestampMs = startMs + (i * 1000 ~/ 30);
-        final frame = await poseService.processCapturedFrame(
-          captured[i],
+        final frame = await poseService.processImageFile(
+          extractedFrames[i],
           timestampMs,
         );
-        if (frame != null) rawLandmarks.add(frame);
+        rawLandmarks.add(
+          frame ?? LandmarkFrame(timestampMs: timestampMs, landmarks: const {}),
+        );
       }
 
       state = const ClientRecordingProcessing(
@@ -392,21 +502,23 @@ class ClientRecording extends _$ClientRecording {
         message: 'Analyzing form...',
       );
 
-      var clientLandmarksForPipeline = rawLandmarks;
+      final filtered = rawLandmarks
+          .map(_preprocessor.filterByConfidence)
+          .toList();
+      var clientLandmarksForPipeline = _preprocessor.smoothFrames(filtered);
       var poseFps =
           recordingDurationMs > 0 && clientLandmarksForPipeline.isNotEmpty
           ? (clientLandmarksForPipeline.length * 1000 / recordingDurationMs)
                 .round()
           : 0;
 
-      // Post-processing: if below 30 FPS but we have enough data, upsample to 30 FPS
-      // (e.g. when Unity + camera run together, capture rate can drop to ~12 FPS)
+      // Post-processing: if below 30 FPS but we have enough data, upsample
       const minFpsToUpsample = 10;
       if (poseFps < kMinClientFrameRate &&
           poseFps >= minFpsToUpsample &&
           recordingDurationMs > 0) {
         AppLogger.info(
-          'Upsampling client pose data from $poseFps FPS to $kMinClientFrameRate FPS (post-processing)',
+          'Upsampling client pose data from $poseFps FPS to $kMinClientFrameRate FPS',
           tag: 'ClientRecording',
         );
         clientLandmarksForPipeline = LandmarkPreprocessor.upsampleToTargetFps(
@@ -438,7 +550,7 @@ class ClientRecording extends _$ClientRecording {
         message: 'Comparing to reference...',
       );
 
-      // Reference: same pipeline as client (filter + normalize+align; skip smooth if already smoothed on server)
+      // Reference: same pipeline as client
       final refLen = _referenceLandmarks.length;
       final angleDefinitions = _relevantAngles.isNotEmpty
           ? FeatureExtractor.filteredDefinitions(_relevantAngles)
@@ -452,7 +564,7 @@ class ClientRecording extends _$ClientRecording {
         angleDefinitions: angleDefinitions,
       );
 
-      // Temporal alignment: try several client start offsets, keep best-scoring comparison
+      // Temporal alignment: try several client start offsets, keep best-scoring
       const maxOffsetFrames = 30;
       const offsetStep = 2;
       const maxTries = 15;
@@ -466,18 +578,22 @@ class ClientRecording extends _$ClientRecording {
       }
 
       int bestOffset = 0;
+      double secondBestScore = 0.0;
+      final offsetScores = <int, double>{};
       ComparisonResultModel bestResult = _comparisonService.compare(
-        exerciseFormId: activeState.formId,
+        exerciseFormId: _formId ?? '',
         referenceFrames: referenceFeatures,
         clientFrames: _featureExtractor.extractBatch(
           _preprocessor.processBatch(
             clientLandmarksForPipeline.sublist(0, trimLen),
+            skipSmooth: true,
           ),
           angleDefinitions: angleDefinitions,
         ),
-        cameraAngle: activeState.cameraAngle,
+        cameraAngle: _cameraAngle ?? 'FRONT',
         avgLandmarkConfidence: null,
       );
+      offsetScores[0] = bestResult.overallScore;
       List<LandmarkFrame> bestTrimmedLandmarks = clientLandmarksForPipeline
           .sublist(0, trimLen);
 
@@ -493,22 +609,29 @@ class ClientRecording extends _$ClientRecording {
         ) {
           if (o + refLen > clientLen) break;
           final trimmed = clientLandmarksForPipeline.sublist(o, o + refLen);
-          final normalizedLandmarks = _preprocessor.processBatch(trimmed);
+          final normalizedLandmarks = _preprocessor.processBatch(
+            trimmed,
+            skipSmooth: true,
+          );
           final clientFeatures = _featureExtractor.extractBatch(
             normalizedLandmarks,
             angleDefinitions: angleDefinitions,
           );
           final result = _comparisonService.compare(
-            exerciseFormId: activeState.formId,
+            exerciseFormId: _formId ?? '',
             referenceFrames: referenceFeatures,
             clientFrames: clientFeatures,
-            cameraAngle: activeState.cameraAngle,
+            cameraAngle: _cameraAngle ?? 'FRONT',
             avgLandmarkConfidence: null,
           );
+          offsetScores[o] = result.overallScore;
           if (result.overallScore > bestResult.overallScore) {
+            secondBestScore = bestResult.overallScore;
             bestResult = result;
             bestOffset = o;
             bestTrimmedLandmarks = trimmed;
+          } else if (result.overallScore > secondBestScore) {
+            secondBestScore = result.overallScore;
           }
         }
         if (bestOffset > 0) {
@@ -519,10 +642,23 @@ class ClientRecording extends _$ClientRecording {
         }
       }
 
+      // Ship 1 diagnostics: offset search summary
+      final margin = bestResult.overallScore - secondBestScore;
+      AppLogger.info(
+        '[DIAG] === OFFSET SEARCH === '
+        '| bestOffset=$bestOffset '
+        '| bestScore=${(bestResult.overallScore * 100).toStringAsFixed(1)}% '
+        '| secondBest=${(secondBestScore * 100).toStringAsFixed(1)}% '
+        '| margin=${(margin * 100).toStringAsFixed(1)}pp '
+        '| offsets tried: ${offsetScores.length} '
+        '| all scores: ${offsetScores.entries.map((e) => '${e.key}=${(e.value * 100).toStringAsFixed(1)}%').join(', ')}',
+        tag: 'ClientRecording',
+      );
+
       final result = bestResult;
 
       state = const ClientRecordingProcessing(
-        progress: 0.9,
+        progress: 0.85,
         message: 'Uploading result...',
       );
 
@@ -532,21 +668,62 @@ class ClientRecording extends _$ClientRecording {
         tag: 'ClientRecording',
       );
 
-      // Upload result to server
+      // Build and upload ClientFramesBlob to S3
       bool uploadSuccess = false;
+      String? recordedFramesKey;
       try {
-        final repo = ref.read(clientPoseRepositoryProvider);
-        final uploadResult = await repo.submitResult(
-          exerciseFormId: activeState.formId,
+        final clientNormalized = _preprocessor.processBatch(
+          bestTrimmedLandmarks,
+          skipSmooth: true,
+        );
+        final clientFeatureFrames = _featureExtractor.extractBatch(
+          clientNormalized,
+          angleDefinitions: angleDefinitions,
+        );
+
+        final blob = FramesBlob.client(
+          version: 3,
+          cameraAngle: _cameraAngle ?? 'FRONT',
+          durationMs: recordingDurationMs,
+          frameRate: poseFps,
+          totalFrames: bestTrimmedLandmarks.length,
+          landmarkFrames: bestTrimmedLandmarks,
+          featureFrames: clientFeatureFrames,
+          normalizedFrames: clientNormalized,
           overallScore: result.overallScore,
           segmentScores: result.segmentScores,
-          corrections: result.corrections.map((c) => c.toJson()).toList(),
-          cameraAngle: activeState.cameraAngle,
-          durationMs: result.durationMs,
-          frameRate: result.frameRate,
-          totalFrames: result.totalFrames,
+          corrections: result.corrections,
+          relevantAngles: _relevantAngles.isNotEmpty ? _relevantAngles : null,
+          avgLandmarkConfidence: _computeAvgConfidence(bestTrimmedLandmarks),
         );
-        uploadSuccess = uploadResult.isSuccess;
+
+        // Only upload to S3 when inside a real workout session.
+        if (_workoutSessionId != null) {
+          final uploadService = ref.read(framesUploadServiceProvider);
+          final keyResult = await uploadService.uploadClientSetFrames(
+            workoutSessionId: _workoutSessionId!,
+            setNumber: _setNumber,
+            framesBlob: blob.toJson(),
+          );
+
+          keyResult.when(
+            success: (key) {
+              recordedFramesKey = key;
+              uploadSuccess = true;
+            },
+            failure: (error) {
+              AppLogger.warning(
+                'Failed to upload client frames blob: ${error.message}',
+                tag: 'ClientRecording',
+              );
+            },
+          );
+        } else {
+          AppLogger.info(
+            'Skipping S3 upload — no workout session (practice mode)',
+            tag: 'ClientRecording',
+          );
+        }
       } catch (e) {
         AppLogger.warning(
           'Failed to upload comparison result: $e',
@@ -558,10 +735,9 @@ class ClientRecording extends _$ClientRecording {
         result: result,
         repCount: 0,
         uploadSuccess: uploadSuccess,
+        recordedFramesKey: recordedFramesKey,
         referenceLandmarkFrames: List.unmodifiable(_referenceLandmarks),
-        clientLandmarkFrames: List.unmodifiable(
-          _preprocessor.smoothFrames(bestTrimmedLandmarks),
-        ),
+        clientLandmarkFrames: List.unmodifiable(bestTrimmedLandmarks),
         exerciseName: _exerciseName,
       );
     } catch (e) {
@@ -571,22 +747,45 @@ class ClientRecording extends _$ClientRecording {
         error: e,
       );
       state = ClientRecordingError('Comparison failed: $e');
+    } finally {
+      // Cleanup: delete extracted frames and video file
+      if (extractedFrames.isNotEmpty) {
+        ref.read(videoFrameExtractorProvider).cleanup(extractedFrames);
+      }
+      if (videoPath != null) {
+        try {
+          await File(videoPath).delete();
+        } catch (_) {}
+      }
     }
+  }
+
+  /// Compute average landmark confidence across all frames.
+  double? _computeAvgConfidence(List<LandmarkFrame> frames) {
+    if (frames.isEmpty) return null;
+    final totalConfidence = frames
+        .expand((f) => f.landmarks.values)
+        .map((p) => p.confidence)
+        .fold<double>(0, (sum, c) => sum + c);
+    final totalPoints = frames.fold<int>(
+      0,
+      (sum, f) => sum + f.landmarks.length,
+    );
+    return totalPoints > 0 ? totalConfidence / totalPoints : null;
   }
 
   /// Reset to initial state for another attempt
   void resetForNewAttempt() {
-    _capturedFramesBuffer.clear();
     _clientLandmarks.clear();
     _clientNormalizedLandmarks.clear();
     _clientFeatures.clear();
+    _videoFilePath = null;
 
     if (_formId != null) {
       state = ClientRecordingReady(
         exerciseName: _exerciseName ?? 'Exercise',
         referenceFrames: _referenceLandmarks,
         referenceFeatureFrames: _referenceFeatures,
-        poseConfig: _poseConfig,
         formId: _formId!,
         cameraAngle: _cameraAngle ?? 'FRONT',
         coachName: _coachName,

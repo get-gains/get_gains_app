@@ -91,6 +91,10 @@ class AuthStateNotifier extends _$AuthStateNotifier {
   AuthState build() {
     _storage = ref.watch(secureStorageServiceProvider);
 
+    // Wire the auth-failure callback so the API client can trigger logout
+    // when it receives an unrecoverable 401 (e.g. AUTH_BAD_JWT).
+    ref.read(apiClientProvider).setAuthFailureCallback(onAuthFailure);
+
     // Schedule auth check after build completes
     // Using Future.microtask to ensure state is initialized first
     // ignore: avoid_print

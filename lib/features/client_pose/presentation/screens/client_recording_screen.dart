@@ -9,7 +9,6 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../../widgets/widgets.dart';
-import '../../../coach_pose/data/models/models.dart';
 import '../../../coach_pose/services/pose_detection_service.dart';
 import '../../../guidance/guidance.dart';
 import '../providers/client_recording_provider.dart';
@@ -39,6 +38,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
   bool _isCameraInitialized = false;
   bool _isCameraError = false;
   bool _isFlipping = false;
+  bool _isStoppingRecording = false;
 
   // ── Guidance state ───────────────────────────────────────────────────
   bool _preBriefDismissed = false;
@@ -93,44 +93,46 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
     }
   }
 
-  void _startImageStream() {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return;
-    }
-    _cameraController!.startImageStream((CameraImage image) {
-      final rotationDegrees = _getCameraRotationDegrees();
-      final captured = CapturedFrame.fromCameraImage(image, rotationDegrees);
-      ref
-          .read(clientRecordingProvider(widget.exerciseId).notifier)
-          .addCapturedFrame(captured);
-    });
-  }
-
-  int _getCameraRotationDegrees() {
-    if (_cameraController == null) return 0;
-    final o = _cameraController!.description.sensorOrientation;
-    return o == 90 || o == 180 || o == 270 ? o : 0;
-  }
-
-  void _stopImageStream() {
-    if (_cameraController != null &&
-        _cameraController!.value.isStreamingImages) {
-      _cameraController!.stopImageStream();
-    }
-  }
-
-  void _onStartRecording() {
+  Future<void> _onStartRecording() async {
     ref
         .read(clientRecordingProvider(widget.exerciseId).notifier)
         .startRecording();
-    _startImageStream();
+    try {
+      await _cameraController?.startVideoRecording();
+      AppLogger.info('Video recording started', tag: 'ClientRecording');
+    } catch (e) {
+      AppLogger.error(
+        'Failed to start video recording',
+        tag: 'ClientRecording',
+        error: e,
+      );
+    }
   }
 
   Future<void> _onStopRecording() async {
-    _stopImageStream();
-    await ref
-        .read(clientRecordingProvider(widget.exerciseId).notifier)
-        .stopRecordingAndCompare();
+    if (_isStoppingRecording) return;
+    _isStoppingRecording = true;
+
+    final notifier = ref.read(
+      clientRecordingProvider(widget.exerciseId).notifier,
+    );
+    notifier.stopRecording();
+
+    try {
+      final file = await _cameraController!.stopVideoRecording();
+      notifier.setRecordedVideo(file.path);
+    } catch (e) {
+      AppLogger.error(
+        'Failed to stop video recording',
+        tag: 'ClientRecording',
+        error: e,
+      );
+      notifier.setRecordingError(
+        'Could not finalize recording. Please try again.',
+      );
+    } finally {
+      _isStoppingRecording = false;
+    }
   }
 
   void _onTryAgain() {
@@ -195,7 +197,6 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
   @override
   void dispose() {
     WakelockPlus.disable();
-    _stopImageStream();
     _cameraController?.dispose();
     super.dispose();
   }
@@ -204,6 +205,18 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final state = ref.watch(clientRecordingProvider(widget.exerciseId));
+
+    // When auto-stop is requested by the provider, use the unified stop flow.
+    ref.listen(clientRecordingProvider(widget.exerciseId), (prev, next) {
+      final autoStopTriggered =
+          next is ClientRecordingActive &&
+          next.autoStopRequested &&
+          (prev is! ClientRecordingActive || !prev.autoStopRequested);
+
+      if (autoStopTriggered) {
+        unawaited(_onStopRecording());
+      }
+    });
 
     return Scaffold(
       backgroundColor: isDark

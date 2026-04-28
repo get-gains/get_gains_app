@@ -41,9 +41,9 @@ abstract class GoogleSignInRequest with _$GoogleSignInRequest {
 abstract class CreateUserFromGoogleRequest with _$CreateUserFromGoogleRequest {
   const factory CreateUserFromGoogleRequest({
     required String email,
-    required String name,
+    @JsonKey(name: 'full_name') required String name,
     required String nickname,
-    required String supabaseId,
+    @JsonKey(name: 'supabase_auth_id') required String supabaseId,
   }) = _CreateUserFromGoogleRequest;
 
   factory CreateUserFromGoogleRequest.fromJson(Map<String, dynamic> json) =>

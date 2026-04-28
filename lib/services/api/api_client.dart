@@ -53,7 +53,7 @@ class ApiClient {
 
   late final Dio _dio;
   final SecureStorageService _secureStorage;
-  late final void Function() _onAuthFailure;
+  late void Function() _onAuthFailure;
 
   /// Access the raw Dio instance (for advanced use cases)
   Dio get dio => _dio;
@@ -70,18 +70,18 @@ class ApiClient {
       },
     );
 
-    // Add interceptors in order (executed in LIFO order for requests, FIFO for responses)
+    // Add interceptors in order (FIFO for requests, LIFO for responses/errors)
     _dio.interceptors.addAll([
-      // Logging (only in debug)
-      if (kDebugMode) LoggingInterceptor(),
-      // Retry logic
-      RetryInterceptor(),
-      // Auth (added last so it runs first on requests)
+      // Auth (runs first on requests — attaches token before logging)
       AuthInterceptor(
         secureStorage: _secureStorage,
         onTokenRefresh: _refreshToken,
-        onAuthFailure: _onAuthFailure,
+        onAuthFailure: () => _onAuthFailure(),
       ),
+      // Retry logic
+      RetryInterceptor(),
+      // Logging (only in debug — runs last so it captures final headers)
+      if (kDebugMode) LoggingInterceptor(),
     ]);
   }
 
@@ -432,11 +432,5 @@ class ApiClient {
 ApiClient apiClient(Ref ref) {
   final secureStorage = ref.watch(secureStorageServiceProvider);
 
-  return ApiClient(
-    secureStorage: secureStorage,
-    // Auth failure callback will be set by auth state provider
-    onAuthFailure: () {
-      AppLogger.warning('Auth failure callback not set', tag: 'ApiClient');
-    },
-  );
+  return ApiClient(secureStorage: secureStorage);
 }

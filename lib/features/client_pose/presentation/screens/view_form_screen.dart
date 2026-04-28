@@ -94,7 +94,6 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
 
           final exerciseName = data['exerciseName'] as String? ?? 'Exercise';
           final forms = data['forms'] as List? ?? [];
-          final poseConfig = data['poseConfig'] as Map<String, dynamic>?;
 
           if (forms.isEmpty) {
             return AppEmptyState(
@@ -129,9 +128,24 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
                     const SizedBox(height: 16),
                     ...forms.map((formData) {
                       final form = formData as Map<String, dynamic>;
-                      final landmarkFrames = _parseLandmarkFrames(
-                        form['landmarkFrames'] as List?,
-                      );
+                      final formId = form['id'] as String?;
+                      final formsBlobs =
+                          data['formsBlobs'] as Map<String, dynamic>? ?? {};
+
+                      // Try blob first, fall back to inline landmarkFrames
+                      List<LandmarkFrame> landmarkFrames = [];
+                      if (formId != null && formsBlobs.containsKey(formId)) {
+                        final blobJson =
+                            formsBlobs[formId] as Map<String, dynamic>;
+                        final blob = ref
+                            .read(clientPoseRepositoryProvider)
+                            .parseCoachBlob(blobJson);
+                        landmarkFrames = blob?.landmarkFrames ?? [];
+                      } else {
+                        landmarkFrames = _parseLandmarkFrames(
+                          form['landmarkFrames'] as List?,
+                        );
+                      }
                       return _FormPlaybackCard(
                         exerciseId: widget.exerciseId,
                         form: form,
@@ -139,10 +153,6 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
                         isDark: isDark,
                       );
                     }),
-                    if (poseConfig != null) ...[
-                      const SizedBox(height: 16),
-                      _PoseConfigInfo(config: poseConfig, isDark: isDark),
-                    ],
                     const SizedBox(height: 32),
                   ],
                 ),
@@ -444,6 +454,7 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
                         PoseViewWidget(
                           landmarkFrames: widget.landmarkFrames,
                           mode: PoseViewMode.raw2D,
+                          mirrorX: true,
                           color: widget.isDark
                               ? Colors.cyanAccent
                               : Colors.cyan,
@@ -473,10 +484,7 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
                                   onToggle: _toggleRotatorSlider,
                                 ),
                               ),
-                            _ViewModeToggle(
-                              mode: _mode,
-                              onToggle: _toggle3D,
-                            ),
+                            _ViewModeToggle(mode: _mode, onToggle: _toggle3D),
                           ],
                         ),
                       ),
@@ -516,9 +524,8 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
                                       min: _rotationMinRadians,
                                       max: _rotationMaxRadians,
                                       activeColor: Colors.cyanAccent,
-                                      onChanged: (v) => setState(
-                                        () => _rotationRadians = v,
-                                      ),
+                                      onChanged: (v) =>
+                                          setState(() => _rotationRadians = v),
                                     ),
                                   ),
                                   Text(
@@ -751,10 +758,7 @@ class _ViewModeToggle extends StatelessWidget {
 
 /// Toggle pill for enabling/disabling the (2D) rotator slider overlay.
 class _RotatorTogglePill extends StatelessWidget {
-  const _RotatorTogglePill({
-    required this.enabled,
-    required this.onToggle,
-  });
+  const _RotatorTogglePill({required this.enabled, required this.onToggle});
 
   final bool enabled;
   final VoidCallback onToggle;
@@ -822,82 +826,6 @@ class _InfoRow extends StatelessWidget {
           const Spacer(),
           Text(value, style: Theme.of(context).textTheme.bodyMedium),
         ],
-      ),
-    );
-  }
-}
-
-class _PoseConfigInfo extends StatelessWidget {
-  const _PoseConfigInfo({required this.config, required this.isDark});
-
-  final Map<String, dynamic> config;
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    final setupInstructions = config['setupInstructions'] as String?;
-    final recommendedAngles =
-        (config['recommendedAngles'] as List?)?.cast<String>() ?? [];
-
-    return AppCard.elevated(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.settings,
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Setup Tips',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            if (setupInstructions != null && setupInstructions.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                setupInstructions,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight,
-                ),
-              ),
-            ],
-            if (recommendedAngles.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Recommended camera angles:',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Wrap(
-                spacing: 8,
-                children: recommendedAngles
-                    .map(
-                      (a) => AppBadge(
-                        label: a.replaceAll('_', ' '),
-                        variant: AppBadgeVariant.outline,
-                      ),
-                    )
-                    .toList(),
-              ),
-            ],
-          ],
-        ),
       ),
     );
   }

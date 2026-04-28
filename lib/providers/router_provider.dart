@@ -61,6 +61,10 @@ class AppRoutes {
   static const String programDetails = '/program-details';
   static const String calendar = '/calendar';
 
+  // Client My Program routes (program-first navigation)
+  static const String myProgram = '/my-program';
+  static const String myProgramDetail = '/my-program/:programId';
+
   // Coach Hub
   static const String coachHub = '/coach/hub';
 
@@ -71,6 +75,7 @@ class AppRoutes {
   // Coach Pose routes
   static const String coachExercises = '/coach/exercises';
   static const String createExercise = '/coach/exercises/create';
+  static const String editExercise = '/coach/exercises/:id/edit';
   static const String exerciseDetail = '/coach/exercises/:id';
   static const String recordForm = '/coach/exercises/:id/record';
   static const String coachViewForm = '/coach/exercises/:id/forms/:formId/view';
@@ -302,6 +307,21 @@ GoRouter router(Ref ref) {
           return RoutineDetailScreen(routineId: id, routine: routine);
         },
       ),
+
+      // Client My Program routes (program-first navigation)
+      GoRoute(
+        path: AppRoutes.myProgram,
+        builder: (context, state) => const MyProgramListScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.myProgramDetail,
+        builder: (context, state) {
+          final program = state.extra as AssignedProgramModel?;
+          // If navigated without extra (e.g. deep-link), fallback gracefully.
+          if (program == null) return const MyProgramListScreen();
+          return MyProgramDetailScreen(program: program);
+        },
+      ),
       GoRoute(
         path: AppRoutes.workoutSession,
         builder: (context, state) {
@@ -366,6 +386,13 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: AppRoutes.createExercise,
         builder: (context, state) => const CreateExerciseScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.editExercise,
+        builder: (context, state) {
+          final exercise = state.extra as ExerciseModel;
+          return EditExerciseScreen(exercise: exercise);
+        },
       ),
       GoRoute(
         path: AppRoutes.exerciseDetail,

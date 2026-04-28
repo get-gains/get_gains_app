@@ -6,7 +6,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../workout/data/models/exercise_model.dart';
+import '../../data/models/exercise_form_model.dart';
 import '../providers/exercise_detail_provider.dart';
+import '../providers/exercise_list_provider.dart';
 import '../widgets/form_card.dart';
 
 /// Exercise detail screen showing info, forms, and config.
@@ -65,6 +67,7 @@ class _ExerciseDetailScreenState extends ConsumerState<ExerciseDetailScreen>
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
+
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: isDark
@@ -92,10 +95,25 @@ class _ExerciseDetailScreenState extends ConsumerState<ExerciseDetailScreen>
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          context.push(
+        onPressed: () async {
+          final uploadedFormId = await context.push<String>(
             AppRoutes.recordForm.replaceFirst(':id', widget.exerciseId),
           );
+
+          if (!mounted || uploadedFormId == null) {
+            return;
+          }
+
+          final forms = ref
+              .read(exerciseDetailProvider(widget.exerciseId))
+              .forms;
+          final alreadyVisible = forms.any((form) => form.id == uploadedFormId);
+
+          if (!alreadyVisible) {
+            await ref
+                .read(exerciseDetailProvider(widget.exerciseId).notifier)
+                .refresh();
+          }
         },
         backgroundColor: isDark
             ? AppColors.primaryDark
@@ -288,18 +306,13 @@ class _FormsTab extends ConsumerWidget {
                     .replaceFirst(':formId', form.id),
               );
             },
-            onActivate: () {
-              ref
-                  .read(exerciseDetailProvider(exerciseId).notifier)
-                  .activateForm(form.id);
-            },
             onDelete: () async {
               final confirmed = await showDialog<bool>(
                 context: context,
                 builder: (context) => AlertDialog(
                   title: const Text('Delete Form?'),
                   content: Text(
-                    'Are you sure you want to delete Version ${form.version}? '
+                    'Are you sure you want to delete this ${form.cameraAngle.displayName} form? '
                     'This action cannot be undone.',
                   ),
                   actions: [

@@ -3,6 +3,7 @@
 /// Data models for workout feature.
 library;
 
+export 'assigned_program_model.dart';
 export 'exercise_model.dart';
 export 'routine_model.dart';
 export 'today_routine_model.dart';

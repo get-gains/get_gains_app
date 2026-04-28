@@ -12,13 +12,20 @@ abstract class PerformedSetModel with _$PerformedSetModel {
   const factory PerformedSetModel({
     required String id,
     required String workoutSessionId,
-    required String routineExerciseId,
+    required String assignedProgramRoutineExerciseId,
     required int setNumber,
     required int repsCompleted,
     double? weightKg,
     int? rpe,
     String? notes,
+    String? recordedFramesKey,
+    double? overallScore,
     @Default(false) bool isCompleted,
+    String? exerciseNameSnapshot,
+    int? targetRepsMin,
+    int? targetRepsMax,
+    int? targetRestSeconds,
+    double? targetWeightKg,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) = _PerformedSetModel;
@@ -55,4 +62,7 @@ extension PerformedSetModelX on PerformedSetModel {
         : '';
     return 'Set $setNumber: $repsCompleted reps$weightStr';
   }
+
+  /// Alias for backward-compat reads that reference routineExerciseId.
+  String get routineExerciseId => assignedProgramRoutineExerciseId;
 }

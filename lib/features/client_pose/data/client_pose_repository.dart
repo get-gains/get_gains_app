@@ -1,14 +1,15 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../core/constants/api_constants.dart';
 import '../../../core/utils/app_error.dart';
 import '../../../core/utils/logger.dart';
 import '../../../core/utils/result.dart';
 import '../../../services/api/api_client.dart';
 import '../../../services/database/app_database.dart';
-import '../../coach_pose/data/models/models.dart';
-import 'models/models.dart';
+import '../../../services/pose/frames_blob.dart';
 
 part 'client_pose_repository.g.dart';
 
@@ -16,8 +17,7 @@ part 'client_pose_repository.g.dart';
 ///
 /// Handles:
 /// - Downloading reference forms for exercises (with offline caching)
-/// - Submitting comparison results to server
-/// - Fetching comparison history
+/// - Downloading coach form frame blobs via presigned URLs
 class ClientPoseRepository {
   ClientPoseRepository({
     required ApiClient apiClient,
@@ -28,11 +28,20 @@ class ClientPoseRepository {
   final ApiClient _apiClient;
   final AppDatabase _db;
 
+  /// Bare Dio for S3 GET — no auth interceptors.
+  final Dio _s3Dio = Dio(
+    BaseOptions(
+      connectTimeout: ApiConstants.connectTimeout,
+      receiveTimeout: ApiConstants.receiveTimeout,
+    ),
+  );
+
   /// Download the active reference form + config for an exercise.
   ///
-  /// **Offline-first**: Tries the server first. On success, caches the
-  /// response locally. On failure (e.g. no internet), falls back to the
-  /// locally cached response if available.
+  /// **Offline-first**: Tries the server first. On success, fetches the
+  /// coach frames blob for each form via presigned download URL, merges
+  /// them into the response, and caches locally. On failure falls back
+  /// to the locally cached response if available.
   Future<Result<Map<String, dynamic>, AppError>> downloadExerciseForm(
     String exerciseId,
   ) async {
@@ -46,7 +55,26 @@ class ClientPoseRepository {
         'Downloaded exercise form for $exerciseId',
         tag: 'ClientPoseRepo',
       );
-      // Cache the response for offline use
+
+      // Fetch each form's frames blob from S3 and attach to the response
+      final forms = data['forms'] as List?;
+      if (forms != null) {
+        final formsBlobs = <String, Map<String, dynamic>>{};
+        for (final formData in forms) {
+          final form = formData as Map<String, dynamic>;
+          final formId = form['id'] as String?;
+          final recordedFramesKey = form['recorded_frames_key'] as String?;
+          if (formId != null && recordedFramesKey != null) {
+            final blob = await _fetchFormBlob(formId);
+            if (blob != null) {
+              formsBlobs[formId] = blob;
+            }
+          }
+        }
+        data['formsBlobs'] = formsBlobs;
+      }
+
+      // Cache the merged response for offline use
       _cacheFormResponse(exerciseId, data);
       return Success(data);
     }
@@ -63,6 +91,46 @@ class ClientPoseRepository {
 
     // No cache available — return the original error
     return result;
+  }
+
+  /// Fetch the coach frames blob for a form via presigned download URL.
+  Future<Map<String, dynamic>?> _fetchFormBlob(String formId) async {
+    try {
+      final urlResult = await _apiClient.get<Map<String, dynamic>>(
+        ApiConstants.poseFormDownloadUrl(formId),
+      );
+
+      return urlResult.when(
+        success: (data) async {
+          final url = data['url'] as String?;
+          if (url == null) return null;
+
+          try {
+            final response = await _s3Dio.get<Map<String, dynamic>>(url);
+            return response.data;
+          } on DioException catch (e) {
+            AppLogger.warning(
+              'Failed to download form blob from S3 for $formId: ${e.message}',
+              tag: 'ClientPoseRepo',
+            );
+            return null;
+          }
+        },
+        failure: (error) async {
+          AppLogger.warning(
+            'Failed to get download URL for form $formId: ${error.message}',
+            tag: 'ClientPoseRepo',
+          );
+          return null;
+        },
+      );
+    } catch (e) {
+      AppLogger.warning(
+        'Error fetching form blob for $formId: $e',
+        tag: 'ClientPoseRepo',
+      );
+      return null;
+    }
   }
 
   /// Cache the server response for an exercise form.
@@ -116,228 +184,22 @@ class ClientPoseRepository {
     }
   }
 
-  /// Submit a form comparison result after on-device analysis.
+  /// Parse a cached form blob into a [CoachFramesBlob].
   ///
-  /// **Offline-first**: If the server is unreachable the result is queued in
-  /// the local [SyncQueue] and will be uploaded automatically by
-  /// [WorkoutSyncService] when connectivity is restored.
-  Future<Result<ComparisonResultModel, AppError>> submitResult({
-    required String exerciseFormId,
-    String? workoutSessionId,
-    String? routineExerciseId,
-    required double overallScore,
-    required Map<String, double> segmentScores,
-    required List<Map<String, dynamic>> corrections,
-    required String cameraAngle,
-    required int durationMs,
-    required int frameRate,
-    required int totalFrames,
-    double? avgLandmarkConfidence,
-    List<Map<String, dynamic>>? clientLandmarkFrames,
-    List<Map<String, dynamic>>? clientFeatureFrames,
-  }) async {
-    final payload = <String, dynamic>{
-      'exerciseFormId': exerciseFormId,
-      if (workoutSessionId != null) 'workoutSessionId': workoutSessionId,
-      if (routineExerciseId != null) 'routineExerciseId': routineExerciseId,
-      'overallScore': overallScore,
-      'segmentScores': segmentScores,
-      'corrections': corrections,
-      'cameraAngle': cameraAngle,
-      'durationMs': durationMs,
-      'frameRate': frameRate,
-      'totalFrames': totalFrames,
-      if (avgLandmarkConfidence != null)
-        'avgLandmarkConfidence': avgLandmarkConfidence,
-      if (clientLandmarkFrames != null)
-        'clientLandmarkFrames': clientLandmarkFrames,
-      if (clientFeatureFrames != null)
-        'clientFeatureFrames': clientFeatureFrames,
-    };
-
-    final result = await _apiClient.post<Map<String, dynamic>>(
-      '/pose/results',
-      data: payload,
-    );
-
-    if (result is Success<Map<String, dynamic>, AppError>) {
-      try {
-        final data = result.value;
-        final resultData = data['result'] as Map<String, dynamic>;
-        return Success(
-          ComparisonResultModel(
-            id: resultData['id'] as String?,
-            exerciseFormId: exerciseFormId,
-            overallScore: (resultData['overallScore'] as num).toDouble(),
-            segmentScores: segmentScores,
-            corrections:
-                (resultData['corrections'] as List?)
-                    ?.map(
-                      (c) =>
-                          CorrectionModel.fromJson(c as Map<String, dynamic>),
-                    )
-                    .toList() ??
-                [],
-            cameraAngle: cameraAngle,
-            durationMs: durationMs,
-            frameRate: frameRate,
-            totalFrames: totalFrames,
-            createdAt: resultData['createdAt'] != null
-                ? DateTime.parse(resultData['createdAt'] as String)
-                : null,
-          ),
-        );
-      } catch (e) {
-        AppLogger.error(
-          'Failed to parse submitted result',
-          tag: 'ClientPoseRepo',
-          error: e,
-        );
-        return Failure(UnknownError(message: 'Failed to parse result: $e'));
-      }
-    }
-
-    // Server unreachable — queue for later sync
-    AppLogger.warning(
-      'Offline: queuing pose result for sync when online',
-      tag: 'ClientPoseRepo',
-    );
+  /// Used by providers to extract landmark/feature frames from the cached
+  /// server response without re-downloading.
+  CoachFramesBlob? parseCoachBlob(Map<String, dynamic>? blobJson) {
+    if (blobJson == null) return null;
     try {
-      await _db.addToSyncQueue(
-        SyncQueueCompanion.insert(
-          entityTable: 'pose_results',
-          recordId: exerciseFormId,
-          operation: 'create',
-          payload: jsonEncode(payload),
-        ),
-      );
-      AppLogger.info('Pose result queued for sync', tag: 'ClientPoseRepo');
-    } catch (e) {
-      AppLogger.error(
-        'Failed to queue pose result',
-        tag: 'ClientPoseRepo',
-        error: e,
-      );
-    }
-
-    final failure = result as Failure<Map<String, dynamic>, AppError>;
-    return Failure(failure.error);
-  }
-
-  /// Get comparison history for the current user.
-  ///
-  /// **Offline-first**: On success the first page (offset 0) is cached in
-  /// [CachedApiResponses]. On network failure the cached page is returned so
-  /// the user can still browse their history without connectivity.
-  Future<Result<List<ComparisonResultModel>, AppError>> getHistory({
-    String? exerciseId,
-    int limit = 20,
-    int offset = 0,
-  }) async {
-    final queryParams = <String, dynamic>{'limit': limit, 'offset': offset};
-    if (exerciseId != null) queryParams['exerciseId'] = exerciseId;
-
-    // Build a stable cache key that reflects the query parameters.
-    final cacheKey = exerciseId != null
-        ? 'pose_history_$exerciseId'
-        : 'pose_history';
-
-    final result = await _apiClient.get<Map<String, dynamic>>(
-      '/pose/results',
-      queryParameters: queryParams,
-    );
-
-    if (result is Success<Map<String, dynamic>, AppError>) {
-      final data = result.value;
-      // Cache the first page for offline use.
-      if (offset == 0) {
-        try {
-          await _db.upsertCachedApiResponse(
-            key: cacheKey,
-            responseJson: jsonEncode(data),
-          );
-        } catch (e) {
-          AppLogger.warning(
-            'Failed to cache pose history: $e',
-            tag: 'ClientPoseRepo',
-          );
-        }
-      }
-      try {
-        final results = (data['results'] as List)
-            .map(
-              (r) => ComparisonResultModel.fromJson(r as Map<String, dynamic>),
-            )
-            .toList();
-        return Success(results);
-      } catch (e) {
-        AppLogger.error(
-          'Failed to parse history',
-          tag: 'ClientPoseRepo',
-          error: e,
-        );
-        return Failure(UnknownError(message: 'Failed to parse history: $e'));
-      }
-    }
-
-    // Network failed — try returning cached first page.
-    try {
-      final cached = await _db.getCachedApiResponse(cacheKey);
-      if (cached != null) {
-        AppLogger.info(
-          'Loaded cached pose history ($cacheKey)',
-          tag: 'ClientPoseRepo',
-        );
-        final data = jsonDecode(cached) as Map<String, dynamic>;
-        final results = (data['results'] as List)
-            .map(
-              (r) => ComparisonResultModel.fromJson(r as Map<String, dynamic>),
-            )
-            .toList();
-        return Success(results);
-      }
+      final blob = FramesBlob.fromJson(blobJson);
+      return blob is CoachFramesBlob ? blob : null;
     } catch (e) {
       AppLogger.warning(
-        'Failed to read cached pose history: $e',
+        'Failed to parse CoachFramesBlob: $e',
         tag: 'ClientPoseRepo',
       );
+      return null;
     }
-
-    final failure = result as Failure<Map<String, dynamic>, AppError>;
-    return Failure(failure.error);
-  }
-
-  /// Get the pose config for an exercise (used for comparison setup).
-  Future<Result<PoseConfigModel?, AppError>> getPoseConfig(
-    String exerciseId,
-  ) async {
-    final result = await _apiClient.get<Map<String, dynamic>>(
-      '/pose/exercises/$exerciseId/config',
-    );
-
-    return result.when(
-      success: (data) {
-        try {
-          final config = PoseConfigModel.fromJson(
-            data['config'] as Map<String, dynamic>,
-          );
-          return Success(config);
-        } catch (e) {
-          AppLogger.error(
-            'Failed to parse pose config',
-            tag: 'ClientPoseRepo',
-            error: e,
-          );
-          return Failure(UnknownError(message: 'Failed to parse config: $e'));
-        }
-      },
-      failure: (error) {
-        if (error is NetworkError && error.statusCode == 404) {
-          return const Success(null);
-        }
-        return Failure(error);
-      },
-    );
   }
 }
 

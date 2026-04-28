@@ -149,7 +149,7 @@ class WorkoutSummaryCard extends StatelessWidget {
               width: double.infinity,
               child: isPlaceholder
                   ? AppButton.secondary(
-                      label: 'View Routines',
+                      label: 'View Program',
                       icon: Icons.arrow_forward,
                       onPressed: onStartPressed,
                     )

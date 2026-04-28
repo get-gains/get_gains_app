@@ -90,7 +90,7 @@ extension StandaloneSessionSummaryX on StandaloneSessionSummary {
   WorkoutSessionModel toWorkoutSessionModel() => WorkoutSessionModel(
     id: id,
     userId: userId,
-    assignedProgramId: assignedProgramId,
+    assignedProgramRoutineId: assignedProgramId,
     routineId: routineId,
     startedAt: startedAt,
     completedAt: completedAt,

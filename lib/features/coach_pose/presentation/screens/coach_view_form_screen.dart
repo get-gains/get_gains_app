@@ -1,30 +1,28 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_embed_unity/flutter_embed_unity.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../services/database/app_database.dart';
+import '../../../../services/pose/frames_blob.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../client_pose/presentation/widgets/pose_view_widget.dart';
 import '../../../unity/data/unity_cosmetics_loader.dart';
 import '../../../unity/data/unity_message_contract.dart';
 import '../../data/coach_pose_repository.dart';
-import '../../data/models/exercise_form_model.dart';
 import '../../data/models/landmark_models.dart';
 
 /// Coach View Form Screen
 ///
 /// Displays the coach's own recorded reference form for an exercise with
-/// an animated skeleton playback of the recorded landmarks. Coaches can
-/// preview their form in 2D or toggle to 3D Unity preview, and go
-/// fullscreen in 3D mode.
-///
-/// Uses [CoachPoseRepository.getFormById] to load the full form detail
-/// including landmark frames.
+/// an animated skeleton playback of the recorded landmarks. Fetches the
+/// frames blob from S3 via a presigned download URL.
 class CoachViewFormScreen extends ConsumerStatefulWidget {
   const CoachViewFormScreen({
     super.key,
@@ -41,19 +39,46 @@ class CoachViewFormScreen extends ConsumerStatefulWidget {
 }
 
 class _CoachViewFormScreenState extends ConsumerState<CoachViewFormScreen> {
-  late Future<ExerciseFormDetailModel?> _formFuture;
+  late Future<CoachFramesBlob?> _blobFuture;
 
   @override
   void initState() {
     super.initState();
-    _loadForm();
+    _loadBlob();
   }
 
-  void _loadForm() {
+  void _loadBlob() {
+    _blobFuture = _fetchBlob();
+  }
+
+  Future<CoachFramesBlob?> _fetchBlob() async {
     final repo = ref.read(coachPoseRepositoryProvider);
-    _formFuture = repo
-        .getFormById(widget.formId)
-        .then((result) => result.valueOrNull);
+    final urlResult = await repo.getFormDownloadUrl(widget.formId);
+
+    return urlResult.when(
+      success: (url) async {
+        try {
+          final response = await Dio().get<Map<String, dynamic>>(url);
+          if (response.data == null) return null;
+          final blob = FramesBlob.fromJson(response.data!);
+          return blob is CoachFramesBlob ? blob : null;
+        } catch (e) {
+          AppLogger.error(
+            'Failed to fetch frames blob from S3',
+            tag: 'CoachViewForm',
+            error: e,
+          );
+          return null;
+        }
+      },
+      failure: (error) {
+        AppLogger.warning(
+          'Failed to get form download URL: ${error.message}',
+          tag: 'CoachViewForm',
+        );
+        return null;
+      },
+    );
   }
 
   @override
@@ -65,15 +90,15 @@ class _CoachViewFormScreenState extends ConsumerState<CoachViewFormScreen> {
           ? AppColors.backgroundDark
           : AppColors.backgroundLight,
       appBar: AppBar(title: const Text('View Form'), centerTitle: true),
-      body: FutureBuilder<ExerciseFormDetailModel?>(
-        future: _formFuture,
+      body: FutureBuilder<CoachFramesBlob?>(
+        future: _blobFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final form = snapshot.data;
-          if (form == null) {
+          final blob = snapshot.data;
+          if (blob == null) {
             return AppEmptyState(
               icon: Icons.error_outline,
               title: 'Form Not Found',
@@ -91,7 +116,8 @@ class _CoachViewFormScreenState extends ConsumerState<CoachViewFormScreen> {
               children: [
                 _FormPlaybackCard(
                   exerciseId: widget.exerciseId,
-                  form: form,
+                  formId: widget.formId,
+                  blob: blob,
                   isDark: isDark,
                 ),
                 const SizedBox(height: 32),
@@ -110,12 +136,14 @@ enum _PreviewMode { twoD, threeD }
 class _FormPlaybackCard extends StatefulWidget {
   const _FormPlaybackCard({
     required this.exerciseId,
-    required this.form,
+    required this.formId,
+    required this.blob,
     required this.isDark,
   });
 
   final String exerciseId;
-  final ExerciseFormDetailModel form;
+  final String formId;
+  final CoachFramesBlob blob;
   final bool isDark;
 
   @override
@@ -127,9 +155,9 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
   bool _unityReady = false;
   bool _poseSent = false;
 
-  List<LandmarkFrame> get _frames => widget.form.landmarkFrames;
+  List<LandmarkFrame> get _frames => widget.blob.landmarkFrames;
 
-  String get _cameraAngle => widget.form.cameraAngle.serverValue;
+  String get _cameraAngle => widget.blob.cameraAngle;
 
   void _toggle3D() {
     setState(() {
@@ -208,20 +236,18 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
     context.push(
       AppRoutes.coachForm3DPreview
           .replaceFirst(':id', widget.exerciseId)
-          .replaceFirst(':formId', widget.form.id),
+          .replaceFirst(':formId', widget.formId),
       extra: {'landmarkFrames': _frames, 'cameraAngle': _cameraAngle},
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final durationMs = widget.form.durationMs;
-    final frameRate = widget.form.frameRate;
-    final totalFrames = widget.form.totalFrames;
-    final version = widget.form.version;
+    final durationMs = widget.blob.durationMs;
+    final frameRate = widget.blob.frameRate;
+    final totalFrames = widget.blob.totalFrames;
     final durationSec = (durationMs / 1000).toStringAsFixed(1);
     final hasFrames = _frames.isNotEmpty;
-    final quality = widget.form.recordingQuality;
 
     return AppCard.elevated(
       child: Column(
@@ -370,31 +396,15 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
                     ),
                     const SizedBox(width: 8),
                     Flexible(
-                      child: Text(
-                        'Version $version',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
                         child: AppBadge(
-                          label: widget.form.cameraAngle.displayName,
+                          label: _cameraAngle,
                           variant: AppBadgeVariant.primary,
                         ),
                       ),
                     ),
-                    if (widget.form.isActive) ...[
-                      const SizedBox(width: 8),
-                      const AppBadge(
-                        label: 'Active',
-                        variant: AppBadgeVariant.success,
-                      ),
-                    ],
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -413,26 +423,12 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
                   value: '$totalFrames',
                   isDark: widget.isDark,
                 ),
-                if (quality != null)
-                  _InfoRow(
-                    label: 'Quality',
-                    value: _formatQuality(quality),
-                    isDark: widget.isDark,
-                  ),
               ],
             ),
           ),
         ],
       ),
     );
-  }
-
-  String _formatQuality(String quality) {
-    return switch (quality) {
-      'good' => 'High',
-      'acceptable' => 'Medium',
-      _ => 'Low',
-    };
   }
 }
 

@@ -46,6 +46,7 @@ class AppButton extends StatefulWidget {
     this.isLoading = false,
     this.isFullWidth = false,
     this.disabled = false,
+    this.textStyle,
   });
 
   /// Primary button factory
@@ -59,6 +60,7 @@ class AppButton extends StatefulWidget {
     this.isLoading = false,
     this.isFullWidth = false,
     this.disabled = false,
+    this.textStyle,
   }) : variant = AppButtonVariant.primary;
 
   /// Secondary button factory
@@ -72,6 +74,7 @@ class AppButton extends StatefulWidget {
     this.isLoading = false,
     this.isFullWidth = false,
     this.disabled = false,
+    this.textStyle,
   }) : variant = AppButtonVariant.secondary;
 
   /// Ghost button factory
@@ -85,6 +88,7 @@ class AppButton extends StatefulWidget {
     this.isLoading = false,
     this.isFullWidth = false,
     this.disabled = false,
+    this.textStyle,
   }) : variant = AppButtonVariant.ghost;
 
   /// Outline button factory
@@ -98,6 +102,7 @@ class AppButton extends StatefulWidget {
     this.isLoading = false,
     this.isFullWidth = false,
     this.disabled = false,
+    this.textStyle,
   }) : variant = AppButtonVariant.outline;
 
   /// Destructive button factory
@@ -111,6 +116,7 @@ class AppButton extends StatefulWidget {
     this.isLoading = false,
     this.isFullWidth = false,
     this.disabled = false,
+    this.textStyle,
   }) : variant = AppButtonVariant.destructive;
 
   /// Link button factory
@@ -124,6 +130,7 @@ class AppButton extends StatefulWidget {
     this.isLoading = false,
     this.isFullWidth = false,
     this.disabled = false,
+    this.textStyle,
   }) : variant = AppButtonVariant.link;
 
   final String label;
@@ -135,6 +142,7 @@ class AppButton extends StatefulWidget {
   final bool isLoading;
   final bool isFullWidth;
   final bool disabled;
+  final TextStyle? textStyle;
 
   @override
   State<AppButton> createState() => _AppButtonState();
@@ -194,7 +202,9 @@ class _AppButtonState extends State<AppButton>
       );
     }
 
-    final textWidget = Text(widget.label, style: _getTextStyle(isDark));
+    final baseStyle = _getTextStyle(isDark);
+    final textStyle = widget.textStyle != null ? baseStyle.merge(widget.textStyle) : baseStyle;
+    final textWidget = Text(widget.label, style: textStyle);
 
     if (widget.icon == null) return textWidget;
 

@@ -67,6 +67,7 @@ class ExerciseListNotifier extends _$ExerciseListNotifier {
     final result = await repo.getExercises(
       search: state.searchQuery.isEmpty ? null : state.searchQuery,
       muscleGroup: state.selectedMuscleGroup?.name.toUpperCase(),
+      onlyMine: true,
       limit: _pageSize,
       offset: 0,
     );
@@ -100,6 +101,7 @@ class ExerciseListNotifier extends _$ExerciseListNotifier {
     final result = await repo.getExercises(
       search: state.searchQuery.isEmpty ? null : state.searchQuery,
       muscleGroup: state.selectedMuscleGroup?.name.toUpperCase(),
+      onlyMine: true,
       limit: _pageSize,
       offset: state.exercises.length,
     );
@@ -137,5 +139,28 @@ class ExerciseListNotifier extends _$ExerciseListNotifier {
   /// Refresh the list (pull-to-refresh).
   Future<void> refresh() async {
     await loadExercises();
+  }
+
+  /// Delete an exercise and remove it from the list.
+  Future<void> deleteExercise(String id) async {
+    final repo = ref.read(coachPoseRepositoryProvider);
+    final result = await repo.deleteExercise(id);
+
+    result.when(
+      success: (_) {
+        AppLogger.info('Exercise deleted: $id', tag: 'ExerciseList');
+        state = state.copyWith(
+          exercises: state.exercises.where((e) => e.id != id).toList(),
+        );
+      },
+      failure: (error) {
+        AppLogger.error(
+          'Failed to delete exercise',
+          tag: 'ExerciseList',
+          error: error,
+        );
+        state = state.copyWith(errorMessage: error.message);
+      },
+    );
   }
 }
