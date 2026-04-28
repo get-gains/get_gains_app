@@ -144,6 +144,10 @@ class CosmeticsRepository {
                 .toList();
           }
 
+          // Replace local owned cache entirely so stale cosmetics from a
+          // previous user on this device are not surfaced.
+          await _db.delete(_db.userCosmeticsTable).go();
+
           // Cache owned cosmetics locally
           for (final item in ownedList) {
             await _db

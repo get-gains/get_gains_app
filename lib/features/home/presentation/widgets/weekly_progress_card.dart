@@ -126,7 +126,6 @@ class WeeklyProgressCard extends StatelessWidget {
 
             // Day indicators
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: List.generate(7, (index) {
                 // index 0 = Monday … index 6 = Sunday
                 // DateTime.weekday: 1=Mon … 7=Sun
@@ -137,11 +136,16 @@ class WeeklyProgressCard extends StatelessWidget {
                     : index < workoutsCompleted;
                 final isToday = weekday == DateTime.now().weekday;
 
-                return _DayIndicator(
-                  label: dayLabels[index],
-                  isCompleted: isCompleted,
-                  isToday: isToday,
-                  isDark: isDark,
+                return Expanded(
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: _DayIndicator(
+                      label: dayLabels[index],
+                      isCompleted: isCompleted,
+                      isToday: isToday,
+                      isDark: isDark,
+                    ),
+                  ),
                 );
               }),
             ),
@@ -230,8 +234,6 @@ class _DayIndicator extends StatelessWidget {
         : (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight);
 
     return Container(
-      width: 36,
-      height: 36,
       decoration: BoxDecoration(
         color: backgroundColor,
         shape: BoxShape.circle,
