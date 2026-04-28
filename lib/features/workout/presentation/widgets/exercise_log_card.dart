@@ -138,10 +138,10 @@ class _ExerciseLogCardState extends ConsumerState<ExerciseLogCard> {
                 },
                 onComplete: () async {
                   ref.read(exerciseLogProvider.notifier).selectSet(index);
-                  await ref
+                  final logged = await ref
                       .read(exerciseLogProvider.notifier)
                       .completeCurrentSet();
-                  widget.onSetCompleted();
+                  if (logged) widget.onSetCompleted();
                 },
                 onTap: () {
                   ref.read(exerciseLogProvider.notifier).selectSet(index);
@@ -160,10 +160,10 @@ class _ExerciseLogCardState extends ConsumerState<ExerciseLogCard> {
                 isLoading: exerciseLogState.isSubmitting,
                 onPressed: () async {
                   HapticFeedback.mediumImpact();
-                  await ref
+                  final logged = await ref
                       .read(exerciseLogProvider.notifier)
                       .completeCurrentSet();
-                  widget.onSetCompleted();
+                  if (logged) widget.onSetCompleted();
                 },
               )
             else

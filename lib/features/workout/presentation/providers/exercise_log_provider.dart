@@ -179,18 +179,21 @@ class ExerciseLogNotifier extends _$ExerciseLogNotifier {
   }
 
   /// Complete the current set and save to repository
-  Future<void> completeCurrentSet({
+  Future<bool> completeCurrentSet({
     String? recordedFramesKey,
     double? overallScore,
   }) async {
-    if (state == null) return;
+    if (state == null) return false;
 
     final currentIndex = state!.currentSetIndex;
-    if (currentIndex >= state!.sets.length) return;
-
-    state = state!.copyWith(isSubmitting: true);
+    if (currentIndex >= state!.sets.length) return false;
 
     final currentSet = state!.sets[currentIndex];
+
+    // Require at least 1 rep to log a set.
+    if (currentSet.reps <= 0) return false;
+
+    state = state!.copyWith(isSubmitting: true);
 
     // Log the set via workout session provider
     final sessionNotifier = ref.read(workoutSessionProvider.notifier);
@@ -238,6 +241,8 @@ class ExerciseLogNotifier extends _$ExerciseLogNotifier {
           : currentIndex,
       isSubmitting: false,
     );
+
+    return true;
   }
 
   /// Select a specific set to edit

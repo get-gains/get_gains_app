@@ -133,30 +133,35 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
     if (!ref.mounted) return;
     result.when(
       success: (session) async {
-        if (session != null && session.routineId != null) {
-          final routineResult = await _repository.getRoutineByModelId(
-            session.routineId!,
-          );
-          if (!ref.mounted) return;
-          routineResult.when(
-            success: (routine) {
-              state = WorkoutSessionActive(
-                session: session,
-                routine: routine,
-                currentExerciseIndex: _calculateCurrentExerciseIndex(
-                  session,
-                  routine,
-                ),
-              );
-            },
-            failure: (_) {
-              state = WorkoutSessionActive(
-                session: session,
-                routine: null,
-                currentExerciseIndex: 0,
-              );
-            },
-          );
+        if (session != null) {
+          // Try APRE CUID first (matches program cache), then local int ID.
+          final routineKey =
+              session.assignedProgramRoutineId ?? session.routineId;
+          if (routineKey != null) {
+            final routineResult = await _repository.getRoutineByModelId(
+              routineKey,
+            );
+            if (!ref.mounted) return;
+            routineResult.when(
+              success: (routine) {
+                state = WorkoutSessionActive(
+                  session: session,
+                  routine: routine,
+                  currentExerciseIndex: _calculateCurrentExerciseIndex(
+                    session,
+                    routine,
+                  ),
+                );
+              },
+              failure: (_) {
+                state = WorkoutSessionActive(
+                  session: session,
+                  routine: null,
+                  currentExerciseIndex: 0,
+                );
+              },
+            );
+          }
         }
       },
       failure: (_) {},
@@ -463,9 +468,12 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
         }
 
         RoutineModel? routine;
-        if (session.routineId != null) {
+        // Try APRE CUID first (matches program cache), then local int ID.
+        final routineKey =
+            session.assignedProgramRoutineId ?? session.routineId;
+        if (routineKey != null) {
           final routineResult = await _repository.getRoutineByModelId(
-            session.routineId!,
+            routineKey,
           );
           if (!ref.mounted) return;
           routine = routineResult.valueOrNull;

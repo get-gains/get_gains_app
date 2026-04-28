@@ -1823,10 +1823,15 @@ class _ClientUnityRecordingScreenState
   Future<void> _logSetAndContinue(ClientRecordingComplete state) async {
     if (_isLoggingSet || _isNavigatingAfterLog) return;
 
+    final reps = int.tryParse(_repsController.text) ?? 0;
+    if (reps <= 0) {
+      AppToast.error(context, 'Please enter reps before logging.');
+      return;
+    }
+
     setState(() => _isLoggingSet = true);
 
     final weight = double.tryParse(_weightController.text);
-    final reps = int.tryParse(_repsController.text) ?? 0;
     final sessionState = ref.read(workoutSessionProvider);
     final exercises =
         widget.routineExercises ??
@@ -1901,6 +1906,10 @@ class _ClientUnityRecordingScreenState
             routineExerciseIdOverride: routineExerciseIdForLookup,
             recordedFramesKey: state.recordedFramesKey,
             overallScore: state.result.overallScore,
+            exerciseNameSnapshot: currentRoutineExercise?.exercise?.name,
+            targetRepsMin: currentRoutineExercise?.repsMin,
+            targetRepsMax: currentRoutineExercise?.repsMax,
+            targetRestSeconds: currentRoutineExercise?.restSeconds,
           );
     } catch (e) {
       AppLogger.warning('Failed to log set: $e', tag: 'ClientUnityRecording');
