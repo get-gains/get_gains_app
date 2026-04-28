@@ -88,3 +88,17 @@ Or open the project in Android Studio and run the app. Use an **ARM64** device o
 | 4    | `flutter run` on an ARM64 device or emulator                                       |
 
 After you change the Unity scene or scripts, **re-export** to `android/unityLibrary` and rebuild the Flutter app.
+
+---
+
+## Cursor MCP (optional)
+
+The monorepo root (`get-gains-master`) includes **`.cursor/mcp.json`** registering a stdio MCP server **`unity-flutter-build`**. Open **that folder** as the Cursor workspace root so `${workspaceFolder}` resolves correctly. After you run **`npm install`** once in `tools/mcp-unity-flutter-build/`, restart Cursor; then tools such as **`export_unity_android`**, **`dart_build_runner`**, **`flutter_build_apk`**, and **`export_and_build`** can refresh `android/unityLibrary` and run Flutter-related commands without hand-copying exports.
+
+- **`export_unity_android`** runs Unity batch export, then by default **`fvm dart run build_runner build --delete-conflicting-outputs`** in `get_gains_app`. Pass **`runCodegen: false`** to skip codegen.
+- **`export_and_build`** runs export, then codegen (default on; set **`runCodegen: false`** to skip), then **`fvm flutter build apk`**.
+- **`dart_build_runner`** runs only codegen in `get_gains_app` (same flags as above).
+- Set **`UNITY_EDITOR`** to your Unity executable if auto-detection fails (see `scripts/export-unity-android-to-flutter.ps1` / `.sh` in the monorepo root).
+- From the shell, the same export scripts support optional codegen: **`-RunCodegen`** on the `.ps1`, or **`--run-codegen`** on the `.sh`.
+- Unity batch export is **slow**; approve or enable auto-run for these tools in Cursor as you prefer.
+- MCP does not watch the filesystem by itself: ask the agent to run the export tool after Unity changes, or invoke the tool from the MCP tools list.

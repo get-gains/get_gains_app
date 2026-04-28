@@ -31,11 +31,10 @@ class _OnboardingSheetState extends ConsumerState<OnboardingSheet> {
   final _weightController = TextEditingController();
   final _injuryController = TextEditingController();
 
-  int _daysAvailable = 3;
-  int _sessionDurationMinutes = 60;
   ExperienceLevel? _experienceLevel;
   Sex? _sex;
   List<String> _equipment = [];
+  List<DayOfWeek> _activeWeekdays = [];
   bool _isSaving = false;
 
   @override
@@ -59,14 +58,13 @@ class _OnboardingSheetState extends ConsumerState<OnboardingSheet> {
       final injury = _injuryController.text.trim();
 
       final request = CreateUserProfileRequest(
-        daysAvailable: _daysAvailable,
-        sessionDurationMinutes: _sessionDurationMinutes,
         heightCm: height,
         weightKg: weight,
         experienceLevel: _experienceLevel,
         sex: _sex,
         equipment: _equipment,
         injuryHistory: injury.isEmpty ? null : injury,
+        activeWeekdays: _activeWeekdays,
       );
 
       await ref.read(userProfileProvider.notifier).createProfile(request);
@@ -87,9 +85,6 @@ class _OnboardingSheetState extends ConsumerState<OnboardingSheet> {
   }
 
   void _handleSkip() {
-    // Create with minimum defaults
-    _daysAvailable = 3;
-    _sessionDurationMinutes = 60;
     _handleSave();
   }
 
@@ -177,82 +172,6 @@ class _OnboardingSheetState extends ConsumerState<OnboardingSheet> {
                 ),
                 const SizedBox(height: 28),
 
-                // ── Availability (required) ─────────────────────────
-                _SectionLabel(label: 'Training Availability', isDark: isDark),
-                const SizedBox(height: 12),
-                AppCard(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      // Days per week
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Days per week',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  fontFamily: AppTextStyles.fontFamilySans,
-                                ),
-                          ),
-                          Text(
-                            '$_daysAvailable',
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primaryDark,
-                                  fontFamily: AppTextStyles.fontFamilyMono,
-                                ),
-                          ),
-                        ],
-                      ),
-                      Slider(
-                        value: _daysAvailable.toDouble(),
-                        min: 1,
-                        max: 7,
-                        divisions: 6,
-                        activeColor: AppColors.primaryDark,
-                        onChanged: (v) =>
-                            setState(() => _daysAvailable = v.round()),
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Session duration
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Session duration',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  fontFamily: AppTextStyles.fontFamilySans,
-                                ),
-                          ),
-                          Text(
-                            '${_sessionDurationMinutes}min',
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primaryDark,
-                                  fontFamily: AppTextStyles.fontFamilyMono,
-                                ),
-                          ),
-                        ],
-                      ),
-                      Slider(
-                        value: _sessionDurationMinutes.toDouble(),
-                        min: 15,
-                        max: 120,
-                        divisions: 7,
-                        activeColor: AppColors.primaryDark,
-                        onChanged: (v) =>
-                            setState(() => _sessionDurationMinutes = v.round()),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-
                 // ── Experience level (optional) ─────────────────────
                 _SectionLabel(label: 'Experience Level', isDark: isDark),
                 const SizedBox(height: 8),
@@ -282,6 +201,49 @@ class _OnboardingSheetState extends ConsumerState<OnboardingSheet> {
                           _experienceLevel = _experienceLevel == level
                               ? null
                               : level;
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 20),
+
+                // ── Active week days ────────────────────────────────
+                _SectionLabel(label: 'Active Days', isDark: isDark),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: DayOfWeek.values.map((day) {
+                    final isSelected = _activeWeekdays.contains(day);
+                    final label = switch (day) {
+                      DayOfWeek.sunday => 'Sun',
+                      DayOfWeek.monday => 'Mon',
+                      DayOfWeek.tuesday => 'Tue',
+                      DayOfWeek.wednesday => 'Wed',
+                      DayOfWeek.thursday => 'Thu',
+                      DayOfWeek.friday => 'Fri',
+                      DayOfWeek.saturday => 'Sat',
+                    };
+                    return FilterChip(
+                      label: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontFamily: AppTextStyles.fontFamilySans,
+                          color: isSelected ? Colors.white : null,
+                        ),
+                      ),
+                      selected: isSelected,
+                      selectedColor: AppColors.primaryDark,
+                      checkmarkColor: Colors.white,
+                      onSelected: (_) {
+                        setState(() {
+                          if (isSelected) {
+                            _activeWeekdays.remove(day);
+                          } else {
+                            _activeWeekdays = [..._activeWeekdays, day];
+                          }
                         });
                       },
                     );

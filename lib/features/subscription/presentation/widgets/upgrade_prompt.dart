@@ -24,8 +24,6 @@ class UpgradePrompt extends StatelessWidget {
   const UpgradePrompt({
     super.key,
     this.feature,
-    this.requiredTier = 1,
-    this.tierName,
     this.title,
     this.description,
     this.onUpgrade,
@@ -39,13 +37,6 @@ class UpgradePrompt extends StatelessWidget {
   /// When provided, [feature.benefitDescription] is used as the default
   /// description and [feature.analyticsKey] can be used for tracking.
   final SubscriptionFeature? feature;
-
-  /// The tier required for this feature
-  final int requiredTier;
-
-  /// The display name of the required tier (from plan name).
-  /// If not provided, defaults to 'Subscription'.
-  final String? tierName;
 
   /// Custom title (overrides feature-based default)
   final String? title;
@@ -68,48 +59,49 @@ class UpgradePrompt extends StatelessWidget {
 
   /// Current subscription status for special-case treatment.
   ///
-  /// - [SubscriptionStatus.pastDue]: Shows "Update payment method" billing
+  /// - [SubscriptionStatus.gracePeriod]: Shows "Update payment method" billing
   ///   resolution CTA with deep link to Play Store / App Store subscription
   ///   management.
-  /// - [SubscriptionStatus.pending]: Shows "Your subscription is being
+  /// - [SubscriptionStatus.trialing]: Shows "Your subscription is being
   ///   processed" informational message with no action required.
   /// - Other statuses or `null`: Standard upgrade prompt.
   final SubscriptionStatus? subscriptionStatus;
 
+  static const _tierName = 'Premium';
+
   /// Effective description derived from [description], [feature], or default.
-  String _effectiveDescription(String tierName) {
+  String _effectiveDescription() {
     if (description != null) return description!;
     if (feature != null) return feature!.benefitDescription;
-    return 'This feature requires a $tierName subscription to access.';
+    return 'This feature requires a $_tierName subscription to access.';
   }
 
   /// Effective title derived from [title], status, or default.
-  String _effectiveTitle(String tierName) {
+  String _effectiveTitle() {
     if (title != null) return title!;
-    if (subscriptionStatus == SubscriptionStatus.pastDue) {
+    if (subscriptionStatus == SubscriptionStatus.gracePeriod) {
       return 'Payment Update Required';
     }
-    if (subscriptionStatus == SubscriptionStatus.pending) {
+    if (subscriptionStatus == SubscriptionStatus.trialing) {
       return 'Subscription Processing';
     }
-    return 'Upgrade to $tierName';
+    return 'Upgrade to $_tierName';
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final displayTierName = tierName ?? 'Subscription';
 
-    // PAST_DUE: billing resolution CTA
-    if (subscriptionStatus == SubscriptionStatus.pastDue) {
+    // GRACE_PERIOD: billing resolution CTA
+    if (subscriptionStatus == SubscriptionStatus.gracePeriod) {
       if (compact) {
         return _buildCompactPastDue(context, isDark);
       }
       return _buildFullPastDue(context, isDark);
     }
 
-    // PENDING: informational only
-    if (subscriptionStatus == SubscriptionStatus.pending) {
+    // TRIALING: informational only
+    if (subscriptionStatus == SubscriptionStatus.trialing) {
       if (compact) {
         return _buildCompactPending(context, isDark);
       }
@@ -118,14 +110,14 @@ class UpgradePrompt extends StatelessWidget {
 
     // Standard upgrade prompt
     if (compact) {
-      return _buildCompact(context, isDark, displayTierName);
+      return _buildCompact(context, isDark);
     }
-    return _buildFull(context, isDark, displayTierName);
+    return _buildFull(context, isDark);
   }
 
   // ── Compact: standard ──────────────────────────────────────
 
-  Widget _buildCompact(BuildContext context, bool isDark, String tierName) {
+  Widget _buildCompact(BuildContext context, bool isDark) {
     final primary = isDark ? AppColors.primaryDark : AppColors.primaryLight;
 
     return Container(
@@ -141,7 +133,7 @@ class UpgradePrompt extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              _effectiveDescription(tierName),
+              _effectiveDescription(),
               style: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(color: primary),
@@ -155,7 +147,6 @@ class UpgradePrompt extends StatelessWidget {
                 () => showUpgradeSheet(
                   context: context,
                   feature: feature,
-                  requiredTier: requiredTier,
                 ),
             child: const Text('Learn More'),
           ),
@@ -166,7 +157,7 @@ class UpgradePrompt extends StatelessWidget {
 
   // ── Full: standard ─────────────────────────────────────────
 
-  Widget _buildFull(BuildContext context, bool isDark, String tierName) {
+  Widget _buildFull(BuildContext context, bool isDark) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -194,7 +185,7 @@ class UpgradePrompt extends StatelessWidget {
 
         // Title
         Text(
-          _effectiveTitle(tierName),
+          _effectiveTitle(),
           style: Theme.of(
             context,
           ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
@@ -204,7 +195,7 @@ class UpgradePrompt extends StatelessWidget {
 
         // Description
         Text(
-          _effectiveDescription(tierName),
+          _effectiveDescription(),
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
             color: isDark
                 ? AppColors.mutedForegroundDark
@@ -448,8 +439,6 @@ class UpgradePrompt extends StatelessWidget {
 Future<void> showUpgradeSheet({
   required BuildContext context,
   SubscriptionFeature? feature,
-  int requiredTier = 1,
-  String? tierName,
   String? title,
   String? description,
   VoidCallback? onUpgrade,
@@ -461,8 +450,6 @@ Future<void> showUpgradeSheet({
       padding: const EdgeInsets.all(24),
       child: UpgradePrompt(
         feature: feature,
-        requiredTier: requiredTier,
-        tierName: tierName,
         title: title,
         description: description,
         subscriptionStatus: subscriptionStatus,

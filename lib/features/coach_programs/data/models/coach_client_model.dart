@@ -51,6 +51,9 @@ abstract class CoachClientModel with _$CoachClientModel {
     /// When the client's platform subscription expires (ML-4).
     DateTime? subscriptionExpiresAt,
 
+    /// Days of the week the client is available for training.
+    @Default([]) List<String> activeWeekdays,
+
     /// Programs currently assigned to this client.
     @Default([]) List<ClientAssignedProgram> assignedPrograms,
 
@@ -63,25 +66,20 @@ abstract class CoachClientModel with _$CoachClientModel {
 }
 
 /// Minimal program info nested inside [CoachClientModel.assignedPrograms].
+///
+/// Now carries the `assigned_program` id, name, and active status directly
+/// instead of a nested `program` FK object.
 @freezed
 abstract class ClientAssignedProgram with _$ClientAssignedProgram {
   const factory ClientAssignedProgram({
-    required String programId,
-    ClientAssignedProgramInfo? program,
+    /// The `assigned_program` row id.
+    required String id,
+    required String name,
+    @Default(false) bool isActive,
   }) = _ClientAssignedProgram;
 
   factory ClientAssignedProgram.fromJson(Map<String, dynamic> json) =>
       _$ClientAssignedProgramFromJson(json);
-}
-
-/// Minimal program name/info.
-@freezed
-abstract class ClientAssignedProgramInfo with _$ClientAssignedProgramInfo {
-  const factory ClientAssignedProgramInfo({required String name}) =
-      _ClientAssignedProgramInfo;
-
-  factory ClientAssignedProgramInfo.fromJson(Map<String, dynamic> json) =>
-      _$ClientAssignedProgramInfoFromJson(json);
 }
 
 // ──────────────────────────────────────────────────────────

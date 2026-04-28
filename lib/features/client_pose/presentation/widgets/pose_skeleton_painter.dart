@@ -1,3 +1,5 @@
+import 'dart:math' show cos, sin, max;
+
 import 'package:flutter/material.dart';
 
 import '../../../coach_pose/data/models/landmark_models.dart';
@@ -53,6 +55,8 @@ class PoseSkeletonPainter extends CustomPainter {
     this.boneStrokeWidth = 2.5,
     this.minConfidence = 0.3,
     this.mirrorX = false,
+    /// Debug: 3D rotation around vertical (Y) axis in radians.
+    this.rotationY = 0,
   });
 
   final LandmarkFrame frame;
@@ -61,10 +65,83 @@ class PoseSkeletonPainter extends CustomPainter {
   final double boneStrokeWidth;
   final double minConfidence;
   final bool mirrorX;
+  final double rotationY;
+
+  /// Project (x,y,z) with 3D rotation around Y through (cx,cy,cz). Uses depth
+  /// scaling so the pose's z-range matches its x-range and rotation stays readable.
+  (double, double) _project(
+    double x,
+    double y,
+    double z,
+    double cx,
+    double cy,
+    double cz,
+    double zScale,
+  ) {
+    final x0 = x - cx;
+    final z0 = (z - cz) * zScale;
+    final xr = x0 * cos(rotationY) - z0 * sin(rotationY) + cx;
+    final yr = y;
+    if (mirrorX) {
+      return (1.0 - xr, yr);
+    }
+    return (xr, yr);
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
     final landmarks = frame.landmarks;
+    if (landmarks.isEmpty) return;
+
+    // --- Pass 1: centroid + z-scale for 3-D projection ---
+    double cx = 0, cy = 0, cz = 0;
+    double minX = 1, maxX = 0, minZ = 1, maxZ = -1;
+    int n = 0;
+    for (final p in landmarks.values) {
+      cx += p.x;
+      cy += p.y;
+      cz += p.z;
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.z < minZ) minZ = p.z;
+      if (p.z > maxZ) maxZ = p.z;
+      n++;
+    }
+    if (n > 0) {
+      cx /= n;
+      cy /= n;
+      cz /= n;
+    }
+    final rangeX = (maxX - minX).clamp(0.01, 1.0);
+    final rangeZ = max(maxZ - minZ, 0.01);
+    final zScale = rangeX / rangeZ;
+
+    // --- Pass 2: project every landmark → bounding box in projected space ---
+    // This ensures the skeleton fills the canvas regardless of whether the
+    // recording was done on a landscape webcam (laptop) or portrait phone.
+    double pMinX = double.infinity, pMaxX = double.negativeInfinity;
+    double pMinY = double.infinity, pMaxY = double.negativeInfinity;
+    for (final p in landmarks.values) {
+      final (px, py) = _project(p.x, p.y, p.z, cx, cy, cz, zScale);
+      if (px < pMinX) pMinX = px;
+      if (px > pMaxX) pMaxX = px;
+      if (py < pMinY) pMinY = py;
+      if (py > pMaxY) pMaxY = py;
+    }
+
+    // 8 % padding so extremities (feet/hands) don't touch the edge.
+    const pad = 0.08;
+    final pRangeX = (pMaxX - pMinX).clamp(0.01, 2.0);
+    final pRangeY = (pMaxY - pMinY).clamp(0.01, 2.0);
+    final bMinX = pMinX - pad * pRangeX;
+    final bMaxX = pMaxX + pad * pRangeX;
+    final bMinY = pMinY - pad * pRangeY;
+    final bMaxY = pMaxY + pad * pRangeY;
+    final bRangeX = bMaxX - bMinX;
+    final bRangeY = bMaxY - bMinY;
+
+    double toSx(double nx) => ((nx - bMinX) / bRangeX) * size.width;
+    double toSy(double ny) => ((ny - bMinY) / bRangeY) * size.height;
 
     // Draw bones
     for (final (from, to) in _skeletonBones) {
@@ -82,12 +159,14 @@ class PoseSkeletonPainter extends CustomPainter {
         ..strokeWidth = boneStrokeWidth
         ..strokeCap = StrokeCap.round;
 
-      final ax = mirrorX ? (1.0 - a.x) * size.width : a.x * size.width;
-      final ay = a.y * size.height;
-      final bx = mirrorX ? (1.0 - b.x) * size.width : b.x * size.width;
-      final by = b.y * size.height;
+      final (axn, ayn) = _project(a.x, a.y, a.z, cx, cy, cz, zScale);
+      final (bxn, byn) = _project(b.x, b.y, b.z, cx, cy, cz, zScale);
 
-      canvas.drawLine(Offset(ax, ay), Offset(bx, by), paint);
+      canvas.drawLine(
+        Offset(toSx(axn), toSy(ayn)),
+        Offset(toSx(bxn), toSy(byn)),
+        paint,
+      );
     }
 
     // Draw joints
@@ -101,16 +180,21 @@ class PoseSkeletonPainter extends CustomPainter {
         ..color = color.withValues(alpha: opacity)
         ..style = PaintingStyle.fill;
 
-      final px = mirrorX ? (1.0 - point.x) * size.width : point.x * size.width;
-      final py = point.y * size.height;
+      final (pxn, pyn) = _project(point.x, point.y, point.z, cx, cy, cz, zScale);
 
-      canvas.drawCircle(Offset(px, py), jointRadius, paint);
+      canvas.drawCircle(
+        Offset(toSx(pxn), toSy(pyn)),
+        jointRadius,
+        paint,
+      );
     }
   }
 
   @override
   bool shouldRepaint(PoseSkeletonPainter oldDelegate) =>
-      oldDelegate.frame != frame || oldDelegate.color != color;
+      oldDelegate.frame != frame ||
+      oldDelegate.color != color ||
+      oldDelegate.rotationY != rotationY;
 }
 
 /// Widget that plays back a sequence of [LandmarkFrame]s as an animated
@@ -125,6 +209,7 @@ class PosePlaybackWidget extends StatefulWidget {
     this.autoPlay = true,
     this.mirrorX = false,
     this.borderRadius,
+    this.rotationY = 0,
   });
 
   final List<LandmarkFrame> landmarkFrames;
@@ -134,6 +219,7 @@ class PosePlaybackWidget extends StatefulWidget {
   final bool autoPlay;
   final bool mirrorX;
   final BorderRadius? borderRadius;
+  final double rotationY;
 
   @override
   State<PosePlaybackWidget> createState() => _PosePlaybackWidgetState();
@@ -220,6 +306,7 @@ class _PosePlaybackWidgetState extends State<PosePlaybackWidget>
                   frame: currentFrame,
                   color: widget.color,
                   mirrorX: widget.mirrorX,
+                  rotationY: widget.rotationY,
                 ),
               ),
             ),

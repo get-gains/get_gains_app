@@ -31,6 +31,7 @@ class PoseViewWidget extends StatelessWidget {
     this.autoPlay = true,
     this.mirrorX = false,
     this.borderRadius,
+    this.rotationY = 0,
   });
 
   final List<LandmarkFrame> landmarkFrames;
@@ -41,6 +42,7 @@ class PoseViewWidget extends StatelessWidget {
   final bool autoPlay;
   final bool mirrorX;
   final BorderRadius? borderRadius;
+  final double rotationY;
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +58,7 @@ class PoseViewWidget extends StatelessWidget {
       autoPlay: autoPlay,
       mirrorX: mirrorX,
       borderRadius: borderRadius,
+      rotationY: rotationY,
     );
   }
 }

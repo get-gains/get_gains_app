@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui';
 
@@ -23,8 +24,8 @@ part 'pose_detection_service.g.dart';
 /// enables GPU acceleration (MediaPipe GPU delegate) which deadlocks with
 /// CameraX on many Android devices (especially Mali GPUs). `single` mode
 /// uses CPU-only TFLite inference — slower per frame (~50-100ms) but reliable.
-/// Since we only process every 10th frame during setup and every 3rd during
-/// recording, this is fast enough.
+/// Coach form recording captures raw frames during recording and processes
+/// them in batch after stop (no live MLKit), so FPS equals camera output.
 class PoseDetectionService {
   PoseDetectionService() {
     _initDetector();
@@ -227,6 +228,50 @@ class PoseDetectionService {
     }
   }
 
+  /// Process an extracted JPEG frame file (post-recording batch via ffmpeg).
+  ///
+  /// Uses [InputImage.fromFilePath] — ffmpeg outputs upright JPEGs
+  /// (rotation metadata is already applied), so we use [rotation0deg].
+  /// Returns `null` if another frame is being processed or no pose detected.
+  Future<LandmarkFrame?> processImageFile(
+    File file,
+    int timestampMs, {
+    Size? imageSize,
+  }) async {
+    if (_isBusy || _isDisposed) return null;
+    _isBusy = true;
+
+    try {
+      final inputImage = InputImage.fromFilePath(file.path);
+
+      final poses = await _poseDetector
+          .processImage(inputImage)
+          .timeout(const Duration(seconds: 10), onTimeout: () => <Pose>[]);
+
+      if (poses.isEmpty) return null;
+
+      final pose = poses.first;
+      // ffmpeg extracts upright frames — use image dimensions as-is.
+      final width = imageSize?.width ?? 640;
+      final height = imageSize?.height ?? 480;
+      return _poseToLandmarkFrame(
+        pose,
+        timestampMs,
+        width,
+        height,
+        rotation: InputImageRotation.rotation0deg,
+      );
+    } catch (e) {
+      AppLogger.warning(
+        'MLKit: processImageFile error: $e',
+        tag: 'PoseDetection',
+      );
+      return null;
+    } finally {
+      _isBusy = false;
+    }
+  }
+
   /// Convert a single [Pose] to a [LandmarkFrame].
   ///
   /// MLKit returns landmark coordinates in pixel space relative to the
@@ -261,7 +306,7 @@ class PoseDetectionService {
       landmarks[_landmarkTypeToString(type)] = LandmarkPoint(
         x: normWidth > 0 ? landmark.x / normWidth : 0.0,
         y: normHeight > 0 ? landmark.y / normHeight : 0.0,
-        z: landmark.z,
+        z: normWidth > 0 ? landmark.z / normWidth : 0.0,
         confidence: landmark.likelihood,
       );
     }

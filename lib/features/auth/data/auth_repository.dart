@@ -62,6 +62,57 @@ class AuthRepository {
   final UserPreferencesService _userPreferences;
   final GoogleSignInService _googleSignInService;
 
+  String _requiredStringField(
+    Map<String, dynamic> source,
+    List<String> keys, {
+    required String fieldName,
+  }) {
+    for (final key in keys) {
+      final value = source[key];
+      if (value is String && value.isNotEmpty) {
+        return value;
+      }
+    }
+
+    throw FormatException(
+      'Missing required field "$fieldName" in auth response. Tried keys: ${keys.join(', ')}',
+    );
+  }
+
+  UserModel _parseAuthUser(Map<String, dynamic> rawUser) {
+    final normalized = <String, dynamic>{
+      'id':
+          rawUser['id'] ??
+          rawUser['userId'] ??
+          rawUser['user_id'] ??
+          rawUser['supabase_auth_id'] ??
+          rawUser['supabaseId'],
+      'email': rawUser['email'],
+      'name': rawUser['name'] ?? rawUser['full_name'] ?? rawUser['fullName'],
+      'nickname': rawUser['nickname'],
+      'supabaseId':
+          rawUser['supabaseId'] ??
+          rawUser['supabase_auth_id'] ??
+          rawUser['id'],
+      'createdAt': rawUser['createdAt'] ?? rawUser['created_at'],
+      'updatedAt': rawUser['updatedAt'] ?? rawUser['updated_at'],
+    };
+
+    return UserModel.fromJson(normalized);
+  }
+
+  PartialUserModel _parsePartialAuthUser(Map<String, dynamic> rawUser) {
+    final normalized = <String, dynamic>{
+      'email': rawUser['email'],
+      'supabaseId':
+          rawUser['supabaseId'] ??
+          rawUser['supabase_auth_id'] ??
+          rawUser['id'],
+    };
+
+    return PartialUserModel.fromJson(normalized);
+  }
+
   // ============== Email/Password Registration ==============
 
   /// Register a new user with email and password
@@ -102,7 +153,7 @@ class AuthRepository {
           // ApiClient already unwraps { data, errors } format
           // So 'data' here is the inner data object with 'user' field
           final response = RegisterResponse(
-            user: UserModel.fromJson(data['user'] as Map<String, dynamic>),
+            user: _parseAuthUser(data['user'] as Map<String, dynamic>),
           );
 
           // Cache user preferences (non-critical, don't fail registration)
@@ -179,11 +230,17 @@ class AuthRepository {
             try {
               // ApiClient already unwraps { data, errors } format
               final response = GoogleSignInResponse(
-                accessToken: data['accessToken'] as String,
-                refreshToken: data['refreshToken'] as String,
-                user: PartialUserModel.fromJson(
-                  data['user'] as Map<String, dynamic>,
+                accessToken: _requiredStringField(
+                  data,
+                  const ['accessToken', 'access_token'],
+                  fieldName: 'accessToken',
                 ),
+                refreshToken: _requiredStringField(
+                  data,
+                  const ['refreshToken', 'refresh_token'],
+                  fieldName: 'refreshToken',
+                ),
+                user: _parsePartialAuthUser(data['user'] as Map<String, dynamic>),
               );
 
               // Save pending profile for completion
@@ -261,7 +318,7 @@ class AuthRepository {
         AuthError(
           message:
               'No pending Google profile found. Please sign in with Google first.',
-          code: 'NO_PENDING_PROFILE',
+          transportCode: 'NO_PENDING_PROFILE',
         ),
       );
     }
@@ -284,7 +341,7 @@ class AuthRepository {
         try {
           // ApiClient already unwraps { data, errors } format
           // The 'data' here contains the user object directly
-          final user = UserModel.fromJson(data['user'] as Map<String, dynamic>);
+          final user = _parseAuthUser(data['user'] as Map<String, dynamic>);
 
           final response = AuthResponse(
             accessToken: pendingProfile.accessToken,
@@ -385,9 +442,17 @@ class AuthRepository {
       success: (data) async {
         try {
           final response = AuthResponse(
-            accessToken: data['accessToken'] as String,
-            refreshToken: data['refreshToken'] as String,
-            user: UserModel.fromJson(data['user'] as Map<String, dynamic>),
+            accessToken: _requiredStringField(
+              data,
+              const ['accessToken', 'access_token'],
+              fieldName: 'accessToken',
+            ),
+            refreshToken: _requiredStringField(
+              data,
+              const ['refreshToken', 'refresh_token'],
+              fieldName: 'refreshToken',
+            ),
+            user: _parseAuthUser(data['user'] as Map<String, dynamic>),
           );
 
           // Store tokens securely
@@ -457,9 +522,17 @@ class AuthRepository {
           success: (data) async {
             try {
               final response = AuthResponse(
-                accessToken: data['accessToken'] as String,
-                refreshToken: data['refreshToken'] as String,
-                user: UserModel.fromJson(data['user'] as Map<String, dynamic>),
+                accessToken: _requiredStringField(
+                  data,
+                  const ['accessToken', 'access_token'],
+                  fieldName: 'accessToken',
+                ),
+                refreshToken: _requiredStringField(
+                  data,
+                  const ['refreshToken', 'refresh_token'],
+                  fieldName: 'refreshToken',
+                ),
+                user: _parseAuthUser(data['user'] as Map<String, dynamic>),
               );
 
               // Store tokens securely
@@ -537,11 +610,17 @@ class AuthRepository {
       success: (data) async {
         try {
           final response = GoogleSignInResponse(
-            accessToken: data['accessToken'] as String,
-            refreshToken: data['refreshToken'] as String,
-            user: PartialUserModel.fromJson(
-              data['user'] as Map<String, dynamic>,
+            accessToken: _requiredStringField(
+              data,
+              const ['accessToken', 'access_token'],
+              fieldName: 'accessToken',
             ),
+            refreshToken: _requiredStringField(
+              data,
+              const ['refreshToken', 'refresh_token'],
+              fieldName: 'refreshToken',
+            ),
+            user: _parsePartialAuthUser(data['user'] as Map<String, dynamic>),
           );
 
           // Save pending profile for completion
@@ -730,14 +809,14 @@ class AuthRepository {
         case 409:
           return const AuthError(
             message: 'Email already exists.',
-            code: 'EMAIL_EXISTS',
+            transportCode: 'EMAIL_EXISTS',
           );
         case 429:
           return AuthError(
             message: error.message.isNotEmpty
                 ? error.message
                 : 'Too many requests. Please wait a moment and try again.',
-            code: 'RATE_LIMITED',
+            transportCode: 'RATE_LIMITED',
           );
         default:
           return error;

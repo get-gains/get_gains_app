@@ -4,12 +4,15 @@ import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/constants/api_constants.dart';
+import '../../../core/errors/api_error_codes.dart';
 import '../../../core/utils/app_error.dart';
 import '../../../core/utils/logger.dart';
 import '../../../core/utils/result.dart';
 import '../../../services/api/api_client.dart';
 import '../../../services/database/app_database.dart';
 import 'models/models.dart';
+import '../../home/data/models/today_status_model.dart';
+import '../../subscription/data/models/subscription_model.dart';
 
 part 'workout_repository.g.dart';
 
@@ -307,11 +310,20 @@ class WorkoutRepository {
     }
   }
 
-  /// Get routine by model ID (remote CUID or local int string)
+  /// Get routine by model ID (remote CUID or local int string).
+  ///
+  /// Checks the assigned-program cache first (APRE-CUID-bearing routines),
+  /// then falls back to the local Routines table for standalone/coach-template
+  /// flows.
   Future<Result<RoutineModel?, AppError>> getRoutineByModelId(
     String modelId,
   ) async {
     try {
+      // 1. Try the assigned-program cache (correct APRE CUIDs).
+      final cached = await getRoutineFromCachedPrograms(modelId);
+      if (cached != null) return Success(cached);
+
+      // 2. Fall back to local Routines table (standalone / coach templates).
       final localId = await _resolveLocalRoutineId(modelId);
       if (localId == null) return const Success(null);
       return getRoutineById(localId);
@@ -321,15 +333,112 @@ class WorkoutRepository {
     }
   }
 
+  /// Search the local AssignedPrograms cache for a routine whose id matches
+  /// [routineModelId]. Returns null if not found in any cached program.
+  Future<RoutineModel?> getRoutineFromCachedPrograms(
+    String routineModelId,
+  ) async {
+    try {
+      final rows = await _db.getAssignedPrograms();
+      for (final row in rows) {
+        final program = AssignedProgramModelX.fromDbRow(
+          remoteId: row.remoteId,
+          name: row.name,
+          description: row.description,
+          isActive: row.isActive,
+          startDate: row.startDate,
+          endDate: row.endDate,
+          routinesJson: row.routinesJson,
+        );
+        for (final routine in program.routines) {
+          if (routine.id == routineModelId) return routine;
+        }
+      }
+      return null;
+    } catch (e) {
+      AppLogger.warning(
+        'Failed to search program cache for routine $routineModelId: $e',
+        tag: 'WorkoutRepo',
+      );
+      return null;
+    }
+  }
+
   // ============== Workout Session Operations ==============
 
-  /// Get active workout session for a user
+  /// Get active workout session for a user.
+  ///
+  /// If the session has no [remoteId] yet (server sync pending), attempts
+  /// an eager sync so that the model's `id` resolves to the server ID
+  /// before the caller navigates to recording/upload screens.
   Future<Result<WorkoutSessionModel?, AppError>> getActiveSession(
     String userId,
   ) async {
     try {
       final session = await _db.getActiveWorkoutSession(userId);
       if (session == null) return const Success(null);
+
+      // Eagerly sync if remoteId is missing so pose-frame uploads work.
+      if (session.remoteId == null) {
+        // Resolve the assigned_program_routine.id for the server request.
+        // New sessions store it in assignedProgramRoutineId; legacy sessions
+        // created before the fix may only have routineId set.
+        String? programRoutineId = session.assignedProgramRoutineId;
+        if (programRoutineId == null && session.routineId != null) {
+          final routine = await _db.getRoutineById(session.routineId!);
+          programRoutineId = routine?.remoteId;
+        }
+
+        if (programRoutineId != null) {
+          try {
+            final serverResult = await _apiClient.post<Map<String, dynamic>>(
+              ApiConstants.workoutSessions,
+              data: {'assignedProgramRoutineId': programRoutineId},
+            );
+            await serverResult.when(
+              success: (data) async {
+                final sessionJson = data['session'] as Map<String, dynamic>;
+                final remoteId = sessionJson['id'] as String;
+                await _db.updateWorkoutSessionRemoteId(session.id, remoteId);
+                AppLogger.info(
+                  'Eagerly synced resumed session ${session.id} → $remoteId',
+                  tag: 'WorkoutRepo',
+                );
+              },
+              failure: (error) async {
+                if (error.code == ApiErrorCode.workoutSessionAlreadyActive) {
+                  final activeResult = await _apiClient
+                      .get<Map<String, dynamic>>(
+                        '${ApiConstants.workoutSessions}/active',
+                      );
+                  final activeData = activeResult.valueOrNull;
+                  final activeSession =
+                      activeData?['session'] as Map<String, dynamic>?;
+                  if (activeSession != null) {
+                    final remoteId = activeSession['id'] as String;
+                    await _db.updateWorkoutSessionRemoteId(
+                      session.id,
+                      remoteId,
+                    );
+                    AppLogger.info(
+                      'Resolved active session on resume ${session.id} → $remoteId',
+                      tag: 'WorkoutRepo',
+                    );
+                  }
+                }
+              },
+            );
+          } catch (_) {
+            // Best-effort — sync queue will handle it eventually
+          }
+        }
+        // Re-fetch so the model picks up the newly set remoteId
+        final updated = await _db.getWorkoutSessionById(session.id);
+        if (updated != null) {
+          final sets = await _db.getPerformedSets(updated.id);
+          return Success(await _mapWorkoutSession(updated, sets));
+        }
+      }
 
       final sets = await _db.getPerformedSets(session.id);
       return Success(await _mapWorkoutSession(session, sets));
@@ -340,6 +449,110 @@ class WorkoutRepository {
         error: e,
       );
       return Failure(DatabaseError(message: 'Failed to get session: $e'));
+    }
+  }
+
+  // ============== Program Operations ==============
+
+  /// Sync assigned programs from server and cache to local DB.
+  ///
+  /// Returns [Success] with the parsed list on success,
+  /// or [Failure] on network/parse error (caller should fall back to local DB).
+  Future<Result<List<AssignedProgramModel>, AppError>> syncPrograms() async {
+    AppLogger.debug('Syncing programs from server', tag: 'WorkoutRepo');
+
+    final result = await _apiClient.get<Map<String, dynamic>>(
+      ApiConstants.workoutPrograms,
+    );
+
+    return result.when(
+      success: (data) async {
+        try {
+          final programsList = <AssignedProgramModel>[];
+          final programsJson = data['programs'] as List;
+
+          for (final programJson in programsJson) {
+            try {
+              final program = AssignedProgramModel.fromJson(
+                programJson as Map<String, dynamic>,
+              );
+              programsList.add(program);
+            } catch (e) {
+              AppLogger.error(
+                'Failed to parse individual program',
+                tag: 'WorkoutRepo',
+                error: e,
+              );
+              continue;
+            }
+          }
+
+          // Full replace: clear old cache, write fresh data
+          await _db.replaceAssignedPrograms(
+            programsList
+                .map(
+                  (p) => AssignedProgramsCompanion.insert(
+                    remoteId: p.id,
+                    name: p.name,
+                    description: Value(p.description),
+                    isActive: Value(p.isActive),
+                    startDate: Value(p.startDate),
+                    endDate: Value(p.endDate),
+                    routinesJson: Value(p.routinesJson),
+                  ),
+                )
+                .toList(),
+          );
+
+          AppLogger.info(
+            'Synced ${programsList.length} programs',
+            tag: 'WorkoutRepo',
+          );
+          return Success(programsList);
+        } catch (e, stackTrace) {
+          AppLogger.error(
+            'Failed to parse programs',
+            tag: 'WorkoutRepo',
+            error: e,
+          );
+          AppLogger.debug('Stack trace: $stackTrace', tag: 'WorkoutRepo');
+          return Failure(
+            DatabaseError(message: 'Failed to parse programs: $e'),
+          );
+        }
+      },
+      failure: (error) => Failure(error),
+    );
+  }
+
+  /// Get all assigned programs from local DB (offline-first).
+  Future<Result<List<AssignedProgramModel>, AppError>> getPrograms() async {
+    try {
+      AppLogger.debug('Fetching programs from local DB', tag: 'WorkoutRepo');
+      final rows = await _db.getAssignedPrograms();
+
+      final models = rows
+          .map(
+            (row) => AssignedProgramModelX.fromDbRow(
+              remoteId: row.remoteId,
+              name: row.name,
+              description: row.description,
+              isActive: row.isActive,
+              startDate: row.startDate,
+              endDate: row.endDate,
+              routinesJson: row.routinesJson,
+            ),
+          )
+          .toList();
+
+      return Success(models);
+    } catch (e) {
+      AppLogger.error(
+        'Failed to load programs from local DB',
+        tag: 'WorkoutRepo',
+        error: e,
+      );
+      return Failure(DatabaseError(message: 'Failed to load programs: $e'));
     }
   }
 
@@ -358,19 +571,19 @@ class WorkoutRepository {
     return routine?.id;
   }
 
-  /// Resolve a RoutineExerciseModel.id (remote CUID or local int string) to
-  /// the local auto-increment integer ID used by the Drift RoutineExercises table.
-  Future<int?> _resolveLocalRoutineExerciseId(String modelId) async {
+  /// Resolve a WorkoutSessionModel.id (remote CUID or local int string) to
+  /// the local auto-increment integer ID used by the Drift WorkoutSessions table.
+  Future<int?> resolveLocalWorkoutSessionId(String modelId) async {
     // 1. Try parsing as local integer ID
     final localId = int.tryParse(modelId);
     if (localId != null) {
-      final re = await _db.getRoutineExerciseById(localId);
-      if (re != null) return localId;
+      final session = await _db.getWorkoutSessionById(localId);
+      if (session != null) return localId;
     }
 
     // 2. Fall back to looking up by remoteId
-    final re = await _db.getRoutineExerciseByRemoteId(modelId);
-    return re?.id;
+    final session = await _db.getWorkoutSessionByRemoteId(modelId);
+    return session?.id;
   }
 
   /// Start a new workout session
@@ -398,23 +611,85 @@ class WorkoutRepository {
         WorkoutSessionsCompanion.insert(
           userId: userId,
           routineId: Value(localRoutineId),
-          assignedProgramId: Value(assignedProgramId),
+          // Store the assigned_program_routine.id (routineModelId) so that
+          // background sync and _autoCreateSession can create the server
+          // session with the correct identifier.
+          assignedProgramRoutineId: Value(routineModelId),
           startedAt: DateTime.now(),
         ),
       );
 
-      // Add to sync queue so the session is created on the server
-      await _db.addToSyncQueue(
-        SyncQueueCompanion.insert(
-          entityTable: 'workout_sessions',
-          recordId: sessionId.toString(),
-          operation: 'create',
-          payload: jsonEncode({
-            'sessionId': sessionId,
-            'assignedProgramId': assignedProgramId,
-          }),
-        ),
-      );
+      // Eagerly sync the session to the server so that remoteId is
+      // available before the user navigates to the recording screen.
+      // If this fails (e.g. offline), fall back to the async sync queue.
+      // NOTE: routineModelId is the assigned_program_routine.id from the
+      // server's getPrograms response — exactly what the server expects.
+      bool syncedEagerly = false;
+      if (routineModelId != null) {
+        try {
+          final serverResult = await _apiClient.post<Map<String, dynamic>>(
+            ApiConstants.workoutSessions,
+            data: {'assignedProgramRoutineId': routineModelId},
+          );
+          await serverResult.when(
+            success: (data) async {
+              final sessionJson = data['session'] as Map<String, dynamic>;
+              final remoteId = sessionJson['id'] as String;
+              await _db.updateWorkoutSessionRemoteId(sessionId, remoteId);
+              syncedEagerly = true;
+              AppLogger.info(
+                'Eagerly synced session $sessionId → $remoteId',
+                tag: 'WorkoutRepo',
+              );
+            },
+            failure: (error) async {
+              // 409 — server already has an active session; fetch its ID
+              if (error.code == ApiErrorCode.workoutSessionAlreadyActive) {
+                final activeResult = await _apiClient.get<Map<String, dynamic>>(
+                  '${ApiConstants.workoutSessions}/active',
+                );
+                final activeData = activeResult.valueOrNull;
+                final activeSession =
+                    activeData?['session'] as Map<String, dynamic>?;
+                if (activeSession != null) {
+                  final remoteId = activeSession['id'] as String;
+                  await _db.updateWorkoutSessionRemoteId(sessionId, remoteId);
+                  syncedEagerly = true;
+                  AppLogger.info(
+                    'Resolved existing active session $sessionId → $remoteId',
+                    tag: 'WorkoutRepo',
+                  );
+                }
+              } else {
+                AppLogger.warning(
+                  'Eager session sync failed, will retry via queue: ${error.message}',
+                  tag: 'WorkoutRepo',
+                );
+              }
+            },
+          );
+        } catch (e) {
+          AppLogger.warning(
+            'Eager session sync threw, will retry via queue: $e',
+            tag: 'WorkoutRepo',
+          );
+        }
+      }
+
+      // If eager sync failed, enqueue for deferred background sync
+      if (!syncedEagerly) {
+        await _db.addToSyncQueue(
+          SyncQueueCompanion.insert(
+            entityTable: 'workout_sessions',
+            recordId: sessionId.toString(),
+            operation: 'create',
+            payload: jsonEncode({
+              'sessionId': sessionId,
+              'assignedProgramRoutineId': routineModelId,
+            }),
+          ),
+        );
+      }
 
       final session = await _db.getWorkoutSessionById(sessionId);
       if (session == null) {
@@ -573,7 +848,7 @@ class WorkoutRepository {
           WorkoutSessionSummary(
             id: session.remoteId ?? session.id.toString(),
             userId: session.userId,
-            assignedProgramId: session.assignedProgramId,
+            assignedProgramId: session.assignedProgramRoutineId,
             routineId: session.routineId?.toString(),
             startedAt: session.startedAt,
             completedAt: session.completedAt,
@@ -616,10 +891,18 @@ class WorkoutRepository {
     double? weightKg,
     int? rpe,
     String? notes,
+    String? recordedFramesKey,
+    double? overallScore,
+    String? exerciseNameSnapshot,
+    int? targetRepsMin,
+    int? targetRepsMax,
+    int? targetRestSeconds,
+    double? targetWeightKg,
   }) async {
     try {
-      // Resolve model IDs to local integer IDs
-      final workoutSessionId = int.tryParse(workoutSessionModelId);
+      final workoutSessionId = await resolveLocalWorkoutSessionId(
+        workoutSessionModelId,
+      );
       if (workoutSessionId == null) {
         return Failure(
           DatabaseError(
@@ -628,33 +911,28 @@ class WorkoutRepository {
         );
       }
 
-      final localRoutineExerciseId = await _resolveLocalRoutineExerciseId(
-        routineExerciseModelId,
-      );
-      if (localRoutineExerciseId == null) {
-        return Failure(
-          DatabaseError(
-            message:
-                'Could not resolve routine exercise ID: $routineExerciseModelId',
-          ),
-        );
-      }
-
       AppLogger.debug(
-        'Logging set: session=$workoutSessionId, exercise=$localRoutineExerciseId '
-        '(modelId=$routineExerciseModelId), '
+        'Logging set: session=$workoutSessionId, '
+        'apreId=$routineExerciseModelId, '
         'set=$setNumber, reps=$repsCompleted, weight=$weightKg',
         tag: 'WorkoutRepo',
       );
 
       final setId = await _db.logSet(
         workoutSessionId: workoutSessionId,
-        routineExerciseId: localRoutineExerciseId,
+        assignedProgramRoutineExerciseId: routineExerciseModelId,
         setNumber: setNumber,
         repsCompleted: repsCompleted,
         weightKg: weightKg,
         rpe: rpe,
         notes: notes,
+        recordedFramesKey: recordedFramesKey,
+        overallScore: overallScore,
+        exerciseNameSnapshot: exerciseNameSnapshot,
+        targetRepsMin: targetRepsMin,
+        targetRepsMax: targetRepsMax,
+        targetRestSeconds: targetRestSeconds,
+        targetWeightKg: targetWeightKg,
       );
 
       // Add to sync queue
@@ -665,12 +943,15 @@ class WorkoutRepository {
           operation: 'create',
           payload: jsonEncode({
             'workoutSessionId': workoutSessionId,
-            'routineExerciseId': localRoutineExerciseId,
+            'assignedProgramRoutineExerciseId': routineExerciseModelId,
             'setNumber': setNumber,
             'repsCompleted': repsCompleted,
             'weightKg': weightKg,
             'rpe': rpe,
             'notes': notes,
+            if (recordedFramesKey != null)
+              'recordedFramesKey': recordedFramesKey,
+            if (overallScore != null) 'overallScore': overallScore,
           }),
         ),
       );
@@ -679,13 +960,20 @@ class WorkoutRepository {
         PerformedSetModel(
           id: setId.toString(),
           workoutSessionId: workoutSessionId.toString(),
-          routineExerciseId: routineExerciseModelId,
+          assignedProgramRoutineExerciseId: routineExerciseModelId,
           setNumber: setNumber,
           repsCompleted: repsCompleted,
           weightKg: weightKg,
           rpe: rpe,
           notes: notes,
+          recordedFramesKey: recordedFramesKey,
+          overallScore: overallScore,
           isCompleted: true,
+          exerciseNameSnapshot: exerciseNameSnapshot,
+          targetRepsMin: targetRepsMin,
+          targetRepsMax: targetRepsMax,
+          targetRestSeconds: targetRestSeconds,
+          targetWeightKg: targetWeightKg,
           createdAt: DateTime.now(),
         ),
       );
@@ -741,7 +1029,7 @@ class WorkoutRepository {
         PerformedSetModel(
           id: setId.toString(),
           workoutSessionId: '',
-          routineExerciseId: '',
+          assignedProgramRoutineExerciseId: '',
           setNumber: 0,
           repsCompleted: repsCompleted ?? 0,
           weightKg: weightKg,
@@ -771,33 +1059,37 @@ class WorkoutRepository {
   /// Get sets for a specific exercise in a session
   Future<Result<List<PerformedSetModel>, AppError>> getSetsForExercise({
     required int workoutSessionId,
-    required int routineExerciseId,
+    required String assignedProgramRoutineExerciseId,
   }) async {
     try {
       final sets = await _db.getPerformedSetsForExercise(
         workoutSessionId,
-        routineExerciseId,
+        assignedProgramRoutineExerciseId,
       );
 
-      final mappedSets = <PerformedSetModel>[];
-      for (final s in sets) {
-        final re = await _db.getRoutineExerciseById(s.routineExerciseId);
-        mappedSets.add(
-          PerformedSetModel(
-            id: s.remoteId ?? s.id.toString(),
-            workoutSessionId: s.workoutSessionId.toString(),
-            routineExerciseId: re?.remoteId ?? s.routineExerciseId.toString(),
-            setNumber: s.setNumber,
-            repsCompleted: s.repsCompleted,
-            weightKg: s.weightKg,
-            rpe: s.rpe,
-            notes: s.notes,
-            isCompleted: s.isCompleted,
-            createdAt: s.createdAt,
-            updatedAt: s.updatedAt,
-          ),
-        );
-      }
+      final mappedSets = sets
+          .map(
+            (s) => PerformedSetModel(
+              id: s.remoteId ?? s.id.toString(),
+              workoutSessionId: s.workoutSessionId.toString(),
+              assignedProgramRoutineExerciseId:
+                  s.assignedProgramRoutineExerciseId,
+              setNumber: s.setNumber,
+              repsCompleted: s.repsCompleted,
+              weightKg: s.weightKg,
+              rpe: s.rpe,
+              notes: s.notes,
+              isCompleted: s.isCompleted,
+              exerciseNameSnapshot: s.exerciseNameSnapshot,
+              targetRepsMin: s.targetRepsMin,
+              targetRepsMax: s.targetRepsMax,
+              targetRestSeconds: s.targetRestSeconds,
+              targetWeightKg: s.targetWeightKg,
+              createdAt: s.createdAt,
+              updatedAt: s.updatedAt,
+            ),
+          )
+          .toList();
 
       return Success(mappedSets);
     } catch (e) {
@@ -877,21 +1169,10 @@ class WorkoutRepository {
     WorkoutSession session,
     List<PerformedSet> sets,
   ) async {
-    // Build a lookup of local routine_exercise ID → model-level ID
-    // so that setsForExercise() matching works correctly.
-    final reIdMap = <int, String>{};
-    for (final s in sets) {
-      if (!reIdMap.containsKey(s.routineExerciseId)) {
-        final re = await _db.getRoutineExerciseById(s.routineExerciseId);
-        reIdMap[s.routineExerciseId] =
-            re?.remoteId ?? s.routineExerciseId.toString();
-      }
-    }
-
     return WorkoutSessionModel(
       id: session.remoteId ?? session.id.toString(),
       userId: session.userId,
-      assignedProgramId: session.assignedProgramId,
+      assignedProgramRoutineId: session.assignedProgramRoutineId,
       routineId: session.routineId?.toString(),
       startedAt: session.startedAt,
       completedAt: session.completedAt,
@@ -901,15 +1182,19 @@ class WorkoutRepository {
             (s) => PerformedSetModel(
               id: s.remoteId ?? s.id.toString(),
               workoutSessionId: s.workoutSessionId.toString(),
-              routineExerciseId:
-                  reIdMap[s.routineExerciseId] ??
-                  s.routineExerciseId.toString(),
+              assignedProgramRoutineExerciseId:
+                  s.assignedProgramRoutineExerciseId,
               setNumber: s.setNumber,
               repsCompleted: s.repsCompleted,
               weightKg: s.weightKg,
               rpe: s.rpe,
               notes: s.notes,
               isCompleted: s.isCompleted,
+              exerciseNameSnapshot: s.exerciseNameSnapshot,
+              targetRepsMin: s.targetRepsMin,
+              targetRepsMax: s.targetRepsMax,
+              targetRestSeconds: s.targetRestSeconds,
+              targetWeightKg: s.targetWeightKg,
               createdAt: s.createdAt,
               updatedAt: s.updatedAt,
             ),
@@ -1000,6 +1285,280 @@ class WorkoutRepository {
       error: failure.error,
     );
     return Failure(failure.error);
+  }
+
+  /// Fetch unified today status from `GET /api/today`.
+  ///
+  /// Returns subscription state + coach today + standalone today in one call.
+  /// Always 200 — never throws [SubscriptionRequiredError].
+  Future<Result<TodayStatusModel, AppError>> getTodayStatus() async {
+    AppLogger.debug('Fetching today status', tag: 'WorkoutRepo');
+
+    final result = await _apiClient.get<Map<String, dynamic>>(
+      ApiConstants.todayStatus,
+    );
+
+    if (result is Success<Map<String, dynamic>, AppError>) {
+      try {
+        final model = TodayStatusModel.fromJson(result.value);
+        AppLogger.info(
+          'Today status: isCoach=${model.isCoach} subscribed=${model.isSubscribed} hasSubscribedCoach=${model.hasCoach}',
+          tag: 'WorkoutRepo',
+        );
+        return Success(model);
+      } catch (e) {
+        AppLogger.error(
+          'Failed to parse today status',
+          tag: 'WorkoutRepo',
+          error: e,
+        );
+        return Failure(
+          UnknownError(
+            message: 'Failed to parse today status: $e',
+            originalError: e,
+          ),
+        );
+      }
+    }
+
+    final failure = result as Failure<Map<String, dynamic>, AppError>;
+
+    if (_shouldFallbackToLegacyTodayStatus(failure.error)) {
+      AppLogger.warning(
+        'GET /today unavailable (404), using legacy today endpoints fallback',
+        tag: 'WorkoutRepo',
+      );
+
+      final legacyStatus = await _buildLegacyTodayStatus();
+      if (legacyStatus != null) {
+        AppLogger.info(
+          'Loaded today status via legacy fallback',
+          tag: 'WorkoutRepo',
+        );
+        return Success(legacyStatus);
+      }
+    }
+
+    AppLogger.error(
+      'Failed to fetch today status',
+      tag: 'WorkoutRepo',
+      error: failure.error,
+    );
+    return Failure(failure.error);
+  }
+
+  bool _shouldFallbackToLegacyTodayStatus(AppError error) {
+    return error is NetworkError && error.statusCode == 404;
+  }
+
+  Future<TodayStatusModel?> _buildLegacyTodayStatus() async {
+    try {
+      bool isSubscribed = false;
+      TodaySubscriptionInfo? subscription;
+
+      final subscriptionResult = await _apiClient.get<Map<String, dynamic>>(
+        ApiConstants.subscriptionStatus,
+      );
+      if (subscriptionResult is Success<Map<String, dynamic>, AppError>) {
+        final data = subscriptionResult.value;
+        isSubscribed = _asBool(data['isSubscribed']) ?? false;
+        subscription = _parseLegacySubscriptionInfo(data['subscription']);
+      }
+
+      bool hasCoach = false;
+      final subscribedCoachesResult = await _apiClient
+          .get<Map<String, dynamic>>(ApiConstants.subscribedCoaches);
+      if (subscribedCoachesResult is Success<Map<String, dynamic>, AppError>) {
+        final data = subscribedCoachesResult.value;
+        final coaches = data['coaches'];
+        hasCoach = coaches is List && coaches.isNotEmpty;
+      }
+
+      TodayWorkoutDetails? coachToday;
+      if (isSubscribed) {
+        final coachTodayResult = await _apiClient.get<Map<String, dynamic>>(
+          ApiConstants.todayWorkout,
+        );
+        if (coachTodayResult is Success<Map<String, dynamic>, AppError>) {
+          coachToday = _parseLegacyTodayDetails(coachTodayResult.value);
+          hasCoach = hasCoach || coachToday != null;
+        }
+      }
+
+      // NOTE:
+      // Do not call legacy `/standalone/today` here. Some deployed backend
+      // versions return 500 for that endpoint, which creates noisy retry/error
+      // logs on every Home refresh. Keep this fallback resilient by returning
+      // coach/subscription state only when unified `/today` is unavailable.
+      final TodayWorkoutDetails? standaloneToday = null;
+
+      return TodayStatusModel(
+        isSubscribed: isSubscribed,
+        hasCoach: hasCoach,
+        subscription: subscription,
+        coachToday: coachToday,
+        standaloneToday: standaloneToday,
+      );
+    } catch (e) {
+      AppLogger.error(
+        'Legacy today fallback failed',
+        tag: 'WorkoutRepo',
+        error: e,
+      );
+      return null;
+    }
+  }
+
+  TodaySubscriptionInfo? _parseLegacySubscriptionInfo(dynamic rawSubscription) {
+    final sub = _asMap(rawSubscription);
+    if (sub == null) return null;
+
+    final id = _asString(sub['id']);
+    final status = _parseSubscriptionStatus(sub['status']);
+    final currentPeriodEnd = _parseDateTime(sub['currentPeriodEnd']);
+
+    final plan = _asMap(sub['plan']);
+    final tierLevel =
+        _asInt(sub['tierLevel']) ?? _asInt(plan?['tierLevel']) ?? 0;
+
+    if (id == null || status == null || currentPeriodEnd == null) {
+      return null;
+    }
+
+    return TodaySubscriptionInfo(
+      id: id,
+      status: status,
+      tierLevel: tierLevel,
+      currentPeriodEnd: currentPeriodEnd,
+    );
+  }
+
+  SubscriptionStatus? _parseSubscriptionStatus(dynamic rawStatus) {
+    final value = _asString(rawStatus)?.toUpperCase();
+    return switch (value) {
+      'ACTIVE' => SubscriptionStatus.active,
+      'TRIALING' => SubscriptionStatus.trialing,
+      'GRACE_PERIOD' || 'PAST_DUE' => SubscriptionStatus.gracePeriod,
+      'PAUSED' => SubscriptionStatus.paused,
+      'CANCELLED' || 'CANCELED' => SubscriptionStatus.cancelled,
+      'EXPIRED' || 'REVOKED' => SubscriptionStatus.expired,
+      _ => null,
+    };
+  }
+
+  TodayWorkoutDetails? _parseLegacyTodayDetails(Map<String, dynamic> payload) {
+    final isRestDay =
+        _asBool(payload['isRestDay']) ??
+        _asBool(payload['is_rest_day']) ??
+        false;
+
+    final todayNode = payload['today'];
+    if (todayNode == null) {
+      return isRestDay ? const TodayWorkoutDetails(isRestDay: true) : null;
+    }
+
+    final todayMap = _asMap(todayNode);
+    if (todayMap != null) {
+      return _toTodayWorkoutDetails(todayMap, isRestDay: isRestDay);
+    }
+
+    if (todayNode is List && todayNode.isNotEmpty) {
+      final first = _asMap(todayNode.first);
+      if (first != null) {
+        return _toTodayWorkoutDetails(first, isRestDay: isRestDay);
+      }
+    }
+
+    return isRestDay ? const TodayWorkoutDetails(isRestDay: true) : null;
+  }
+
+  TodayWorkoutDetails _toTodayWorkoutDetails(
+    Map<String, dynamic> data, {
+    required bool isRestDay,
+  }) {
+    final routine = _asMap(data['routine']);
+
+    final dayOfWeek =
+        _asString(data['dayOfWeek']) ??
+        _extractFirstDayName(data['daysOfWeek']) ??
+        _extractFirstDayName(data['days_of_week']);
+
+    final exerciseCount =
+        _asInt(data['exerciseCount']) ??
+        _asInt(data['exercise_count']) ??
+        (routine?['exercises'] is List
+            ? (routine!['exercises'] as List).length
+            : null) ??
+        (data['assigned_program_routine_exercises'] is List
+            ? (data['assigned_program_routine_exercises'] as List).length
+            : null) ??
+        0;
+
+    final estimatedMinutes =
+        _asInt(data['estimatedMinutes']) ??
+        _asInt(data['estimated_duration_minutes']) ??
+        _asInt(routine?['estimatedDurationMinutes']) ??
+        _asInt(routine?['estimated_duration_minutes']) ??
+        0;
+
+    return TodayWorkoutDetails(
+      isRestDay: isRestDay,
+      programRoutineId:
+          _asString(data['programRoutineId']) ??
+          _asString(data['assignedProgramRoutineId']) ??
+          _asString(data['id']),
+      dayOfWeek: dayOfWeek,
+      dayNumber: _asInt(data['dayNumber']),
+      programName:
+          _asString(data['programName']) ?? _asString(data['program_name']),
+      routineName:
+          _asString(data['routineName']) ?? _asString(routine?['name']),
+      exerciseCount: exerciseCount,
+      estimatedMinutes: estimatedMinutes,
+    );
+  }
+
+  String? _extractFirstDayName(dynamic rawDays) {
+    if (rawDays is! List || rawDays.isEmpty) return null;
+    return _asString(rawDays.first);
+  }
+
+  Map<String, dynamic>? _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      return value.map((key, val) => MapEntry(key.toString(), val));
+    }
+    return null;
+  }
+
+  String? _asString(dynamic value) {
+    if (value is! String) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  int? _asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  bool? _asBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final normalized = value.trim().toLowerCase();
+      if (normalized == 'true') return true;
+      if (normalized == 'false') return false;
+    }
+    return null;
+  }
+
+  DateTime? _parseDateTime(dynamic value) {
+    final raw = _asString(value);
+    if (raw == null) return null;
+    return DateTime.tryParse(raw);
   }
 
   /// Fetch aggregated weekly workout statistics from the server.

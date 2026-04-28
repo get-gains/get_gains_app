@@ -21,6 +21,7 @@ import '../features/gains_coins/presentation/screens/shop_screen.dart';
 import '../features/gains_coins/presentation/screens/cosmetic_detail_screen.dart';
 import '../features/gains_coins/presentation/screens/inventory_screen.dart';
 import '../features/gains_coins/presentation/screens/leaderboard_screen.dart';
+import '../features/gains_coins/presentation/screens/missions_screen.dart';
 import '../features/gains_coins/data/models/cosmetic_model.dart';
 import 'auth_state_provider.dart';
 import '../features/programs/screens/program_screen.dart';
@@ -31,6 +32,8 @@ import '../features/programs/screens/create_program_screen.dart';
 import 'deep_link_provider.dart';
 
 part 'router_provider.g.dart';
+
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 /// Route Paths
 class AppRoutes {
@@ -59,6 +62,10 @@ class AppRoutes {
   static const String programDetails = '/program-details';
   static const String calendar = '/calendar';
 
+  // Client My Program routes (program-first navigation)
+  static const String myProgram = '/my-program';
+  static const String myProgramDetail = '/my-program/:programId';
+
   // Coach Hub
   static const String coachHub = '/coach/hub';
 
@@ -69,8 +76,12 @@ class AppRoutes {
   // Coach Pose routes
   static const String coachExercises = '/coach/exercises';
   static const String createExercise = '/coach/exercises/create';
+  static const String editExercise = '/coach/exercises/:id/edit';
   static const String exerciseDetail = '/coach/exercises/:id';
   static const String recordForm = '/coach/exercises/:id/record';
+  static const String coachViewForm = '/coach/exercises/:id/forms/:formId/view';
+  static const String coachForm3DPreview =
+      '/coach/exercises/:id/forms/:formId/3d-preview';
 
   // Client Pose routes
   static const String clientViewForm = '/client/exercise/:id/view-form';
@@ -79,15 +90,12 @@ class AppRoutes {
   static const String clientCompareForm = '/client/exercise/:id/compare';
   static const String clientUnityRecord = '/client/exercise/:id/unity-record';
   // Coach Program routes
-  static const String coachPrograms = '/coach/programs';
-  static const String coachCreateProgram = '/coach/programs/create';
-  static const String coachEditProgram = '/coach/programs/:id/edit';
-  static const String coachProgramDetail = '/coach/programs/:id';
   static const String coachRoutines = '/coach/routines';
   static const String coachCreateRoutine = '/coach/routines/create';
   static const String coachEditRoutine = '/coach/routines/:id/edit';
   static const String coachRoutineDetail = '/coach/routines/:id';
   static const String clientAssignments = '/coach/clients/:userId/programs';
+  static const String programBuilder = '/coach/clients/:userId/program-builder';
   static const String coachRoster = '/coach/roster';
   static const String coachSettings = '/coach/settings';
 
@@ -128,6 +136,7 @@ class AppRoutes {
   static const String cosmeticDetail = '/shop/cosmetic';
   static const String inventory = '/inventory';
   static const String leaderboard = '/leaderboard';
+  static const String missions = '/missions';
 }
 
 /// Router Provider
@@ -158,6 +167,7 @@ GoRouter router(Ref ref) {
   final refreshNotifier = _GoRouterRefreshStream(ref);
 
   final routerInstance = GoRouter(
+    navigatorKey: appNavigatorKey,
     initialLocation: AppRoutes.splash,
     debugLogDiagnostics: true,
     refreshListenable: refreshNotifier,
@@ -299,6 +309,21 @@ GoRouter router(Ref ref) {
           return RoutineDetailScreen(routineId: id, routine: routine);
         },
       ),
+
+      // Client My Program routes (program-first navigation)
+      GoRoute(
+        path: AppRoutes.myProgram,
+        builder: (context, state) => const MyProgramListScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.myProgramDetail,
+        builder: (context, state) {
+          final program = state.extra as AssignedProgramModel?;
+          // If navigated without extra (e.g. deep-link), fallback gracefully.
+          if (program == null) return const MyProgramListScreen();
+          return MyProgramDetailScreen(program: program);
+        },
+      ),
       GoRoute(
         path: AppRoutes.workoutSession,
         builder: (context, state) {
@@ -365,6 +390,13 @@ GoRouter router(Ref ref) {
         builder: (context, state) => const CreateExerciseScreen(),
       ),
       GoRoute(
+        path: AppRoutes.editExercise,
+        builder: (context, state) {
+          final exercise = state.extra as ExerciseModel;
+          return EditExerciseScreen(exercise: exercise);
+        },
+      ),
+      GoRoute(
         path: AppRoutes.exerciseDetail,
         builder: (context, state) {
           final id = state.pathParameters['id']!;
@@ -377,6 +409,26 @@ GoRouter router(Ref ref) {
         builder: (context, state) {
           final id = state.pathParameters['id']!;
           return FormRecordingScreen(exerciseId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.coachViewForm,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          final formId = state.pathParameters['formId']!;
+          return CoachViewFormScreen(exerciseId: id, formId: formId);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.coachForm3DPreview,
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final frames = extra?['landmarkFrames'] as List<LandmarkFrame>? ?? [];
+          final angle = extra?['cameraAngle'] as String? ?? 'FRONT';
+          return Form3DPreviewScreen(
+            landmarkFrames: frames,
+            cameraAngle: angle,
+          );
         },
       ),
 
@@ -424,29 +476,7 @@ GoRouter router(Ref ref) {
         },
       ),
 
-      // Coach Program Routes
-      GoRoute(
-        path: AppRoutes.coachPrograms,
-        builder: (context, state) => const CoachProgramsScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.coachCreateProgram,
-        builder: (context, state) => const CoachProgramFormScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.coachProgramDetail,
-        builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          return CoachProgramDetailScreen(programId: id);
-        },
-      ),
-      GoRoute(
-        path: AppRoutes.coachEditProgram,
-        builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          return CoachProgramFormScreen(programId: id);
-        },
-      ),
+      // Coach Routine Routes
       GoRoute(
         path: AppRoutes.coachRoutines,
         builder: (context, state) => const CoachRoutinesScreen(),
@@ -475,6 +505,19 @@ GoRouter router(Ref ref) {
           final userId = state.pathParameters['userId']!;
           final userName = state.uri.queryParameters['name'];
           return ClientAssignmentsScreen(userId: userId, userName: userName);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.programBuilder,
+        builder: (context, state) {
+          final userId = state.pathParameters['userId']!;
+          final programId = state.uri.queryParameters['programId'];
+          final clientName = state.uri.queryParameters['name'];
+          return ProgramBuilderScreen(
+            clientId: userId,
+            programId: programId,
+            clientName: clientName,
+          );
         },
       ),
       GoRoute(
@@ -535,9 +578,15 @@ GoRouter router(Ref ref) {
       ),
 
       // Coach Discovery Routes (Client-Facing)
+      // IMPORTANT: Literal routes must come before parametric `:id` route
+      // to prevent GoRouter from matching e.g. `/coaches/subscribed` as `:id`.
       GoRoute(
         path: AppRoutes.discoverCoaches,
         builder: (context, state) => const CoachDiscoveryScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.subscribedCoaches,
+        builder: (context, state) => const SubscribedCoachesScreen(),
       ),
       GoRoute(
         path: AppRoutes.coachProfile,
@@ -545,10 +594,6 @@ GoRouter router(Ref ref) {
           final id = state.pathParameters['id']!;
           return CoachProfileScreen(coachId: id);
         },
-      ),
-      GoRoute(
-        path: AppRoutes.subscribedCoaches,
-        builder: (context, state) => const SubscribedCoachesScreen(),
       ),
 
       // Standalone Workout Routes
@@ -630,6 +675,9 @@ GoRouter router(Ref ref) {
             sessionDurationMin: (extra['sessionDurationMin'] as int?) ?? 0,
             avgAccuracy: (extra['avgAccuracy'] as double?) ?? 1.0,
             streakDays: (extra['streakDays'] as int?) ?? 0,
+            showWorkoutSummaryAfterContinue:
+                (extra['showWorkoutSummaryAfterCoins'] as bool?) ?? false,
+            workoutSummary: extra['workoutSummary'] as Map<String, dynamic>?,
           );
         },
       ),
@@ -655,6 +703,10 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: AppRoutes.leaderboard,
         builder: (context, state) => const LeaderboardScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.missions,
+        builder: (context, state) => const MissionsScreen(),
       ),
     ],
 

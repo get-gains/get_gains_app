@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/errors/api_error_codes.dart';
+import '../../../../core/errors/error_messages.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/app_error.dart';
@@ -76,24 +78,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       // New Google user — navigate to complete profile
       context.go(AppRoutes.completeProfile);
     } else if (next is LoginError) {
-      // Show error toast
-      final message = _getErrorMessage(next.error);
-      AppToast.error(context, message);
+      _showLoginError(next.error);
     }
   }
 
-  String _getErrorMessage(AppError error) {
-    if (error is AuthError) {
-      return error.message;
-    } else if (error is NetworkError) {
-      if (error.statusCode == 401) {
-        return 'Invalid email or password';
-      } else if (error.statusCode == 404) {
-        return 'User not found. Please sign up first.';
-      }
-      return error.message;
+  void _showLoginError(AppError error) {
+    final message = errorMessageFor(error);
+
+    // Email not verified — offer to navigate to the verification screen
+    if (error.code == ApiErrorCode.authEmailNotVerified) {
+      final email = _emailController.text.trim();
+      AppToast.error(
+        context,
+        message,
+        actionLabel: 'Check Email',
+        action: () => context.go(
+          '${AppRoutes.checkEmail}?email=${Uri.encodeComponent(email)}',
+        ),
+      );
+      return;
     }
-    return 'Login failed. Please try again.';
+
+    AppToast.error(context, message);
   }
 
   Future<void> _handleEmailPasswordLogin() async {
@@ -272,7 +278,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 return 'Email is required';
               }
               if (!RegExp(
-                r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                r'^[\w-\.+]+@([\w-]+\.)+[\w-]{2,4}$',
               ).hasMatch(value)) {
                 return 'Enter a valid email';
               }

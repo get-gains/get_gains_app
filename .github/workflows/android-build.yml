@@ -73,8 +73,8 @@ jobs:
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: "temurin"
+          java-version: "17"
 
       - name: Install Flutter (to get Dart for FVM)
         uses: subosito/flutter-action@v2
@@ -104,6 +104,29 @@ jobs:
       - name: Create .env file
         run: touch .env
 
+      - name: Configure Gradle properties for CI
+        run: |
+          cat > android/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:ReservedCodeCacheSize=512m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8
+          org.gradle.daemon=false
+          org.gradle.workers.max=2
+          org.gradle.parallel=false
+          kotlin.daemon.jvmargs=-Xmx1g
+          android.useAndroidX=true
+          android.enableJetifier=true
+          unityStreamingAssets=
+          EOF
+
+      - name: Exclude Unity library from CI build
+        run: |
+          # Unity IL2CPP compilation is too memory-intensive for standard GitHub-hosted runners.
+          # settings.gradle.kts includes :unityLibrary when one of these Gradle files exists.
+          rm -f android/unityLibrary/build.gradle
+          rm -f android/unityLibrary/build.gradle.kts
+          rm -f android/unityLibrary/unityLibrary/build.gradle
+          rm -f android/unityLibrary/unityLibrary/build.gradle.kts
+          echo "Unity library excluded from CI build."
+
       - name: Get dependencies
         run: fvm flutter pub get
 
@@ -123,4 +146,3 @@ jobs:
           name: debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 7
-

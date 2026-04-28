@@ -79,7 +79,7 @@ class ResetPasswordNotifier extends _$ResetPasswordNotifier {
         AuthError(
           message:
               'Recovery session expired. Please request a new password reset.',
-          code: 'NO_RECOVERY_TOKEN',
+          transportCode: 'NO_RECOVERY_TOKEN',
         ),
       );
       return;

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../guidance/guidance.dart';
 import '../../../home/presentation/providers/home_providers.dart';
 import '../../data/models/models.dart';
 import '../providers/exercise_log_provider.dart';
@@ -36,6 +37,52 @@ class WorkoutSessionScreen extends ConsumerStatefulWidget {
 
 class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
   final PageController _pageController = PageController();
+  bool _isAutoRoutingToRecording = false;
+  bool _tourTriggered = false;
+
+  // Guidance GlobalKeys
+  final _exerciseTabsKey = GlobalKey(
+    debugLabel: 'workout_session_exercise_tabs',
+  );
+  final _setInputKey = GlobalKey(debugLabel: 'workout_session_set_input');
+  final _progressKey = GlobalKey(debugLabel: 'workout_session_progress');
+  final _finishButtonKey = GlobalKey(debugLabel: 'workout_session_finish');
+
+  @override
+  void initState() {
+    super.initState();
+
+    if (widget.readOnly) {
+      final preferredIndex =
+          widget.nextSetNavigation?['currentExerciseIndex'] as int?;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref
+            .read(workoutSessionProvider.notifier)
+            .refreshActiveSession(preferredExerciseIndex: preferredIndex);
+      });
+    }
+  }
+
+  void _syncPageToCurrentExercise(int index, {required bool animate}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_pageController.hasClients) return;
+
+      final currentPage = (_pageController.page ?? 0).round();
+      if (currentPage == index) return;
+
+      if (animate) {
+        _pageController.animateToPage(
+          index,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      } else {
+        _pageController.jumpToPage(index);
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -48,7 +95,7 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     WorkoutSessionState next,
   ) {
     if (next is WorkoutSessionCompleted) {
-      _showCompletionDialog(next.session, next.routine);
+      _goToCoinReward(next.session, next.routine);
     } else if (next is WorkoutSessionError) {
       AppToast.error(context, next.error.message);
     } else if (next is WorkoutSessionActive &&
@@ -59,87 +106,38 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
       if (newIndex != oldIndex &&
           newIndex < (next.routine?.exercises.length ?? 0) &&
           _pageController.hasClients) {
-        _pageController.animateToPage(
-          newIndex,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
+        _syncPageToCurrentExercise(newIndex, animate: true);
       }
     }
   }
 
-  void _showCompletionDialog(
-    WorkoutSessionModel session,
-    RoutineModel? routine,
-  ) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Workout Complete! 🎉'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Duration: ${_formatDuration(session.duration)}'),
-            Text('Sets completed: ${session.completedSetsCount}'),
-            Text('Total volume: ${session.totalVolume.toStringAsFixed(1)} kg'),
-            if (routine != null) ...[
-              const SizedBox(height: 12),
-              const Divider(),
-              const SizedBox(height: 8),
-              ...routine.exercises.map((exercise) {
-                final sets = session.setsForExercise(exercise.id);
-                final done = sets.length >= exercise.sets;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Row(
-                    children: [
-                      Icon(
-                        done
-                            ? Icons.check_circle
-                            : Icons.radio_button_unchecked,
-                        color: done ? AppColors.success : Colors.grey,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          exercise.exercise?.name ?? 'Exercise',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ),
-                      Text(
-                        '${sets.length}/${exercise.sets}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: done ? AppColors.success : Colors.grey,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              ref.invalidate(activeTodayProvider);
-              context.go(
-                AppRoutes.coinReward,
-                extra: <String, dynamic>{
-                  'setsCompleted': session.completedSetsCount,
-                  'sessionDurationMin': session.duration?.inMinutes ?? 0,
-                },
-              );
-            },
-            child: const Text('Done'),
-          ),
-        ],
-      ),
+  void _goToCoinReward(WorkoutSessionModel session, RoutineModel? routine) {
+    ref.invalidate(activeTodayProvider);
+
+    final exerciseStatuses =
+        routine?.exercises.map((exercise) {
+          final sets = session.setsForExercise(exercise.id);
+          return <String, dynamic>{
+            'name': exercise.exercise?.name ?? 'Exercise',
+            'completed': sets.length,
+            'target': exercise.sets,
+          };
+        }).toList() ??
+        const <Map<String, dynamic>>[];
+
+    context.go(
+      AppRoutes.coinReward,
+      extra: <String, dynamic>{
+        'setsCompleted': session.completedSetsCount,
+        'sessionDurationMin': session.duration?.inMinutes ?? 0,
+        'showWorkoutSummaryAfterCoins': true,
+        'workoutSummary': <String, dynamic>{
+          'durationText': _formatDuration(session.duration),
+          'setsCompleted': session.completedSetsCount,
+          'totalVolumeKg': session.totalVolume,
+          'exerciseStatuses': exerciseStatuses,
+        },
+      },
     );
   }
 
@@ -154,24 +152,14 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     final state = ref.read(workoutSessionProvider);
     if (state is! WorkoutSessionActive) return true;
 
-    final shouldLeave = await showDialog<bool>(
+    final shouldLeave = await showAppConfirmDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Leave Workout?'),
-        content: const Text(
+      title: 'Leave Workout?',
+      message:
           'Your progress will be saved. You can continue this workout later.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Leave'),
-          ),
-        ],
-      ),
+      confirmLabel: 'Leave',
+      cancelLabel: 'Cancel',
+      isDestructive: true,
     );
 
     return shouldLeave ?? false;
@@ -194,6 +182,69 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     }
   }
 
+  bool _autoResumeRecordingIfNeeded(WorkoutSessionActive state) {
+    if (widget.readOnly || _isAutoRoutingToRecording) return false;
+    final routine = state.routine;
+    if (routine == null || routine.exercises.isEmpty) return false;
+    if (state.isAllExercisesCompleted) return false;
+
+    int targetIndex = state.currentExerciseIndex.clamp(
+      0,
+      routine.exercises.length - 1,
+    );
+
+    bool isIncompleteAt(int index) {
+      final exercise = routine.exercises[index];
+      final completed = state.session.setsForExercise(exercise.id).length;
+      return completed < exercise.sets;
+    }
+
+    if (!isIncompleteAt(targetIndex)) {
+      final nextIncompleteFromCurrent = routine.exercises.indexWhere(
+        (exercise) =>
+            state.session.setsForExercise(exercise.id).length < exercise.sets,
+        targetIndex + 1,
+      );
+
+      targetIndex = nextIncompleteFromCurrent >= 0
+          ? nextIncompleteFromCurrent
+          : routine.exercises.indexWhere(
+              (exercise) =>
+                  state.session.setsForExercise(exercise.id).length <
+                  exercise.sets,
+            );
+
+      if (targetIndex < 0) return false;
+    }
+
+    final targetExercise = routine.exercises[targetIndex];
+    final exerciseId = targetExercise.exercise?.id ?? targetExercise.exerciseId;
+    if (exerciseId.isEmpty) return false;
+
+    final completedSets = state.session
+        .setsForExercise(targetExercise.id)
+        .length;
+    final nextSetNumber = completedSets + 1;
+    if (nextSetNumber > targetExercise.sets) return false;
+
+    _isAutoRoutingToRecording = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.go(
+        '/client/exercise/$exerciseId/unity-record',
+        extra: {
+          'workoutSessionId': state.session.id,
+          'routineExerciseId': targetExercise.id,
+          'routineExercises': routine.exercises,
+          'currentExerciseIndex': targetIndex,
+          'currentSetNumber': nextSetNumber,
+        },
+      );
+    });
+
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -202,6 +253,15 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     ref.listen(workoutSessionProvider, _handleSessionStateChange);
 
     final sessionState = ref.watch(workoutSessionProvider);
+
+    if (sessionState is WorkoutSessionActive &&
+        sessionState.currentExerciseIndex <
+            (sessionState.routine?.exercises.length ?? 0)) {
+      _syncPageToCurrentExercise(
+        sessionState.currentExerciseIndex,
+        animate: false,
+      );
+    }
 
     return PopScope(
       canPop: false,
@@ -212,12 +272,20 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
           context.go(AppRoutes.home);
         }
       },
-      child: Scaffold(
-        backgroundColor: isDark
-            ? AppColors.backgroundDark
-            : AppColors.backgroundLight,
-        appBar: _buildAppBar(context, sessionState, isDark),
-        body: _buildBody(context, sessionState, isDark),
+      child: TourOrchestrator(
+        tourKeys: {
+          'workout_session_exercise_tabs': _exerciseTabsKey,
+          'workout_session_set_input': _setInputKey,
+          'workout_session_progress': _progressKey,
+          'workout_session_finish': _finishButtonKey,
+        },
+        child: Scaffold(
+          backgroundColor: isDark
+              ? AppColors.backgroundDark
+              : AppColors.backgroundLight,
+          appBar: _buildAppBar(context, sessionState, isDark),
+          body: _buildBody(context, sessionState, isDark),
+        ),
       ),
     );
   }
@@ -260,19 +328,47 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
         ],
       ),
       centerTitle: true,
+      actions: [
+        InfoIconButton(
+          content: kWorkoutSessionHelp,
+          onTapOverride: () {
+            ref
+                .read(tourProvider.notifier)
+                .startTour('workout_session', kWorkoutSessionTourSteps);
+          },
+        ),
+      ],
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(4),
-        child: LinearProgressIndicator(
-          value: state.progress,
-          backgroundColor: isDark
-              ? AppColors.surfaceDark
-              : AppColors.surfaceLight,
-          valueColor: AlwaysStoppedAnimation<Color>(
-            isDark ? AppColors.primaryDark : AppColors.primaryLight,
+        child: KeyedSubtree(
+          key: _progressKey,
+          child: LinearProgressIndicator(
+            value: state.progress,
+            backgroundColor: isDark
+                ? AppColors.surfaceDark
+                : AppColors.surfaceLight,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              isDark ? AppColors.primaryDark : AppColors.primaryLight,
+            ),
           ),
         ),
       ),
     );
+  }
+
+  void _maybeStartTour(WorkoutSessionActive state) {
+    if (_tourTriggered || widget.readOnly) return;
+    _tourTriggered = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final repo = ref.read(guidanceRepositoryProvider);
+      if (!repo.isCompleted(GuidanceRepository.kWorkoutSession)) {
+        ref
+            .read(tourProvider.notifier)
+            .startTour('workout_session', kWorkoutSessionTourSteps);
+      }
+    });
   }
 
   Widget _buildBody(
@@ -314,14 +410,23 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
       );
     }
 
+    if (_autoResumeRecordingIfNeeded(state)) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    _maybeStartTour(state);
+
     return Column(
       children: [
         // Exercise tabs/indicators
-        ExerciseTabBar(
-          exercises: state.routine!.exercises,
-          currentIndex: state.currentExerciseIndex,
-          session: state.session,
-          onTap: _onExerciseChanged,
+        KeyedSubtree(
+          key: _exerciseTabsKey,
+          child: ExerciseTabBar(
+            exercises: state.routine!.exercises,
+            currentIndex: state.currentExerciseIndex,
+            session: state.session,
+            onTap: _onExerciseChanged,
+          ),
         ),
 
         // Exercise content
@@ -333,19 +438,34 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
             itemBuilder: (context, index) {
               final exercise = state.routine!.exercises[index];
               final completedSets = state.session.setsForExercise(exercise.id);
+              final latestSetId = completedSets.isNotEmpty
+                  ? completedSets.last.id
+                  : 'none';
 
-              return ExerciseLogCard(
+              final card = ExerciseLogCard(
+                key: ValueKey(
+                  '${exercise.id}-${completedSets.length}-$latestSetId',
+                ),
                 routineExercise: exercise,
                 completedSets: completedSets,
                 onSetCompleted: _onSetCompleted,
                 readOnly: widget.readOnly,
               );
+
+              // Attach tour key to the first exercise card
+              if (index == 0) {
+                return KeyedSubtree(key: _setInputKey, child: card);
+              }
+              return card;
             },
           ),
         ),
 
         // Bottom actions
-        _buildBottomActions(context, state, isDark),
+        KeyedSubtree(
+          key: _finishButtonKey,
+          child: _buildBottomActions(context, state, isDark),
+        ),
       ],
     );
   }
@@ -357,14 +477,34 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
   ) {
     if (widget.readOnly) {
       final canStartNextSet = widget.nextSetNavigation != null;
+      final canFinishWorkout = state.isAllExercisesCompleted;
+
+      final label = canStartNextSet
+          ? 'Start Next Set'
+          : canFinishWorkout
+          ? 'Finish Workout'
+          : 'Continue Workout';
+
+      final icon = canStartNextSet
+          ? Icons.videocam
+          : canFinishWorkout
+          ? Icons.check
+          : Icons.play_arrow;
+
+      final onPressed = canStartNextSet
+          ? _startNextSet
+          : canFinishWorkout
+          ? _completeWorkout
+          : _continueWorkout;
+
       return SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: AppButton.primary(
-            label: canStartNextSet ? 'Start Next Set' : 'Finish Workout',
-            icon: canStartNextSet ? Icons.videocam : Icons.check,
+            label: label,
+            icon: icon,
             isFullWidth: true,
-            onPressed: canStartNextSet ? _startNextSet : _completeWorkout,
+            onPressed: onPressed,
           ),
         ),
       );
@@ -409,7 +549,30 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
                       label: 'Next',
                       icon: Icons.arrow_forward,
                       iconPosition: IconPosition.trailing,
-                      onPressed: () {
+                      onPressed: () async {
+                        final routine = state.routine;
+                        if (routine != null &&
+                            state.currentExerciseIndex <
+                                routine.exercises.length) {
+                          final currentExercise =
+                              routine.exercises[state.currentExerciseIndex];
+                          final currentCompletedSets = state.session
+                              .setsForExercise(currentExercise.id)
+                              .length;
+                          final isCurrentExerciseCompleted =
+                              currentCompletedSets >= currentExercise.sets;
+
+                          final nextIndex = state.currentExerciseIndex + 1;
+                          if (isCurrentExerciseCompleted &&
+                              nextIndex < routine.exercises.length) {
+                            await _goToRecordingForExercise(
+                              state: state,
+                              exerciseIndex: nextIndex,
+                            );
+                            return;
+                          }
+                        }
+
                         ref
                             .read(workoutSessionProvider.notifier)
                             .nextExercise();
@@ -429,6 +592,43 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
   void _onSetCompleted() {
     // Refresh UI after set completion
     setState(() {});
+  }
+
+  Future<void> _goToRecordingForExercise({
+    required WorkoutSessionActive state,
+    required int exerciseIndex,
+  }) async {
+    final routine = state.routine;
+    if (routine == null) return;
+    if (exerciseIndex < 0 || exerciseIndex >= routine.exercises.length) return;
+
+    final targetExercise = routine.exercises[exerciseIndex];
+    final exerciseId = targetExercise.exercise?.id ?? targetExercise.exerciseId;
+    if (exerciseId.isEmpty) {
+      AppToast.error(context, 'Unable to start recording for this exercise.');
+      return;
+    }
+
+    final completedSets = state.session.setsForExercise(targetExercise.id);
+    final nextSetNumber = completedSets.length + 1;
+    if (nextSetNumber > targetExercise.sets) {
+      AppToast.error(
+        context,
+        'All sets are already completed for this exercise.',
+      );
+      return;
+    }
+
+    context.go(
+      '/client/exercise/$exerciseId/unity-record',
+      extra: {
+        'workoutSessionId': state.session.id,
+        'routineExerciseId': targetExercise.id,
+        'routineExercises': routine.exercises,
+        'currentExerciseIndex': exerciseIndex,
+        'currentSetNumber': nextSetNumber,
+      },
+    );
   }
 
   void _startNextSet() {
@@ -453,7 +653,20 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     );
   }
 
+  void _continueWorkout() {
+    context.go(AppRoutes.workoutSession);
+  }
+
   Future<void> _completeWorkout() async {
+    final state = ref.read(workoutSessionProvider);
+    if (state is WorkoutSessionActive && !state.isAllExercisesCompleted) {
+      AppToast.error(
+        context,
+        'Complete all exercise sets before finishing your workout.',
+      );
+      return;
+    }
+
     final notes = await _showNotesDialog();
     await ref
         .read(workoutSessionProvider.notifier)

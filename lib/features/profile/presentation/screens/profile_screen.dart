@@ -12,6 +12,7 @@ import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../auth/data/models/user_model.dart';
 import '../../../gains_coins/presentation/widgets/coin_balance_widget.dart';
+import '../../../guidance/guidance.dart';
 import '../../../home/presentation/screens/home_screen.dart'
     show isCoachProvider;
 import '../../data/models/user_profile_model.dart';
@@ -275,20 +276,22 @@ class _ProfileContent extends StatelessWidget {
                       isDark: isDark,
                       onTap: () => context.push(AppRoutes.progress),
                     ),
-                    _divider(isDark),
-                    _NavLinkTile(
-                      icon: Icons.person_search,
-                      title: 'Find Coaches',
-                      isDark: isDark,
-                      onTap: () => context.push(AppRoutes.discoverCoaches),
-                    ),
-                    _divider(isDark),
-                    _NavLinkTile(
-                      icon: Icons.people,
-                      title: 'My Coaches',
-                      isDark: isDark,
-                      onTap: () => context.push(AppRoutes.subscribedCoaches),
-                    ),
+                    if (!isCoach) ...[
+                      _divider(isDark),
+                      _NavLinkTile(
+                        icon: Icons.person_search,
+                        title: 'Find Coaches',
+                        isDark: isDark,
+                        onTap: () => context.push(AppRoutes.discoverCoaches),
+                      ),
+                      _divider(isDark),
+                      _NavLinkTile(
+                        icon: Icons.people,
+                        title: 'My Coaches',
+                        isDark: isDark,
+                        onTap: () => context.push(AppRoutes.subscribedCoaches),
+                      ),
+                    ],
                     if (isCoach) ...[
                       _divider(isDark),
                       _NavLinkTile(
@@ -305,6 +308,23 @@ class _ProfileContent extends StatelessWidget {
                         onTap: () => context.push(AppRoutes.coachRoster),
                       ),
                     ],
+                    _divider(isDark),
+                    _NavLinkTile(
+                      icon: Icons.help_outline,
+                      title: 'Help & Tours',
+                      isDark: isDark,
+                      onTap: () {
+                        final container = ProviderScope.containerOf(context);
+                        container
+                            .read(guidanceRepositoryProvider)
+                            .resetAllTours();
+                        AppToast.success(
+                          context,
+                          'All tours reset. They will replay on each screen.',
+                        );
+                        context.go(AppRoutes.home);
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -649,24 +669,45 @@ class _TrainingPreferencesCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasExperienceLevel = profile.experienceLevel != null;
+    final hasInjuryHistory =
+        profile.injuryHistory != null && profile.injuryHistory!.isNotEmpty;
+
+    if (!hasExperienceLevel && !hasInjuryHistory) {
+      return AppCard(
+        padding: const EdgeInsets.all(20),
+        child: _ProfileRow(
+          icon: Icons.info_outline,
+          label: 'Tip',
+          value: 'Tap the edit button to set your training preferences',
+          isDark: isDark,
+        ),
+      );
+    }
+
     return AppCard(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _ProfileRow(
-            icon: Icons.calendar_view_week_outlined,
-            label: 'Days per week',
-            value: '${profile.daysAvailable}',
-            isDark: isDark,
-          ),
-          const SizedBox(height: 16),
-          _ProfileRow(
-            icon: Icons.timer_outlined,
-            label: 'Session duration',
-            value: '${profile.sessionDurationMinutes} min',
-            isDark: isDark,
-          ),
+          if (hasExperienceLevel)
+            _ProfileRow(
+              icon: Icons.trending_up_outlined,
+              label: 'Experience',
+              value:
+                  profile.experienceLevel!.name[0].toUpperCase() +
+                  profile.experienceLevel!.name.substring(1),
+              isDark: isDark,
+            ),
+          if (hasExperienceLevel && hasInjuryHistory)
+            const SizedBox(height: 16),
+          if (hasInjuryHistory)
+            _ProfileRow(
+              icon: Icons.healing_outlined,
+              label: 'Injuries',
+              value: profile.injuryHistory!,
+              isDark: isDark,
+            ),
         ],
       ),
     );

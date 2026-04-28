@@ -3,9 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/errors/api_error_codes.dart';
+import '../../../../core/errors/error_messages.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_error.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../../core/access/access_guard.dart';
+import '../../../../core/access/access_guard_provider.dart';
 import '../../../subscription/subscription.dart';
 import '../../data/models/coach_model.dart';
 import '../providers/coach_profile_provider.dart';
@@ -34,9 +38,13 @@ class _CoachProfileScreenState extends ConsumerState<CoachProfileScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-      () => ref.read(coachProfileProvider(widget.coachId).notifier).load(),
-    );
+    Future.microtask(() {
+      ref.read(coachProfileProvider(widget.coachId).notifier).load();
+      // Always refresh subscribed coaches when opening the profile so the
+      // Subscribe/Unsubscribe button reflects the true server state on every
+      // visit — not just the first time (fixes stale-button-on-revisit bug).
+      ref.read(subscribedCoachesProvider.notifier).loadCoaches();
+    });
   }
 
   @override
@@ -84,7 +92,7 @@ class _CoachProfileScreenState extends ConsumerState<CoachProfileScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            error.message,
+            errorMessageFor(error),
             style: Theme.of(context).textTheme.bodyMedium,
             textAlign: TextAlign.center,
           ),
@@ -333,51 +341,78 @@ class _CoachProfileScreenState extends ConsumerState<CoachProfileScreen> {
         );
         if (confirmed != true || !mounted) return;
 
-        final success = await ref
+        final (:success, :error) = await ref
             .read(subscribedCoachesProvider.notifier)
             .unsubscribeFromCoach(widget.coachId);
         if (mounted) {
           if (success) {
             AppToast.success(context, 'Unsubscribed from coach');
-          } else {
-            AppToast.error(context, 'Failed to unsubscribe');
+          } else if (error != null) {
+            _showSubscriptionError(error);
           }
         }
       } else {
         // Proactive subscription check — show upgrade prompt instead of
         // relying on server 403 with a vague error toast (US2 / T026).
-        final guard = ref.read(subscriptionGuardProvider);
-        final canAccess = await guard.requireTier(
-          SubscriptionTiers.basic,
-          onDenied: (_) {
-            if (mounted) {
-              showUpgradeSheet(
-                context: context,
-                feature: SubscriptionFeature.coachAccess,
-              );
-            }
-          },
+        final guard = ref.read(accessGuardProvider);
+        final decision = await guard.evaluateAsync(
+          const AccessRequirement(requireTier: SubscriptionTier.premium),
         );
-        if (!canAccess) return;
+        if (decision is! AccessGranted) {
+          if (mounted) {
+            showUpgradeSheet(
+              context: context,
+              feature: SubscriptionFeature.coachAccess,
+            );
+          }
+          return;
+        }
 
         // Subscribe — server still enforces ML-2 + ML-5 as fallback
-        final success = await ref
+        final (:success, :error) = await ref
             .read(subscribedCoachesProvider.notifier)
             .subscribeToCoach(widget.coachId);
         if (mounted) {
           if (success) {
             AppToast.success(context, 'Subscribed to coach!');
-          } else {
-            AppToast.error(
-              context,
-              'Could not subscribe. The coach may not be accepting new '
-              'clients right now.',
-            );
+          } else if (error != null) {
+            _showSubscriptionError(error);
           }
         }
       }
     } finally {
       if (mounted) setState(() => _isSubscribing = false);
+    }
+  }
+
+  /// Shows a code-aware error toast for subscribe/unsubscribe failures.
+  void _showSubscriptionError(AppError error) {
+    switch (error.code) {
+      // Already subscribed — stale UI. Refresh so button flips to "Unsubscribe".
+      case ApiErrorCode.userCoachAlreadySubscribed:
+        AppToast.info(context, errorMessageFor(error));
+        ref.read(subscribedCoachesProvider.notifier).loadCoaches();
+
+      // Already unsubscribed — stale UI. Refresh so button flips to "Subscribe".
+      case ApiErrorCode.userCoachAlreadyUnsubscribed:
+        AppToast.info(context, 'Already unsubscribed from this coach.');
+        ref.read(subscribedCoachesProvider.notifier).loadCoaches();
+
+      // Coach at capacity or not accepting — warn, not error (not the user's fault)
+      case ApiErrorCode.userCoachAtCapacity:
+      case ApiErrorCode.userCoachNotAccepting:
+        AppToast.warning(context, errorMessageFor(error));
+
+      // Subscription required — show upgrade sheet
+      case ApiErrorCode.subscriptionRequired:
+      case ApiErrorCode.subscriptionTierInsufficient:
+        showUpgradeSheet(
+          context: context,
+          feature: SubscriptionFeature.coachAccess,
+        );
+
+      default:
+        AppToast.error(context, errorMessageFor(error));
     }
   }
 

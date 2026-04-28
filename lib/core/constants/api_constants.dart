@@ -14,9 +14,10 @@ class ApiConstants {
       dotenv.env['API_BASE_URL'] ?? 'http://localhost:3000/api';
 
   // Timeouts
+  // Pose form uploads contain large landmark payloads; allow generous timeouts.
   static const Duration connectTimeout = Duration(seconds: 30);
-  static const Duration receiveTimeout = Duration(seconds: 30);
-  static const Duration sendTimeout = Duration(seconds: 30);
+  static const Duration receiveTimeout = Duration(seconds: 120);
+  static const Duration sendTimeout = Duration(seconds: 120);
 
   // Auth Endpoints
   static const String login = '/auth/login';
@@ -37,14 +38,19 @@ class ApiConstants {
   // Profile Endpoints (fitness profile / onboarding)
   static const String profile = '/profile';
 
+  /// Coach → client profile: GET /profile/clients/:userId
+  static String clientProfile(String userId) => '/profile/clients/$userId';
+
   // Workout Endpoints
   static const String workouts = '/workout';
   static const String exercises = '/workout/exercises';
   static const String routines = '/workout/routines';
+  static const String workoutPrograms = '/workout/programs';
   static const String workoutSessions = '/workout/sessions';
   static const String performedSets = '/workout/sets';
   static const String performedSetsSync = '/workout/sets/sync';
   static const String todayWorkout = '/workout/today';
+  static const String todayStatus = '/today';
   static const String weeklyStats = '/workout/stats/weekly';
   static const String activeSession = '/workout/sessions/active';
 
@@ -86,17 +92,18 @@ class ApiConstants {
   static const String subscribedCoaches = '/user/coaches/subscribed';
 
   // Pose Detection Endpoints
-  static const String poseResults = '/pose/results';
+  static const String poseFramesUploadUrl = '/pose/uploads/frames-url';
+
+  /// GET /pose/forms/:formId/download-url
+  static String poseFormDownloadUrl(String formId) =>
+      '/pose/forms/$formId/download-url';
 
   // Sync Endpoints
   static const String sync = '/sync';
   static const String syncStatus = '/sync/status';
 
   // Subscription Endpoints
-  static const String subscriptionPlans = '/subscriptions/plans';
   static const String subscriptionStatus = '/subscriptions/status';
-  static const String subscriptionHistory = '/subscriptions/history';
-  static const String subscriptionVerify = '/subscriptions/verify';
 
   // Coins Endpoints
   static const String coinBalance = '/coins/balance';
@@ -115,4 +122,7 @@ class ApiConstants {
   // Leaderboard Endpoints
   static const String leaderboardClass = '/leaderboard/class';
   static const String leaderboardMyCoaches = '/leaderboard/my-coaches';
+
+  // Missions
+  static const String missions = '/missions';
 }

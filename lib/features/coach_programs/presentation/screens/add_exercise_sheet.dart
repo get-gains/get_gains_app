@@ -1,65 +1,72 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text_styles.dart';
+import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
-import '../../../coach_pose/coach_pose.dart';
 import '../../../coach_pose/presentation/providers/exercise_list_provider.dart';
-import '../../data/models/program_model.dart';
-import '../../data/models/program_request_models.dart';
-import '../providers/coach_routine_provider.dart';
+import '../../../workout/data/models/exercise_model.dart';
+import '../providers/program_builder_provider.dart';
 
-/// Shows a bottom sheet to add an exercise from the global library to a routine.
+/// Shows a bottom sheet to add an exercise to a program routine.
 ///
-/// Returns `true` if an exercise was successfully added, `false`/`null` otherwise.
+/// Flow:
+///   1. Browse / search the exercise library.
+///   2. Select an exercise → fill in prescription (sets, reps, rest).
+///   3. Save → calls `addExercise` on the program builder provider.
+///
+/// Also offers a "Create New Exercise" button that pushes the
+/// [CreateExerciseScreen]. On return, the library is refreshed.
+///
+/// Returns `true` if an exercise was added, `null`/`false` otherwise.
 Future<bool?> showAddExerciseSheet({
   required BuildContext context,
-  required String routineId,
+  required String clientId,
+  required String programId,
+  required String aprId,
   required int nextOrder,
 }) async {
   return showAppBottomSheet<bool>(
     context: context,
-    isScrollControlled: true,
-    builder: (context) =>
-        _AddExerciseSheetContent(routineId: routineId, nextOrder: nextOrder),
+    builder: (ctx) => _AddExerciseSheet(
+      clientId: clientId,
+      programId: programId,
+      aprId: aprId,
+      nextOrder: nextOrder,
+    ),
   );
 }
 
-class _AddExerciseSheetContent extends ConsumerStatefulWidget {
-  const _AddExerciseSheetContent({
-    required this.routineId,
+class _AddExerciseSheet extends ConsumerStatefulWidget {
+  const _AddExerciseSheet({
+    required this.clientId,
+    required this.programId,
+    required this.aprId,
     required this.nextOrder,
   });
 
-  final String routineId;
+  final String clientId;
+  final String programId;
+  final String aprId;
   final int nextOrder;
 
   @override
-  ConsumerState<_AddExerciseSheetContent> createState() =>
-      _AddExerciseSheetContentState();
+  ConsumerState<_AddExerciseSheet> createState() => _AddExerciseSheetState();
 }
 
-class _AddExerciseSheetContentState
-    extends ConsumerState<_AddExerciseSheetContent> {
+class _AddExerciseSheetState extends ConsumerState<_AddExerciseSheet> {
+  // Step: library → prescription
+  ExerciseModel? _selectedExercise;
+
+  // Prescription form
   final _setsController = TextEditingController(text: '3');
   final _repsMinController = TextEditingController(text: '8');
   final _repsMaxController = TextEditingController(text: '12');
-  final _restController = TextEditingController(text: '90');
-  final _notesController = TextEditingController();
-  String? _selectedExerciseId;
-  bool _isLoading = false;
+  final _restController = TextEditingController(text: '60');
 
-  @override
-  void initState() {
-    super.initState();
-    // Ensure exercise list is loaded
-    Future.microtask(() {
-      final exerciseState = ref.read(exerciseListProvider);
-      if (exerciseState.exercises.isEmpty && !exerciseState.isLoading) {
-        ref.read(exerciseListProvider.notifier).loadExercises();
-      }
-    });
-  }
+  bool _isSaving = false;
 
   @override
   void dispose() {
@@ -67,246 +74,342 @@ class _AddExerciseSheetContentState
     _repsMinController.dispose();
     _repsMaxController.dispose();
     _restController.dispose();
-    _notesController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final theme = Theme.of(context);
+
+    return AppBottomSheetContent(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AppBottomSheetHeader(
+            title: _selectedExercise == null
+                ? 'Select Exercise'
+                : 'Set Prescription',
+            onClose: () => Navigator.of(context).pop(),
+          ),
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.55,
+            child: _selectedExercise == null
+                ? _buildExerciseLibrary(isDark)
+                : _buildPrescriptionForm(isDark),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Exercise Library ─────────────────────────────────
+
+  Widget _buildExerciseLibrary(bool isDark) {
     final exerciseState = ref.watch(exerciseListProvider);
 
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Column(
+      children: [
+        // Search bar
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: AppTextField(
+                  hint: 'Search exercises...',
+                  prefixIcon: Icons.search,
+                  size: AppTextFieldSize.sm,
+                  onChanged: (value) =>
+                      ref.read(exerciseListProvider.notifier).search(value),
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton.icon(
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('New'),
+                onPressed: _createNewExercise,
+              ),
+            ],
+          ),
+        ),
+        // Muscle group filter
+        SizedBox(
+          height: 36,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: [
+              _FilterChipItem(
+                label: 'All',
+                isSelected: exerciseState.selectedMuscleGroup == null,
+                isDark: isDark,
+                onTap: () => ref
+                    .read(exerciseListProvider.notifier)
+                    .filterByMuscleGroup(null),
+              ),
+              ...MuscleGroup.values.map(
+                (mg) => _FilterChipItem(
+                  label: mg.displayName,
+                  isSelected: exerciseState.selectedMuscleGroup == mg,
+                  isDark: isDark,
+                  onTap: () => ref
+                      .read(exerciseListProvider.notifier)
+                      .filterByMuscleGroup(mg),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Exercise list
+        Expanded(
+          child: exerciseState.isLoading && exerciseState.exercises.isEmpty
+              ? const Center(child: CircularProgressIndicator())
+              : exerciseState.exercises.isEmpty
+              ? Center(
+                  child: Text(
+                    exerciseState.errorMessage ?? 'No exercises found.',
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: exerciseState.exercises.length,
+                  itemBuilder: (context, index) {
+                    final exercise = exerciseState.exercises[index];
+                    return _ExerciseLibraryRow(
+                      exercise: exercise,
+                      isDark: isDark,
+                      onSelect: () =>
+                          setState(() => _selectedExercise = exercise),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _createNewExercise() async {
+    // Close the bottom sheet, push the create screen.
+    Navigator.of(context).pop();
+    // ignore: use_build_context_synchronously
+    GoRouter.of(context).push(AppRoutes.createExercise);
+    // When the user pops back, they can re-open "Add Exercise" with the
+    // new exercise in the library (auto-refreshed by ExerciseListNotifier).
+  }
+
+  // ── Prescription Form ────────────────────────────────
+
+  Widget _buildPrescriptionForm(bool isDark) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Selected exercise preview
+        AppCard.elevated(
+          child: Row(
+            children: [
+              Icon(
+                Icons.fitness_center,
+                color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _selectedExercise!.name,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    Text(
+                      _selectedExercise!.primaryMuscleGroup.displayName,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: isDark
+                            ? AppColors.mutedForegroundDark
+                            : AppColors.mutedForegroundLight,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 20),
+                onPressed: () => setState(() => _selectedExercise = null),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        Text(
+          'Prescription',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            fontFamily: AppTextStyles.fontFamilySans,
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        Row(
           children: [
-            Text('Add Exercise', style: theme.textTheme.headlineSmall),
-            const SizedBox(height: 4),
-            Text(
-              'Select an exercise from the library and set the prescription.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: isDark
-                    ? AppColors.mutedForegroundDark
-                    : AppColors.mutedForegroundLight,
+            Expanded(
+              child: AppTextField(
+                controller: _setsController,
+                label: 'Sets',
+                keyboardType: TextInputType.number,
               ),
             ),
-            const SizedBox(height: 20),
-
-            // Exercise selector
-            Text('Exercise', style: theme.textTheme.titleSmall),
-            const SizedBox(height: 8),
-            _buildExerciseDropdown(exerciseState, isDark, theme),
-            const SizedBox(height: 16),
-
-            // Prescription row 1: Sets
-            Row(
-              children: [
-                Expanded(
-                  child: AppTextField(
-                    controller: _setsController,
-                    label: 'Sets',
-                    keyboardType: TextInputType.number,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: AppTextField(
-                    controller: _repsMinController,
-                    label: 'Min Reps',
-                    keyboardType: TextInputType.number,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: AppTextField(
-                    controller: _repsMaxController,
-                    label: 'Max Reps',
-                    keyboardType: TextInputType.number,
-                  ),
-                ),
-              ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: AppTextField(
+                controller: _repsMinController,
+                label: 'Reps Min',
+                keyboardType: TextInputType.number,
+              ),
             ),
-            const SizedBox(height: 12),
-
-            // Rest seconds
-            AppTextField(
-              controller: _restController,
-              label: 'Rest (seconds)',
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 12),
-
-            // Notes
-            AppTextField(
-              controller: _notesController,
-              label: 'Notes (optional)',
-              hint: 'e.g. Squeeze at top, slow eccentric',
-              maxLines: 2,
-              minLines: 1,
-            ),
-            const SizedBox(height: 24),
-
-            Row(
-              children: [
-                Expanded(
-                  child: AppButton.outline(
-                    label: 'Cancel',
-                    onPressed: () => Navigator.of(context).pop(false),
-                    isFullWidth: true,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: AppButton.primary(
-                    label: 'Add',
-                    onPressed: _isLoading ? null : _submit,
-                    isLoading: _isLoading,
-                    isFullWidth: true,
-                  ),
-                ),
-              ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: AppTextField(
+                controller: _repsMaxController,
+                label: 'Reps Max',
+                keyboardType: TextInputType.number,
+              ),
             ),
           ],
         ),
-      ),
+        const SizedBox(height: 12),
+        AppTextField(
+          controller: _restController,
+          label: 'Rest (seconds)',
+          keyboardType: TextInputType.number,
+        ),
+        const SizedBox(height: 24),
+        AppButton(
+          label: 'Add Exercise',
+          icon: Icons.add,
+          isFullWidth: true,
+          isLoading: _isSaving,
+          onPressed: _isSaving ? null : _saveExercise,
+        ),
+      ],
     );
   }
 
-  Widget _buildExerciseDropdown(
-    ExerciseListState state,
-    bool isDark,
-    ThemeData theme,
-  ) {
-    if (state.isLoading && state.exercises.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
+  Future<void> _saveExercise() async {
+    if (_selectedExercise == null) return;
 
-    if (state.exercises.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.surface1Dark : AppColors.mutedLight,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          'No exercises available. Create exercises first.',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: isDark
-                ? AppColors.mutedForegroundDark
-                : AppColors.mutedForegroundLight,
-          ),
-          textAlign: TextAlign.center,
-        ),
-      );
-    }
+    final sets = int.tryParse(_setsController.text.trim()) ?? 3;
+    final repsMin = int.tryParse(_repsMinController.text.trim()) ?? 8;
+    final repsMax = int.tryParse(_repsMaxController.text.trim()) ?? 12;
+    final rest = int.tryParse(_restController.text.trim()) ?? 60;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.inputDark : AppColors.inputLight,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isDark ? AppColors.borderDark : AppColors.borderLight,
+    setState(() => _isSaving = true);
+
+    final success = await ref
+        .read(programBuilderProvider(widget.clientId).notifier)
+        .addExercise(
+          widget.aprId,
+          exerciseId: _selectedExercise!.id,
+          sets: sets,
+          repsMin: repsMin,
+          repsMax: repsMax,
+          restSeconds: rest,
+          orderInRoutine: widget.nextOrder,
+        );
+
+    if (mounted) {
+      setState(() => _isSaving = false);
+      if (success) {
+        Navigator.of(context).pop(true);
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Failed to add exercise')));
+      }
+    }
+  }
+}
+
+// ── Internal Widgets ───────────────────────────────────
+
+class _ExerciseLibraryRow extends StatelessWidget {
+  const _ExerciseLibraryRow({
+    required this.exercise,
+    required this.isDark,
+    required this.onSelect,
+  });
+
+  final ExerciseModel exercise;
+  final bool isDark;
+  final VoidCallback onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return ListTile(
+      onTap: onSelect,
+      leading: CircleAvatar(
+        radius: 18,
+        backgroundColor: isDark
+            ? AppColors.surface2Dark
+            : AppColors.surface2Light,
+        child: Icon(
+          Icons.fitness_center,
+          size: 18,
+          color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
         ),
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _selectedExerciseId,
-          isExpanded: true,
-          hint: Text(
-            'Choose an exercise...',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: isDark
-                  ? AppColors.mutedForegroundDark
-                  : AppColors.mutedForegroundLight,
-            ),
-          ),
-          dropdownColor: isDark ? AppColors.surface2Dark : AppColors.cardLight,
-          items: state.exercises.map((e) {
-            return DropdownMenuItem(
-              value: e.id,
-              child: Text(
-                '${e.name} (${e.primaryMuscleGroup.displayName})',
-                style: theme.textTheme.bodyMedium,
-              ),
-            );
-          }).toList(),
-          onChanged: (value) {
-            setState(() => _selectedExerciseId = value);
-          },
+      title: Text(exercise.name, style: theme.textTheme.bodyMedium),
+      subtitle: Text(
+        exercise.primaryMuscleGroup.displayName,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: isDark
+              ? AppColors.mutedForegroundDark
+              : AppColors.mutedForegroundLight,
         ),
       ),
+      trailing: Icon(
+        Icons.chevron_right,
+        color: isDark
+            ? AppColors.mutedForegroundDark
+            : AppColors.mutedForegroundLight,
+      ),
+      dense: true,
     );
   }
+}
 
-  Future<void> _submit() async {
-    if (_selectedExerciseId == null) {
-      AppToast.warning(context, 'Please select an exercise');
-      return;
-    }
+class _FilterChipItem extends StatelessWidget {
+  const _FilterChipItem({
+    required this.label,
+    required this.isSelected,
+    required this.isDark,
+    required this.onTap,
+  });
 
-    final sets = int.tryParse(_setsController.text.trim());
-    final repsMin = int.tryParse(_repsMinController.text.trim());
-    final repsMax = int.tryParse(_repsMaxController.text.trim());
-    final rest = int.tryParse(_restController.text.trim());
+  final String label;
+  final bool isSelected;
+  final bool isDark;
+  final VoidCallback onTap;
 
-    if (sets == null || sets < 1) {
-      AppToast.warning(context, 'Enter valid sets');
-      return;
-    }
-    if (repsMin == null || repsMin < 1) {
-      AppToast.warning(context, 'Enter valid min reps');
-      return;
-    }
-    if (repsMax == null || repsMax < repsMin) {
-      AppToast.warning(context, 'Max reps must be ≥ min reps');
-      return;
-    }
-    if (rest == null || rest < 0) {
-      AppToast.warning(context, 'Enter valid rest seconds');
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      final success = await ref
-          .read(routineDetailProvider(widget.routineId).notifier)
-          .addExercise(
-            AddRoutineExerciseRequest(
-              exerciseId: _selectedExerciseId!,
-              sets: sets,
-              repsMin: repsMin,
-              repsMax: repsMax,
-              restSeconds: rest,
-              orderInRoutine: widget.nextOrder,
-              notes: _notesController.text.trim().isEmpty
-                  ? null
-                  : _notesController.text.trim(),
-            ),
-          );
-
-      if (mounted) {
-        if (success) {
-          AppToast.success(context, 'Exercise added to routine');
-          Navigator.of(context).pop(true);
-        } else {
-          AppToast.error(context, 'Failed to add exercise');
-        }
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: ChoiceChip(
+        label: Text(label, style: const TextStyle(fontSize: 12)),
+        selected: isSelected,
+        selectedColor: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+        labelStyle: TextStyle(
+          color: isSelected
+              ? Colors.white
+              : (isDark ? AppColors.foregroundDark : AppColors.foregroundLight),
+          fontFamily: AppTextStyles.fontFamilySans,
+        ),
+        onSelected: (_) => onTap(),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+    );
   }
 }

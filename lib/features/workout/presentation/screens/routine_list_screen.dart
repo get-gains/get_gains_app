@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../../core/access/access_gated.dart';
+import '../../../../core/access/access_guard.dart';
 import '../../../subscription/subscription.dart';
 import '../../data/models/models.dart';
 import '../../data/workout_repository.dart';
@@ -61,8 +63,10 @@ class _RoutineListScreenState extends ConsumerState<RoutineListScreen> {
           ? AppColors.backgroundDark
           : AppColors.backgroundLight,
       appBar: AppBar(title: const Text('Routines'), centerTitle: true),
-      body: SubscriptionGatedWidget(
-        requiredTier: SubscriptionTiers.basic,
+      body: AccessGated(
+        requires: const AccessRequirement(
+          requireTier: SubscriptionTier.premium,
+        ),
         feature: SubscriptionFeature.coachRoutines,
         compact: true,
         child: FutureBuilder<List<RoutineModel>>(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/errors/error_messages.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
@@ -150,14 +151,14 @@ class _SubscribedCoachesScreenState
     );
 
     if (confirmed == true && mounted) {
-      final success = await ref
+      final (:success, :error) = await ref
           .read(subscribedCoachesProvider.notifier)
           .unsubscribeFromCoach(coach.id);
       if (mounted) {
         if (success) {
           AppToast.success(context, 'Unsubscribed from ${coach.name}');
-        } else {
-          AppToast.error(context, 'Failed to unsubscribe');
+        } else if (error != null) {
+          AppToast.error(context, errorMessageFor(error));
         }
       }
     }

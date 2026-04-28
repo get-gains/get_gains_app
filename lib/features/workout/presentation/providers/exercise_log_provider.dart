@@ -95,23 +95,27 @@ class ExerciseLogNotifier extends _$ExerciseLogNotifier {
           .firstOrNull;
 
       if (existingSet != null) {
-        editableSets.add(EditableSetModel(
-          id: existingSet.id,
-          setNumber: i,
-          reps: existingSet.repsCompleted,
-          weight: existingSet.weightKg ?? 0.0,
-          rpe: existingSet.rpe,
-          notes: existingSet.notes,
-          isCompleted: existingSet.isCompleted,
-        ));
+        editableSets.add(
+          EditableSetModel(
+            id: existingSet.id,
+            setNumber: i,
+            reps: existingSet.repsCompleted,
+            weight: existingSet.weightKg ?? 0.0,
+            rpe: existingSet.rpe,
+            notes: existingSet.notes,
+            isCompleted: existingSet.isCompleted,
+          ),
+        );
       } else {
         // Create new empty set with suggested values
-        editableSets.add(EditableSetModel(
-          setNumber: i,
-          reps: routineExercise.repsMin,
-          weight: 0.0,
-          isCompleted: false,
-        ));
+        editableSets.add(
+          EditableSetModel(
+            setNumber: i,
+            reps: routineExercise.repsMin,
+            weight: 0.0,
+            isCompleted: false,
+          ),
+        );
       }
     }
 
@@ -126,12 +130,7 @@ class ExerciseLogNotifier extends _$ExerciseLogNotifier {
   }
 
   /// Update the current set values
-  void updateCurrentSet({
-    int? reps,
-    double? weight,
-    int? rpe,
-    String? notes,
-  }) {
+  void updateCurrentSet({int? reps, double? weight, int? rpe, String? notes}) {
     if (state == null) return;
 
     final currentIndex = state!.currentSetIndex;
@@ -180,15 +179,21 @@ class ExerciseLogNotifier extends _$ExerciseLogNotifier {
   }
 
   /// Complete the current set and save to repository
-  Future<void> completeCurrentSet() async {
-    if (state == null) return;
+  Future<bool> completeCurrentSet({
+    String? recordedFramesKey,
+    double? overallScore,
+  }) async {
+    if (state == null) return false;
 
     final currentIndex = state!.currentSetIndex;
-    if (currentIndex >= state!.sets.length) return;
-
-    state = state!.copyWith(isSubmitting: true);
+    if (currentIndex >= state!.sets.length) return false;
 
     final currentSet = state!.sets[currentIndex];
+
+    // Require at least 1 rep to log a set.
+    if (currentSet.reps <= 0) return false;
+
+    state = state!.copyWith(isSubmitting: true);
 
     // Log the set via workout session provider
     final sessionNotifier = ref.read(workoutSessionProvider.notifier);
@@ -198,6 +203,17 @@ class ExerciseLogNotifier extends _$ExerciseLogNotifier {
       weight: currentSet.weight > 0 ? currentSet.weight : null,
       rpe: currentSet.rpe,
       notes: currentSet.notes,
+      // Always log against this card's exercise, not whatever
+      // exercise index is currently selected in session state.
+      routineExerciseIdOverride: state!.routineExercise.id,
+      recordedFramesKey: recordedFramesKey,
+      overallScore: overallScore,
+      // Snapshot the exercise prescription at log time so historical
+      // sessions survive coach edits to the program.
+      exerciseNameSnapshot: state!.routineExercise.exercise?.name,
+      targetRepsMin: state!.routineExercise.repsMin,
+      targetRepsMax: state!.routineExercise.repsMax,
+      targetRestSeconds: state!.routineExercise.restSeconds,
     );
 
     // Mark as completed
@@ -213,14 +229,20 @@ class ExerciseLogNotifier extends _$ExerciseLogNotifier {
     );
 
     // Move to next incomplete set
-    final nextIncompleteIndex = updatedSets
-        .indexWhere((s) => !s.isCompleted, currentIndex + 1);
+    final nextIncompleteIndex = updatedSets.indexWhere(
+      (s) => !s.isCompleted,
+      currentIndex + 1,
+    );
 
     state = state!.copyWith(
       sets: updatedSets,
-      currentSetIndex: nextIncompleteIndex >= 0 ? nextIncompleteIndex : currentIndex,
+      currentSetIndex: nextIncompleteIndex >= 0
+          ? nextIncompleteIndex
+          : currentIndex,
       isSubmitting: false,
     );
+
+    return true;
   }
 
   /// Select a specific set to edit

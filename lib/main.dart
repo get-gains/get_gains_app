@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'core/core.dart';
 import 'features/auth/services/user_preferences_service.dart';
+import 'features/subscription/services/revenuecat_service.dart';
 import 'providers/providers.dart';
 import 'widgets/widgets.dart';
 
@@ -34,56 +33,17 @@ Future<void> main() async {
     initialDelay: const Duration(milliseconds: 300),
   );
 
-  // Initialize Sentry for error tracking
-  final sentryDsn = dotenv.env['SENTRY_DSN'];
-  if (sentryDsn != null && sentryDsn.isNotEmpty) {
-    await SentryFlutter.init(
-      (options) {
-        options.dsn = sentryDsn;
-        // Set environment based on build mode
-        options.environment = const bool.fromEnvironment('dart.vm.product')
-            ? 'production'
-            : 'development';
-        // Enable debug logging for Sentry itself in debug mode
-        options.debug = false; // Set to true to debug Sentry issues
-        // Capture all errors including debug breadcrumbs
-        options.tracesSampleRate = 1.0;
-        // Attach screenshots on errors (optional, can be heavy)
-        options.attachScreenshot = false;
-        // Include user interaction breadcrumbs
-        options.enableUserInteractionBreadcrumbs = true;
-        // Auto session tracking
-        options.autoSessionTrackingInterval = const Duration(
-          milliseconds: 30000,
-        );
-      },
-      appRunner: () {
-        // Enable Sentry logging in AppLogger after initialization
-        AppLogger.enableSentry();
-        AppLogger.info('Starting Get Gains App', tag: 'Main');
+  // Initialize RevenueCat SDK (before runApp, no user login yet)
+  await RevenueCatService().init();
 
-        runApp(
-          ProviderScope(
-            overrides: [userPrefsBoxProvider.overrideWithValue(userPrefsBox)],
-            child: const GetGainsApp(),
-          ),
-        );
-      },
-    );
-  } else {
-    AppLogger.warning(
-      'SENTRY_DSN not configured - remote error tracking disabled',
-      tag: 'Main',
-    );
-    AppLogger.info('Starting Get Gains App', tag: 'Main');
+  AppLogger.info('Starting Get Gains App', tag: 'Main');
 
-    runApp(
-      ProviderScope(
-        overrides: [userPrefsBoxProvider.overrideWithValue(userPrefsBox)],
-        child: const GetGainsApp(),
-      ),
-    );
-  }
+  runApp(
+    ProviderScope(
+      overrides: [userPrefsBoxProvider.overrideWithValue(userPrefsBox)],
+      child: const GetGainsApp(),
+    ),
+  );
 }
 
 /// Root Application Widget

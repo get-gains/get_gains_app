@@ -86,31 +86,107 @@ class FormComparisonService {
       );
     }
 
-    // Compute DTW score per angle
+    // Compute DTW score per angle with OOV-aware alignment
     final angleScores = <String, double>{};
+    final angleCoverage = <String, double>{};
     final corrections = <CorrectionModel>[];
 
+    /// Minimum coverage ratio for an angle to be included in scoring.
+    const minCoverageRatio = 0.30;
+
     for (final angleName in commonAngles) {
-      final refSeries = _extractAngleSeries(referenceFrames, angleName);
-      final clientSeries = _extractAngleSeries(clientFrames, angleName);
+      // Build aligned series: only frames where BOTH sides have the angle
+      final aligned = _alignedSeries(referenceFrames, clientFrames, angleName);
+      angleCoverage[angleName] = aligned.coverage;
 
-      if (refSeries.length < 2 || clientSeries.length < 2) continue;
+      // Drop angles with insufficient coverage
+      if (aligned.coverage < minCoverageRatio) {
+        AppLogger.info(
+          'Dropping angle $angleName: coverage ${(aligned.coverage * 100).toStringAsFixed(0)}% < ${(minCoverageRatio * 100).toStringAsFixed(0)}%',
+          tag: 'FormComparison',
+        );
+        continue;
+      }
 
-      final dtwDistance = _dtw(refSeries, clientSeries);
+      if (aligned.ref.length < 2 || aligned.client.length < 2) continue;
+
+      // Drop angles where the reference barely moves — these carry no
+      // coaching signal and inflate scores when both sides are near-static.
+      // In production, detectRelevantAngles handles this upstream; this
+      // gate is defense-in-depth for direct compare() calls and tests.
+      final refROM =
+          aligned.ref.reduce(math.max) - aligned.ref.reduce(math.min);
+      const minRefRom = 5.0; // degrees
+      if (refROM < minRefRom) {
+        AppLogger.info(
+          'Dropping angle $angleName: refROM ${refROM.toStringAsFixed(1)}° < $minRefRom°',
+          tag: 'FormComparison',
+        );
+        continue;
+      }
+
+      final smoothedRef = _smooth(aligned.ref);
+      final smoothedClient = _smooth(aligned.client);
+
+      final (dtwDistance, pathLength) = _dtw(smoothedRef, smoothedClient);
 
       // Mean angular deviation per aligned frame pair
-      final alignedLen = math.max(refSeries.length, clientSeries.length);
-      final meanDev = alignedLen > 0 ? dtwDistance / alignedLen : 180.0;
+      final meanDev = pathLength > 0 ? dtwDistance / pathLength : 180.0;
 
-      // Score: 0° mean deviation → 1.0, ≥45° → 0.0
-      final score = (1.0 - meanDev / 45.0).clamp(0.0, 1.0);
+      // --- Fix C: Tighter score mapping (4°/30° moderate) ---
+      final adjustedDev = math.max(0.0, meanDev - 4.0);
+      final baseScore = (1.0 - adjustedDev / 30.0).clamp(0.0, 1.0);
+
+      // --- Fix B: Bidirectional ROM penalty ---
+      // Penalises when the client's range-of-motion deviates significantly
+      // from the reference in either direction (too much or too little movement).
+      // refROM already computed above for the minRefRom gate.
+      final clientROM =
+          aligned.client.reduce(math.max) - aligned.client.reduce(math.min);
+      final romRatio = refROM > 1.0 ? clientROM / refROM : 1.0;
+      final romDeviation = (romRatio - 1.0).abs();
+      // Tolerance: ±60% ROM difference is acceptable (covers natural variation).
+      // Beyond that, ramp penalty over next 1.4 units to a max of 50% reduction.
+      const romTolerance = 0.6;
+      const romRampRange = 1.4;
+      const maxRomPenalty = 0.5;
+      final romPenalty = romDeviation <= romTolerance
+          ? 0.0
+          : ((romDeviation - romTolerance) / romRampRange).clamp(0.0, 1.0) *
+                maxRomPenalty;
+      final romFactor = 1.0 - romPenalty;
+
+      // --- Fix D: Shift-invariant Pearson correlation factor ---
+      // Catches pattern mismatch that DTW masks by warping. Uses peak
+      // cross-correlation: finds the temporal lag that maximizes Pearson,
+      // so correct form with a phase offset still scores high while wrong
+      // exercises can't be salvaged by any shift.
+      final pearsonR = _peakCrossCorrelation(smoothedRef, smoothedClient);
+      final correlationFactor = pearsonR.clamp(0.0, 1.0);
+      // strong-pattern (r≈1) → ×1.0, no-pattern (r≈0) → ×0.5, anti-pattern → ×0.5
+      final pearsonMultiplier = 0.5 + 0.5 * correlationFactor;
+
+      final score = (baseScore * romFactor * pearsonMultiplier).clamp(0.0, 1.0);
       angleScores[angleName] = score;
+
+      // Ship 1 diagnostics: per-angle breakdown for tuning
+      AppLogger.info(
+        '[DIAG] angle=$angleName | meanDev=${meanDev.toStringAsFixed(2)}° '
+        '| adjustedDev=${adjustedDev.toStringAsFixed(2)}° | baseScore=${(baseScore * 100).toStringAsFixed(1)}% '
+        '| romRatio=${romRatio.toStringAsFixed(2)} | romFactor=${romFactor.toStringAsFixed(2)} '
+        '| pearsonR=${pearsonR.toStringAsFixed(3)} | pearsonMul=${pearsonMultiplier.toStringAsFixed(2)} '
+        '| finalScore=${(score * 100).toStringAsFixed(1)}% '
+        '| coverage=${(aligned.coverage * 100).toStringAsFixed(0)}% '
+        '| refROM=${refROM.toStringAsFixed(1)}° | clientROM=${clientROM.toStringAsFixed(1)}° '
+        '| pathLen=$pathLength | dtwDist=${dtwDistance.toStringAsFixed(1)}',
+        tag: 'FormComparison',
+      );
 
       // Generate correction if score is below threshold
       if (score < 0.7) {
         final avgDev = meanDev;
-        final maxDev = _maxDeviation(refSeries, clientSeries);
-        final direction = _inferDirection(refSeries, clientSeries);
+        final maxDev = _maxDeviation(smoothedRef, smoothedClient);
+        final direction = _inferDirection(aligned.ref, aligned.client);
         final segment = _angleToSegment(angleName).name;
 
         corrections.add(
@@ -129,10 +205,43 @@ class FormComparisonService {
     // Aggregate per-angle scores into body-segment scores
     final segmentScores = _aggregateSegmentScores(angleScores);
 
-    // Overall score is mean of all angle scores
-    final overallScore = angleScores.isEmpty
-        ? 0.0
-        : angleScores.values.reduce((a, b) => a + b) / angleScores.length;
+    // --- Fix F: Coverage-weighted overall score ---
+    // Angles with higher coverage (more visible frames) contribute more.
+    final double overallScore;
+    if (angleScores.isEmpty) {
+      overallScore = 0.0;
+      // All angles dropped — tell the user why
+      corrections.add(
+        CorrectionModel(
+          angleName: 'visibility',
+          segment: BodySegment.FULL_BODY.name,
+          avgDeviation: 0,
+          maxDeviation: 0,
+          direction: 'insufficient_visibility',
+          message:
+              'Could not see enough of your body to assess form. '
+              'Make sure your full body is in frame.',
+        ),
+      );
+    } else {
+      double weightedSum = 0;
+      double weightSum = 0;
+      for (final entry in angleScores.entries) {
+        final w = angleCoverage[entry.key] ?? 1.0;
+        weightedSum += entry.value * w;
+        weightSum += w;
+      }
+      overallScore = weightSum > 0 ? weightedSum / weightSum : 0.0;
+    }
+
+    // Ship 1 diagnostics: summary of all angle scores
+    AppLogger.info(
+      '[DIAG] === COMPARISON SUMMARY === '
+      '| angles scored: ${angleScores.length} '
+      '| overall: ${(overallScore * 100).toStringAsFixed(1)}% '
+      '| angle scores: ${angleScores.entries.map((e) => '${e.key}=${(e.value * 100).toStringAsFixed(1)}%').join(', ')}',
+      tag: 'FormComparison',
+    );
 
     final result = ComparisonResultModel(
       exerciseFormId: exerciseFormId,
@@ -146,6 +255,7 @@ class FormComparisonService {
       frameRate: _computeFrameRate(clientFrames),
       totalFrames: clientFrames.length,
       avgLandmarkConfidence: avgLandmarkConfidence,
+      angleCoverage: angleCoverage,
     );
 
     AppLogger.info(
@@ -157,30 +267,61 @@ class FormComparisonService {
     return result;
   }
 
-  /// Classic DTW algorithm — returns accumulated distance
-  double _dtw(List<double> s, List<double> t) {
+  /// Classic DTW algorithm with Sakoe-Chiba band — returns (accumulated distance, path length).
+  ///
+  /// [bandRatio] constrains warping to ±(bandRatio × max(n, m)) cells around
+  /// the diagonal, preventing unbounded tempo warping.
+  (double, int) _dtw(List<double> s, List<double> t, {double bandRatio = 0.2}) {
     final n = s.length;
     final m = t.length;
+    final band = math.max(1, (math.max(n, m) * bandRatio).ceil());
     final dtw = List.generate(
       n + 1,
       (_) => List.filled(m + 1, double.infinity),
     );
+    final pathLen = List.generate(n + 1, (_) => List.filled(m + 1, 0));
     dtw[0][0] = 0;
 
     for (int i = 1; i <= n; i++) {
-      for (int j = 1; j <= m; j++) {
+      final jStart = math.max(1, i - band);
+      final jEnd = math.min(m, i + band);
+      for (int j = jStart; j <= jEnd; j++) {
         final cost = (s[i - 1] - t[j - 1]).abs();
-        dtw[i][j] =
-            cost +
-            [
-              dtw[i - 1][j], // insertion
-              dtw[i][j - 1], // deletion
-              dtw[i - 1][j - 1], // match
-            ].reduce(math.min);
+        final prevs = [
+          dtw[i - 1][j], // insertion
+          dtw[i][j - 1], // deletion
+          dtw[i - 1][j - 1], // match
+        ];
+        final minPrev = prevs.reduce(math.min);
+        dtw[i][j] = cost + minPrev;
+
+        // Track path length through the same predecessor
+        if (minPrev == dtw[i - 1][j - 1]) {
+          pathLen[i][j] = pathLen[i - 1][j - 1] + 1;
+        } else if (minPrev == dtw[i - 1][j]) {
+          pathLen[i][j] = pathLen[i - 1][j] + 1;
+        } else {
+          pathLen[i][j] = pathLen[i][j - 1] + 1;
+        }
       }
     }
 
-    return dtw[n][m];
+    return (dtw[n][m], pathLen[n][m]);
+  }
+
+  /// Sliding-window average smoother to reduce frame-to-frame jitter.
+  List<double> _smooth(List<double> series, {int window = 3}) {
+    if (series.length <= window) return series;
+    final half = window ~/ 2;
+    return List.generate(series.length, (i) {
+      final start = math.max(0, i - half);
+      final end = math.min(series.length, i + half + 1);
+      double sum = 0;
+      for (int k = start; k < end; k++) {
+        sum += series[k];
+      }
+      return sum / (end - start);
+    });
   }
 
   Set<String> _collectAngleNames(List<FeatureFrame> frames) {
@@ -196,6 +337,28 @@ class FormComparisonService {
         .where((f) => f.angles.containsKey(name))
         .map((f) => f.angles[name]!)
         .toList();
+  }
+
+  /// Build aligned series for [angleName]: only frames where BOTH ref and
+  /// client have the angle are kept. Returns the paired lists and the
+  /// coverage ratio (frames available / max sequence length).
+  ({List<double> ref, List<double> client, double coverage}) _alignedSeries(
+    List<FeatureFrame> refFrames,
+    List<FeatureFrame> clientFrames,
+    String angleName,
+  ) {
+    final n = math.min(refFrames.length, clientFrames.length);
+    final r = <double>[];
+    final c = <double>[];
+    for (var i = 0; i < n; i++) {
+      final a = refFrames[i].angles[angleName];
+      final b = clientFrames[i].angles[angleName];
+      if (a != null && b != null) {
+        r.add(a);
+        c.add(b);
+      }
+    }
+    return (ref: r, client: c, coverage: n > 0 ? r.length / n : 0.0);
   }
 
   double _maxDeviation(List<double> ref, List<double> client) {
@@ -314,5 +477,67 @@ class FormComparisonService {
     final durationS = _computeDurationMs(frames) / 1000.0;
     if (durationS <= 0) return 0;
     return (frames.length / durationS).round();
+  }
+
+  /// Pearson correlation coefficient between two same-length series.
+  ///
+  /// Returns a value in [-1, 1]. Special cases:
+  /// - Both series constant (zero variance) → 1.0 (identical "no movement" pattern)
+  /// - One series constant, the other varies → 0.0 (pattern mismatch)
+  double _pearsonCorrelation(List<double> a, List<double> b) {
+    final n = math.min(a.length, b.length);
+    if (n < 2) return 0.0;
+
+    double sumA = 0, sumB = 0;
+    for (int i = 0; i < n; i++) {
+      sumA += a[i];
+      sumB += b[i];
+    }
+    final meanA = sumA / n;
+    final meanB = sumB / n;
+
+    double covAB = 0, varA = 0, varB = 0;
+    for (int i = 0; i < n; i++) {
+      final da = a[i] - meanA;
+      final db = b[i] - meanB;
+      covAB += da * db;
+      varA += da * da;
+      varB += db * db;
+    }
+
+    final aIsConst = varA < 1e-10;
+    final bIsConst = varB < 1e-10;
+    if (aIsConst && bIsConst) return 1.0; // both static = perfect match
+    if (aIsConst || bIsConst) return 0.0; // one moves, other doesn't
+
+    return covAB / math.sqrt(varA * varB);
+  }
+
+  /// Shift-invariant peak cross-correlation.
+  ///
+  /// Tries all lags in [-maxShift, +maxShift] and returns the highest
+  /// Pearson r found. This makes the correlation immune to temporal
+  /// offsets — correct form that is phase-shifted still scores high,
+  /// while a genuinely different pattern can't be rescued by any shift.
+  double _peakCrossCorrelation(List<double> a, List<double> b, {int? maxLag}) {
+    final n = math.min(a.length, b.length);
+    if (n < 4) return 0.0;
+
+    final maxShift = maxLag ?? math.min(n ~/ 3, 30);
+    double bestR = -1.0;
+
+    for (int lag = -maxShift; lag <= maxShift; lag++) {
+      final aStart = math.max(0, lag);
+      final bStart = math.max(0, -lag);
+      final len = math.min(n - aStart, n - bStart);
+      if (len < 4) continue;
+
+      final aSlice = a.sublist(aStart, aStart + len);
+      final bSlice = b.sublist(bStart, bStart + len);
+      final r = _pearsonCorrelation(aSlice, bSlice);
+      if (r > bestR) bestR = r;
+    }
+
+    return bestR;
   }
 }

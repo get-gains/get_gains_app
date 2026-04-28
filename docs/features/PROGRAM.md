@@ -24,7 +24,7 @@ Coach creates Program (e.g. Push Pull Legs)
   → Coach creates Routine (e.g. Push)
     → Coach picks an Exercise (e.g. Bench Press)
       → Exercise is added to Routine with prescription (sets/reps/rest)
-        → Routine is assigned to Program on a day number
+        → Routine is assigned to Program on a specific weekday
           → Program is assigned to a specific Client
             → Client performs the workout
               → Client logs sets (reps + weight + RPE)
@@ -119,7 +119,7 @@ ProgramDetailModel({
 ```dart
 ProgramRoutineSlotModel({
   required String id,           // ProgramRoutine junction ID
-  required int dayNumber,       // day in the cycle (1-based)
+  required DayOfWeek dayOfWeek, // MONDAY, TUESDAY, etc.
   required RoutineModel routine, // full routine with exercises
 })
 ```
@@ -186,8 +186,8 @@ PaginationMeta({
 | `UpdateProgramRequest` | `PATCH /coach/programs/:id` | `name?`, `description?` |
 | `CreateRoutineRequest` | `POST /coach/routines` | `name`, `description`, `estimatedDurationMinutes`, `muscleGroupsTargeted[]` |
 | `UpdateRoutineRequest` | `PATCH /coach/routines/:id` | `name?`, `description?`, `estimatedDurationMinutes?`, `muscleGroupsTargeted[]?` |
-| `AssignRoutineRequest` | `POST /coach/programs/:id/routines` | `routineId`, `dayNumber` |
-| `UpdateProgramRoutineRequest` | `PATCH /coach/programs/:id/routines/:jid` | `dayNumber` |
+| `AssignRoutineRequest` | `POST /coach/programs/:id/routines` | `routineId`, `dayOfWeek` |
+| `UpdateProgramRoutineRequest` | `PATCH /coach/programs/:id/routines/:jid` | `dayOfWeek` |
 | `AddRoutineExerciseRequest` | `POST /coach/programs/routines/:id/exercises` | `exerciseId`, `sets`, `repsMin`, `repsMax`, `restSeconds`, `orderInRoutine`, `notes?` |
 | `UpdateRoutineExerciseRequest` | `PATCH /coach/programs/routines/:id/exercises/:jid` | `sets?`, `repsMin?`, `repsMax?`, `restSeconds?`, `orderInRoutine?`, `notes?` |
 | `AssignProgramRequest` | `POST /coach/assign-program` | `userId`, `programId`, `startDate`, `endDate?`, `notes?` |
@@ -416,7 +416,7 @@ await ref
     .read(programDetailProvider(programId).notifier)
     .assignRoutine(AssignRoutineRequest(
       routineId: routineId,
-      dayNumber: 1,
+      dayOfWeek: DayOfWeek.monday,
     ));
 
 // 5. Assign the program to a client
@@ -518,15 +518,18 @@ ClientAssignmentsScreen
 **Provider**: `programDetailProvider(programId)` (family)
 
 **Features**:
-- Sorted day-slot cards showing day number, routine name, description
+- Full Monday-Sunday schedule rendered in order
+- Assigned days show routine cards with weekday labels
+- Unassigned days show Rest Day cards with inline Assign action
 - Exercise preview per slot (first 3 exercises shown + "+N more" overflow)
-- Stats badges: total days, total unique routines
-- FAB to assign a routine to a new day-slot via `showAssignRoutineSheet`
+- Stats badges: days/week and currently assigned routine count
+- FAB to assign a routine to any open weekday via `showAssignRoutineSheet`
+- Rest Day Assign button opens the same sheet with preferred weekday preselected
 - Tap routine name → navigates to routine detail
 - Remove routine via confirm sheet
 - Edit program via AppBar action
 
-**Extension used**: `ProgramDetailModelX.totalDays`, `.cycleLengthDays` for computed stats.
+**Extension used**: `ProgramDetailModelX.totalDays`.
 
 #### CoachProgramFormScreen
 
@@ -603,7 +606,8 @@ All bottom sheets use `showAppBottomSheet` from the design system, ensuring cons
 
 **Fields**:
 - Routine dropdown (populated from `coachRoutinesListProvider`)
-- Day number text field (auto-suggests next available day number)
+- Weekday chip selector (`DayOfWeek.values`)
+- Optional preselected weekday when opened from a Rest Day card
 
 #### showAddExerciseSheet
 
@@ -714,4 +718,4 @@ The `ApiClient` automatically unwraps the `data` field. Repository methods recei
 
 ---
 
-*Last updated: February 24, 2026*
+*Last updated: April 16, 2026*

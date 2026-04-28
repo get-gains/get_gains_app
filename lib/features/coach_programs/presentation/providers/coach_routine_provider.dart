@@ -2,7 +2,6 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/utils/app_error.dart';
 import '../../../../core/utils/logger.dart';
-import '../../../workout/data/models/routine_model.dart';
 import '../../data/coach_program_repository.dart';
 import '../../data/models/program_model.dart';
 import '../../data/models/program_request_models.dart';
@@ -190,7 +189,7 @@ class RoutineDetailLoading extends RoutineDetailState {
 
 class RoutineDetailLoaded extends RoutineDetailState {
   const RoutineDetailLoaded(this.routine);
-  final RoutineModel routine;
+  final RoutineSummaryModel routine;
 }
 
 class RoutineDetailError extends RoutineDetailState {
@@ -225,74 +224,11 @@ class RoutineDetailNotifier extends _$RoutineDetailNotifier {
       },
     );
   }
-
-  /// Add an exercise from the global library to this routine, then refresh.
-  Future<bool> addExercise(AddRoutineExerciseRequest request) async {
-    final result = await _repo.addExerciseToRoutine(routineId, request);
-
-    return result.when(
-      success: (_) {
-        load();
-        return true;
-      },
-      failure: (error) {
-        AppLogger.error(
-          'Add exercise failed: ${error.message}',
-          tag: 'RoutineDetailNotifier',
-        );
-        return false;
-      },
-    );
-  }
-
-  /// Update the prescription for an exercise in this routine, then refresh.
-  Future<bool> updateExercise(
-    String routineExerciseId,
-    UpdateRoutineExerciseRequest request,
-  ) async {
-    final result = await _repo.updateRoutineExercise(
-      routineId,
-      routineExerciseId,
-      request,
-    );
-
-    return result.when(
-      success: (_) {
-        load();
-        return true;
-      },
-      failure: (error) {
-        AppLogger.error(
-          'Update exercise failed: ${error.message}',
-          tag: 'RoutineDetailNotifier',
-        );
-        return false;
-      },
-    );
-  }
-
-  /// Remove an exercise from this routine, then refresh.
-  Future<bool> removeExercise(String routineExerciseId) async {
-    final result = await _repo.removeRoutineExercise(
-      routineId,
-      routineExerciseId,
-    );
-
-    return result.when(
-      success: (_) {
-        load();
-        return true;
-      },
-      failure: (error) {
-        AppLogger.error(
-          'Remove exercise failed: ${error.message}',
-          tag: 'RoutineDetailNotifier',
-        );
-        return false;
-      },
-    );
-  }
 }
+
+// NOTE: Exercise CRUD on routine templates was removed in the
+// program-builder redesign. Exercise management now happens at the
+// program level via ProgramBuilderProvider (Phase 2).
 
 // ──────────────────────────────────────────────────────────
 // Convenience Providers

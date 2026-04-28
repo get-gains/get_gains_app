@@ -216,12 +216,14 @@ class AppEmptyState extends StatelessWidget {
 
     final bgColor = isDark ? AppColors.secondaryDark : AppColors.secondaryLight;
 
-    return Padding(
-      padding: EdgeInsets.all(_spacing),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(_spacing),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
           // Icon container
           Container(
             width: _iconContainerSize,
@@ -267,7 +269,8 @@ class AppEmptyState extends StatelessWidget {
           ],
         ],
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildActions(bool isDark) {

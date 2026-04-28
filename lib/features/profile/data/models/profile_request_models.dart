@@ -6,8 +6,7 @@ part 'profile_request_models.g.dart';
 
 /// Request body for POST /api/profile (onboarding).
 ///
-/// `daysAvailable` and `sessionDurationMinutes` are required by the server.
-/// All other fields are optional and can be filled in during onboarding or
+/// All fields are optional and can be filled in during onboarding or
 /// later via profile editing.
 ///
 /// **Avatar handling**: The optional [avatarFilePath] is NOT serialised to
@@ -17,20 +16,16 @@ part 'profile_request_models.g.dart';
 @freezed
 abstract class CreateUserProfileRequest with _$CreateUserProfileRequest {
   const factory CreateUserProfileRequest({
-    // Availability — required for onboarding
-    required int daysAvailable,
-    required int sessionDurationMinutes,
-
     // Personal Data — optional
     String? bio,
     double? heightCm,
     double? weightKg,
-    String? unitPreference,
     Sex? sex,
     DateTime? dateOfBirth,
     @Default([]) List<String> equipment,
     String? injuryHistory,
     ExperienceLevel? experienceLevel,
+    @Default([]) List<DayOfWeek> activeWeekdays,
 
     /// Local file path for avatar image to upload.
     /// Excluded from JSON – handled via multipart form-data in the repository.
@@ -59,14 +54,12 @@ abstract class UpdateUserProfileRequest with _$UpdateUserProfileRequest {
     String? bio,
     double? heightCm,
     double? weightKg,
-    String? unitPreference,
     Sex? sex,
     DateTime? dateOfBirth,
     List<String>? equipment,
     String? injuryHistory,
     ExperienceLevel? experienceLevel,
-    int? daysAvailable,
-    int? sessionDurationMinutes,
+    List<DayOfWeek>? activeWeekdays,
 
     /// Local file path for a new avatar image to upload.
     /// Excluded from JSON – handled via multipart form-data in the repository.

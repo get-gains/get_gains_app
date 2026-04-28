@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/errors/api_error_codes.dart';
+import '../../../../core/errors/error_messages.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/app_error.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../providers/coin_balance_provider.dart';
@@ -59,7 +62,7 @@ class ShopScreen extends ConsumerWidget {
               child: AppEmptyState.compact(
                 icon: Icons.storefront_outlined,
                 title: 'Failed to Load Shop',
-                description: error.message,
+                description: errorMessageFor(error),
               ),
             ),
           },
@@ -155,38 +158,9 @@ class _ShopContent extends ConsumerWidget {
         // ── Purchase error banner ──
         if (state.purchaseError != null)
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: (isDark ? AppColors.error : AppColors.destructiveLight)
-                      .withValues(alpha: 0.1),
-                  borderRadius: AppTheme.borderRadiusMd,
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.error_outline,
-                      color: isDark
-                          ? AppColors.error
-                          : AppColors.destructiveLight,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        state.purchaseError!,
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: isDark
-                              ? AppColors.error
-                              : AppColors.destructiveLight,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            child: _PurchaseErrorBanner(
+              error: state.purchaseError!,
+              isDark: isDark,
             ),
           ),
 
@@ -341,6 +315,63 @@ class _Chip extends StatelessWidget {
                 : AppColors.foregroundLight,
             fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Purchase Error Banner ──
+
+class _PurchaseErrorBanner extends ConsumerWidget {
+  const _PurchaseErrorBanner({required this.error, required this.isDark});
+
+  final AppError error;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final message = errorMessageFor(error);
+    final errorColor = isDark ? AppColors.error : AppColors.destructiveLight;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: errorColor.withValues(alpha: 0.1),
+          borderRadius: AppTheme.borderRadiusMd,
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline, color: errorColor, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: AppTextStyles.bodySmall.copyWith(color: errorColor),
+              ),
+            ),
+            // Insufficient balance — offer a shortcut to earn more coins
+            if (error.code == ApiErrorCode.coinInsufficientBalance)
+              TextButton(
+                onPressed: () => context.push(AppRoutes.coinHistory),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  'Earn Coins',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: isDark
+                        ? AppColors.primaryDark
+                        : AppColors.primaryLight,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

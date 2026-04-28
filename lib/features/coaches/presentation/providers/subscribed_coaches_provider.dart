@@ -46,7 +46,11 @@ class SubscribedCoachesError extends SubscribedCoachesState {
 /// Manages the authenticated user's list of subscribed coaches.
 ///
 /// Each coach in the list includes a `subscribedAt` timestamp.
-@riverpod
+///
+/// keepAlive: true so state survives navigation — prevents the provider from
+/// being disposed when the user leaves a screen and returning to Initial,
+/// which would cause the Subscribe button to flash incorrectly on re-visit.
+@Riverpod(keepAlive: true)
 class SubscribedCoachesNotifier extends _$SubscribedCoachesNotifier {
   @override
   SubscribedCoachesState build() => const SubscribedCoachesInitial();
@@ -115,12 +119,18 @@ class SubscribedCoachesNotifier extends _$SubscribedCoachesNotifier {
   /// Server-side guards handle:
   /// - ML-2: 403 if no platform subscription
   /// - ML-5: 409 if coach not accepting / at capacity
-  Future<bool> subscribeToCoach(String coachId) async {
+  ///
+  /// Returns a record with [success] and an optional [error] so screens can
+  /// branch on [AppError.code] for code-aware UX.
+  Future<({bool success, AppError? error})> subscribeToCoach(
+    String coachId,
+  ) async {
     final result = await _repo.subscribeToCoach(coachId);
 
     return result.when(
       success: (subscribedCoach) {
-        // Prepend to the current list if loaded
+        // Optimistically prepend if the list is loaded; otherwise
+        // trigger a full load so isSubscribedToCoach reflects the new state.
         final current = state;
         if (current is SubscribedCoachesLoaded) {
           state = SubscribedCoachesLoaded(
@@ -129,21 +139,30 @@ class SubscribedCoachesNotifier extends _$SubscribedCoachesNotifier {
               total: current.pagination.total + 1,
             ),
           );
+        } else {
+          // State is Initial/Loading/Error — do a full load so the derived
+          // providers pick up the new subscription immediately.
+          loadCoaches();
         }
-        return true;
+        return (success: true, error: null);
       },
       failure: (error) {
         AppLogger.error(
           'Subscribe failed: ${error.message}',
           tag: 'SubscribedCoachesNotifier',
         );
-        return false;
+        return (success: false, error: error);
       },
     );
   }
 
   /// Unsubscribe from a coach and remove them from the list.
-  Future<bool> unsubscribeFromCoach(String coachId) async {
+  ///
+  /// Returns a record with [success] and an optional [error] so screens can
+  /// branch on [AppError.code] for code-aware UX.
+  Future<({bool success, AppError? error})> unsubscribeFromCoach(
+    String coachId,
+  ) async {
     final result = await _repo.unsubscribeFromCoach(coachId);
 
     return result.when(
@@ -157,14 +176,14 @@ class SubscribedCoachesNotifier extends _$SubscribedCoachesNotifier {
             ),
           );
         }
-        return true;
+        return (success: true, error: null);
       },
       failure: (error) {
         AppLogger.error(
           'Unsubscribe failed: ${error.message}',
           tag: 'SubscribedCoachesNotifier',
         );
-        return false;
+        return (success: false, error: error);
       },
     );
   }

@@ -30,12 +30,16 @@ class CoinRewardScreen extends ConsumerStatefulWidget {
     required this.sessionDurationMin,
     this.avgAccuracy = 1.0,
     this.streakDays = 0,
+    this.showWorkoutSummaryAfterContinue = false,
+    this.workoutSummary,
   });
 
   final int setsCompleted;
   final int sessionDurationMin;
   final double avgAccuracy;
   final int streakDays;
+  final bool showWorkoutSummaryAfterContinue;
+  final Map<String, dynamic>? workoutSummary;
 
   @override
   ConsumerState<CoinRewardScreen> createState() => _CoinRewardScreenState();
@@ -161,7 +165,7 @@ class _CoinRewardScreenState extends ConsumerState<CoinRewardScreen>
                   width: double.infinity,
                   child: AppButton.primary(
                     label: 'Continue',
-                    onPressed: () => context.go(AppRoutes.home),
+                    onPressed: _handleContinue,
                     isFullWidth: true,
                   ),
                 ),
@@ -173,5 +177,89 @@ class _CoinRewardScreenState extends ConsumerState<CoinRewardScreen>
         ),
       ),
     );
+  }
+
+  void _handleContinue() {
+    context.go(AppRoutes.home);
+
+    if (!widget.showWorkoutSummaryAfterContinue) return;
+    final summary = widget.workoutSummary;
+    if (summary == null) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final dialogContext = appNavigatorKey.currentContext;
+      if (dialogContext == null) return;
+
+      final exerciseStatuses =
+          (summary['exerciseStatuses'] as List<dynamic>? ?? const [])
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList();
+
+      showDialog(
+        context: dialogContext,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('Workout Complete!'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Duration: ${summary['durationText'] ?? '--:--'}'),
+              Text('Sets completed: ${summary['setsCompleted'] ?? 0}'),
+              Text(
+                'Total volume: ${((summary['totalVolumeKg'] as num?) ?? 0).toStringAsFixed(1)} kg',
+              ),
+              if (exerciseStatuses.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Divider(),
+                const SizedBox(height: 8),
+                ...exerciseStatuses.map((exercise) {
+                  final completed =
+                      (exercise['completed'] as num?)?.toInt() ?? 0;
+                  final target = (exercise['target'] as num?)?.toInt() ?? 0;
+                  final done = completed >= target && target > 0;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      children: [
+                        Icon(
+                          done
+                              ? Icons.check_circle
+                              : Icons.radio_button_unchecked,
+                          color: done ? AppColors.success : Colors.grey,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            exercise['name'] as String? ?? 'Exercise',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                        Text(
+                          '$completed/$target',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: done ? AppColors.success : Colors.grey,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      );
+    });
   }
 }

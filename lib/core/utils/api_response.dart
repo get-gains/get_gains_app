@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../errors/api_error_codes.dart';
+
 part 'api_response.freezed.dart';
 part 'api_response.g.dart';
 
@@ -7,11 +9,15 @@ part 'api_response.g.dart';
 ///
 /// Matches the server's `ApiError` format:
 /// ```json
-/// { "field": "email", "message": "Invalid email" }
+/// { "field": "email", "code": "AUTH_INVALID_CREDENTIALS", "message": "Invalid email or password." }
 /// ```
 @freezed
 abstract class ApiError with _$ApiError {
-  const factory ApiError({String? field, required String message}) = _ApiError;
+  const factory ApiError({
+    String? field,
+    String? code,
+    required String message,
+  }) = _ApiError;
 
   factory ApiError.fromJson(Map<String, dynamic> json) =>
       _$ApiErrorFromJson(json);
@@ -75,6 +81,20 @@ extension ApiResponseParser on Map<String, dynamic> {
     if (errors == null || errors.isEmpty) return null;
     final first = errors.first as Map<String, dynamic>;
     return first['message'] as String?;
+  }
+
+  /// Get the first error's typed [ApiErrorCode], if present.
+  ///
+  /// Returns `null` when the server did not include a `code` field (legacy
+  /// responses). Returns [ApiErrorCode.unknown] when the code string is
+  /// present but not recognized by the generated enum.
+  ApiErrorCode? get firstErrorCode {
+    final errors = this['errors'] as List<dynamic>?;
+    if (errors == null || errors.isEmpty) return null;
+    final first = errors.first as Map<String, dynamic>;
+    final raw = first['code'] as String?;
+    if (raw == null || raw.isEmpty) return null;
+    return ApiErrorCode.fromString(raw);
   }
 
   /// Get all error messages joined

@@ -4,22 +4,21 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../coach_pose/services/pose_detection_service.dart';
+import '../../../guidance/guidance.dart';
 import '../providers/client_recording_provider.dart';
 import '../widgets/pose_view_widget.dart';
 
 /// Client Recording Screen
 ///
 /// Allows clients to record themselves performing an exercise while:
-/// - Detecting pose via MLKit
-/// - Counting reps in real-time
-/// - After stopping, running DTW comparison against coach's reference form
+/// - Capturing frames during recording (no live MLKit for performance)
+/// - After stopping, post-processing: pose analysis & DTW comparison
 /// - Displaying similarity score and corrections
 ///
 /// Each recording session counts as one set.
@@ -38,10 +37,13 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
   List<CameraDescription> _cameras = [];
   bool _isCameraInitialized = false;
   bool _isCameraError = false;
-  bool _isProcessingFrame = false;
   bool _isFlipping = false;
-  int _frameSkipCount = 0;
-  static const _processEveryNFrames = 3; // Process every 3rd frame
+  bool _isStoppingRecording = false;
+
+  // ── Guidance state ───────────────────────────────────────────────────
+  bool _preBriefDismissed = false;
+  bool _tipDismissed = false;
+  bool _resultsFirstTimeShown = false;
 
   @override
   void initState() {
@@ -72,7 +74,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
 
       _cameraController = CameraController(
         camera,
-        ResolutionPreset.medium,
+        ResolutionPreset.low,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.nv21,
       );
@@ -91,68 +93,46 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
     }
   }
 
-  void _startImageStream() {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return;
-    }
-
-    _cameraController!.startImageStream((CameraImage image) {
-      _frameSkipCount++;
-      if (_frameSkipCount % _processEveryNFrames != 0) return;
-      if (_isProcessingFrame) return;
-
-      _isProcessingFrame = true;
-      _processImage(image).whenComplete(() {
-        _isProcessingFrame = false;
-      });
-    });
-  }
-
-  void _stopImageStream() {
-    if (_cameraController != null &&
-        _cameraController!.value.isStreamingImages) {
-      _cameraController!.stopImageStream();
-    }
-  }
-
-  Future<void> _processImage(CameraImage image) async {
-    try {
-      final poseService = ref.read(poseDetectionServiceProvider);
-      final rotation = _cameraController!.description.sensorOrientation;
-      final inputRotation = InputImageRotation.values.firstWhere(
-        (r) => r.rawValue == rotation,
-        orElse: () => InputImageRotation.rotation0deg,
-      );
-      final timestampMs = DateTime.now().millisecondsSinceEpoch;
-
-      final landmarkFrame = await poseService.processFrame(
-        image,
-        inputRotation,
-        timestampMs,
-      );
-
-      if (landmarkFrame != null) {
-        ref
-            .read(clientRecordingProvider(widget.exerciseId).notifier)
-            .processFrame(landmarkFrame);
-      }
-    } catch (e) {
-      // Silently skip failed frames
-    }
-  }
-
-  void _onStartRecording() {
+  Future<void> _onStartRecording() async {
     ref
         .read(clientRecordingProvider(widget.exerciseId).notifier)
         .startRecording();
-    _startImageStream();
+    try {
+      await _cameraController?.startVideoRecording();
+      AppLogger.info('Video recording started', tag: 'ClientRecording');
+    } catch (e) {
+      AppLogger.error(
+        'Failed to start video recording',
+        tag: 'ClientRecording',
+        error: e,
+      );
+    }
   }
 
   Future<void> _onStopRecording() async {
-    _stopImageStream();
-    await ref
-        .read(clientRecordingProvider(widget.exerciseId).notifier)
-        .stopRecordingAndCompare();
+    if (_isStoppingRecording) return;
+    _isStoppingRecording = true;
+
+    final notifier = ref.read(
+      clientRecordingProvider(widget.exerciseId).notifier,
+    );
+    notifier.stopRecording();
+
+    try {
+      final file = await _cameraController!.stopVideoRecording();
+      notifier.setRecordedVideo(file.path);
+    } catch (e) {
+      AppLogger.error(
+        'Failed to stop video recording',
+        tag: 'ClientRecording',
+        error: e,
+      );
+      notifier.setRecordingError(
+        'Could not finalize recording. Please try again.',
+      );
+    } finally {
+      _isStoppingRecording = false;
+    }
   }
 
   void _onTryAgain() {
@@ -199,7 +179,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
 
       final controller = CameraController(
         targetCamera,
-        ResolutionPreset.medium,
+        ResolutionPreset.low,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.nv21,
       );
@@ -217,7 +197,6 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
   @override
   void dispose() {
     WakelockPlus.disable();
-    _stopImageStream();
     _cameraController?.dispose();
     super.dispose();
   }
@@ -226,6 +205,18 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final state = ref.watch(clientRecordingProvider(widget.exerciseId));
+
+    // When auto-stop is requested by the provider, use the unified stop flow.
+    ref.listen(clientRecordingProvider(widget.exerciseId), (prev, next) {
+      final autoStopTriggered =
+          next is ClientRecordingActive &&
+          next.autoStopRequested &&
+          (prev is! ClientRecordingActive || !prev.autoStopRequested);
+
+      if (autoStopTriggered) {
+        unawaited(_onStopRecording());
+      }
+    });
 
     return Scaffold(
       backgroundColor: isDark
@@ -245,6 +236,8 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
               tooltip: 'Flip camera',
               onPressed: _isFlipping ? null : _flipCamera,
             ),
+          // Help / guidance info
+          InfoIconButton(content: kRecordingHelp),
         ],
       ),
       body: _buildBody(context, state, isDark),
@@ -270,7 +263,8 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
       ClientRecordingError(message: final msg) => _buildError(context, msg),
       ClientRecordingReady() => _buildReadyState(context, state, isDark),
       ClientRecordingActive() => _buildRecordingState(context, state, isDark),
-      ClientRecordingProcessing() => _buildProcessing(context),
+      ClientRecordingProcessing(:final progress, :final message) =>
+        _buildProcessing(context, progress: progress, message: message),
       ClientRecordingComplete() => _buildResults(context, state, isDark),
     };
   }
@@ -295,148 +289,267 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
     ClientRecordingReady state,
     bool isDark,
   ) {
-    return Column(
+    final showPreBrief =
+        !_preBriefDismissed &&
+        !ref
+            .read(guidanceRepositoryProvider)
+            .isCompleted(GuidanceRepository.kRecording);
+
+    return Stack(
       children: [
-        // Coach reference playback + camera preview (split view)
-        Expanded(
-          child: Column(
-            children: [
-              // Coach's reference skeleton
-              if (state.referenceFrames.isNotEmpty)
-                Expanded(
-                  flex: 1,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Coach's Form",
-                          style: Theme.of(context).textTheme.labelMedium
-                              ?.copyWith(
-                                color: isDark
-                                    ? AppColors.textSecondaryDark
-                                    : AppColors.textSecondaryLight,
+        Column(
+          children: [
+            // Coach reference playback + camera preview (split view)
+            Expanded(
+              child: Column(
+                children: [
+                  // Coach's reference skeleton
+                  if (state.referenceFrames.isNotEmpty)
+                    Expanded(
+                      flex: 1,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Coach's Form",
+                              style: Theme.of(context).textTheme.labelMedium
+                                  ?.copyWith(
+                                    color: isDark
+                                        ? AppColors.textSecondaryDark
+                                        : AppColors.textSecondaryLight,
+                                  ),
+                            ),
+                            const SizedBox(height: 4),
+                            Expanded(
+                              child: PoseViewWidget(
+                                landmarkFrames: state.referenceFrames,
+                                mode: PoseViewMode.raw2D,
+                                color: Colors.cyanAccent,
+                                backgroundColor: const Color(0xFF0F0F1A),
+                                mirrorX: true,
                               ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        Expanded(
-                          child: PoseViewWidget(
-                            landmarkFrames: state.referenceFrames,
-                            mode: PoseViewMode.raw2D,
-                            color: Colors.cyanAccent,
-                            backgroundColor: const Color(0xFF0F0F1A),
+                      ),
+                    ),
+
+                  // Camera preview
+                  Expanded(
+                    flex: 1,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Your Camera',
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight,
+                                ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 4),
+                          Expanded(
+                            child: _isCameraInitialized
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: CameraPreview(_cameraController!),
+                                  )
+                                : _isCameraError
+                                ? Container(
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? AppColors.surface1Dark
+                                          : AppColors.surface1Light,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Center(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.videocam_off,
+                                            size: 32,
+                                            color: Colors.redAccent,
+                                          ),
+                                          SizedBox(height: 8),
+                                          Text(
+                                            'Camera unavailable',
+                                            style: TextStyle(
+                                              color: Colors.redAccent,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                : const Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-
-              // Camera preview
-              Expanded(
-                flex: 1,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Your Camera',
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(
-                              color: isDark
-                                  ? AppColors.textSecondaryDark
-                                  : AppColors.textSecondaryLight,
-                            ),
-                      ),
-                      const SizedBox(height: 4),
-                      Expanded(
-                        child: _isCameraInitialized
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: CameraPreview(_cameraController!),
-                              )
-                            : _isCameraError
-                            ? Container(
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? AppColors.surface1Dark
-                                      : AppColors.surface1Light,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.videocam_off,
-                                        size: 32,
-                                        color: Colors.redAccent,
-                                      ),
-                                      SizedBox(height: 8),
-                                      Text(
-                                        'Camera unavailable',
-                                        style: TextStyle(
-                                          color: Colors.redAccent,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              )
-                            : const Center(child: CircularProgressIndicator()),
-                      ),
-                    ],
-                  ),
-                ),
+                ],
               ),
-            ],
-          ),
+            ),
+
+            // Info + start button
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  if (state.coachName != null) ...[
+                    Text(
+                      'Coach: ${state.coachName}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                  ],
+                  Text(
+                    'Camera: ${_formatAngle(state.cameraAngle)}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Watch the coach\'s form above, then record yours.\n'
+                    'Each recording counts as one set.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  AppButton.primary(
+                    label: 'Start Recording',
+                    icon: Icons.fiber_manual_record,
+                    isFullWidth: true,
+                    onPressed: _isCameraInitialized ? _onStartRecording : null,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
 
-        // Info + start button
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              if (state.coachName != null) ...[
-                Text(
-                  'Coach: ${state.coachName}',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
-                  ),
-                ),
-                const SizedBox(height: 4),
-              ],
-              Text(
-                'Camera: ${_formatAngle(state.cameraAngle)}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Watch the coach\'s form above, then record yours.\n'
-                'Each recording counts as one set.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              AppButton.primary(
-                label: 'Start Recording',
-                icon: Icons.fiber_manual_record,
-                isFullWidth: true,
-                onPressed: _isCameraInitialized ? _onStartRecording : null,
-              ),
-            ],
+        // Pre-brief instructional overlay (first-time only)
+        if (showPreBrief)
+          _buildPreBriefOverlay(
+            context,
+            isDark,
+            hasReferenceForm: state.referenceFrames.isNotEmpty,
           ),
-        ),
       ],
+    );
+  }
+
+  Widget _buildPreBriefOverlay(
+    BuildContext context,
+    bool isDark, {
+    bool hasReferenceForm = true,
+  }) {
+    final theme = Theme.of(context);
+
+    final sections = hasReferenceForm
+        ? kRecordingHelp.sections
+        : [
+            const HelpSection(
+              heading: 'No Reference Form',
+              body:
+                  'There is no reference form available for this exercise. '
+                  'Focus on performing the exercise with your best technique.',
+              iconName: 'info',
+            ),
+            const HelpSection(
+              heading: 'Record Your Form',
+              body:
+                  'The app will still record and analyze your movement. '
+                  'Do your best and review the results after.',
+              iconName: 'videocam',
+            ),
+          ];
+
+    return Container(
+      color: Colors.black87,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.videocam_outlined,
+                    size: 48,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Before You Record',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ...sections.map(
+                    (section) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.check_circle_outline,
+                            size: 20,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              section.body,
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () {
+                        setState(() => _preBriefDismissed = true);
+                        ref
+                            .read(guidanceRepositoryProvider)
+                            .markCompleted(GuidanceRepository.kRecording);
+                      },
+                      child: const Text('Got it'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -458,6 +571,51 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: CameraPreview(_cameraController!),
+                ),
+
+              // Dismissible recording tip badge
+              if (!_tipDismissed)
+                Positioned(
+                  top: 16,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: AnimatedSlide(
+                      duration: const Duration(milliseconds: 300),
+                      offset: Offset.zero,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Follow the form on screen',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: () => setState(() => _tipDismissed = true),
+                              child: const Icon(
+                                Icons.close,
+                                size: 14,
+                                color: Colors.white54,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
 
               // Recording indicator
@@ -498,41 +656,6 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
                 ),
               ),
 
-              // Rep counter overlay
-              Positioned(
-                top: 16,
-                right: 16,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color:
-                        (isDark
-                                ? AppColors.primaryDark
-                                : AppColors.primaryLight)
-                            .withValues(alpha: 0.9),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.repeat, color: Colors.white, size: 20),
-                      const SizedBox(width: 6),
-                      Text(
-                        '${state.repCount} reps',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
               // Coach's reference skeleton (PiP overlay)
               if (state.referenceLandmarkFrames.isNotEmpty)
                 Positioned(
@@ -558,6 +681,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
                             color: Colors.cyanAccent,
                             backgroundColor: const Color(0xDD0F0F1A),
                             showControls: false,
+                            mirrorX: true,
                           ),
                         ),
                         Positioned(
@@ -624,20 +748,53 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
     );
   }
 
-  Widget _buildProcessing(BuildContext context) {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Analyzing your form...'),
-          SizedBox(height: 8),
-          Text(
-            'Comparing against coach\'s reference',
-            style: TextStyle(color: Colors.grey),
-          ),
-        ],
+  Widget _buildProcessing(
+    BuildContext context, {
+    required double progress,
+    required String message,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final percent = (progress * 100).toStringAsFixed(0);
+    return Container(
+      color: isDark ? Colors.black87 : Colors.white.withValues(alpha: 0.95),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 72,
+              height: 72,
+              child: CircularProgressIndicator(
+                value: progress > 0 ? progress : null,
+                strokeWidth: 4,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              message,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '$percent%',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white70 : Colors.black87,
+                fontFamily: 'JetBrains Mono',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                'This may take a moment.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey, height: 1.4),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -682,6 +839,10 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 8),
+
+          // Score grading scale (first-time inline, then info icon)
+          _buildScoreExplainer(context, score, isDark),
           const SizedBox(height: 16),
 
           // Rep count
@@ -699,7 +860,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    '${state.repCount} reps completed',
+                    'Form analyzed',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -710,7 +871,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Segment scores
+          // Segment scores with info icons
           if (state.result.segmentScores.isNotEmpty) ...[
             Text(
               'Segment Breakdown',
@@ -720,22 +881,50 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
             ),
             const SizedBox(height: 8),
             ...state.result.segmentScores.entries.map(
-              (entry) => _SegmentScoreRow(
-                name: entry.key,
-                score: entry.value,
-                isDark: isDark,
+              (entry) => _buildSegmentRowWithInfo(
+                context,
+                entry.key,
+                entry.value,
+                isDark,
               ),
             ),
           ],
 
-          // Corrections
+          // Corrections with AI header
           if (state.result.corrections.isNotEmpty) ...[
             const SizedBox(height: 16),
-            Text(
-              'Form Corrections',
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+            // AI Form Suggestions header
+            Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'AI Form Suggestions',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.info_outline, size: 18),
+                  tooltip: 'About AI suggestions',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      showDragHandle: true,
+                      builder: (_) =>
+                          const ContextualHelpSheet(content: kResultsHelp),
+                    );
+                  },
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             ...state.result.corrections.map(
@@ -800,39 +989,92 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
     return 'Keep Practicing';
   }
 
-  String _formatAngle(String angle) {
-    return angle
-        .replaceAll('_', ' ')
-        .split(' ')
-        .map(
-          (w) => w.isEmpty
-              ? w
-              : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}',
-        )
-        .join(' ');
+  /// Score explainer — inline grading scale for first-time users, info icon otherwise.
+  Widget _buildScoreExplainer(BuildContext context, double score, bool isDark) {
+    final isFirstTime =
+        !_resultsFirstTimeShown &&
+        !ref
+            .read(guidanceRepositoryProvider)
+            .isCompleted(GuidanceRepository.kResults);
+
+    if (isFirstTime && !_resultsFirstTimeShown) {
+      _resultsFirstTimeShown = true;
+      Future.microtask(() {
+        ref
+            .read(guidanceRepositoryProvider)
+            .markCompleted(GuidanceRepository.kResults);
+      });
+    }
+
+    if (isFirstTime) {
+      return Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Score Guide',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            alignment: WrapAlignment.center,
+            children: kScoreGrades.map((grade) {
+              final (min, max, label) = grade;
+              return Text(
+                '$min-$max%: $label',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      );
+    }
+
+    // Returning user: small info icon
+    return Center(
+      child: TextButton.icon(
+        onPressed: () {
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            showDragHandle: true,
+            builder: (_) => const ContextualHelpSheet(content: kResultsHelp),
+          );
+        },
+        icon: const Icon(Icons.info_outline, size: 16),
+        label: Text(
+          scoreGradeLabel(score),
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+      ),
+    );
   }
-}
 
-class _SegmentScoreRow extends StatelessWidget {
-  const _SegmentScoreRow({
-    required this.name,
-    required this.score,
-    required this.isDark,
-  });
-
-  final String name;
-  final double score;
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
+  /// Segment row with an info icon that opens segment explanation.
+  Widget _buildSegmentRowWithInfo(
+    BuildContext context,
+    String name,
+    double score,
+    bool isDark,
+  ) {
     final scorePercent = (score * 100).toStringAsFixed(0);
     final color = score >= 0.8
         ? Colors.green
         : score >= 0.6
         ? Colors.orange
         : Colors.red;
-
     final prettyName = name
         .replaceAllMapped(
           RegExp(r'([A-Z])'),
@@ -877,9 +1119,57 @@ class _SegmentScoreRow extends StatelessWidget {
               ),
             ),
           ),
+          SizedBox(
+            width: 28,
+            child: IconButton(
+              icon: const Icon(Icons.info_outline, size: 16),
+              tooltip: 'About this segment',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              onPressed: () {
+                final explanation = kSegmentExplanations[name];
+                if (explanation == null) return;
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  showDragHandle: true,
+                  builder: (_) => ContextualHelpSheet(
+                    content: HelpContentModel(
+                      id: 'segment_$name',
+                      title: explanation.displayName,
+                      sections: [
+                        HelpSection(
+                          heading: 'What it Measures',
+                          body: explanation.description,
+                          iconName: 'analytics',
+                        ),
+                        HelpSection(
+                          heading: 'Improvement Tip',
+                          body: explanation.improvementTip,
+                          iconName: 'lightbulb',
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  String _formatAngle(String angle) {
+    return angle
+        .replaceAll('_', ' ')
+        .split(' ')
+        .map(
+          (w) => w.isEmpty
+              ? w
+              : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}',
+        )
+        .join(' ');
   }
 }
 

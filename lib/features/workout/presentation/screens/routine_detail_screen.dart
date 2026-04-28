@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../client_pose/data/client_pose_repository.dart';
+import '../../../guidance/guidance.dart';
 import '../../data/models/models.dart';
 import '../../data/workout_repository.dart';
 import '../providers/workout_session_provider.dart';
@@ -30,6 +31,17 @@ class RoutineDetailScreen extends ConsumerStatefulWidget {
 class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
   late Future<RoutineModel?> _routineFuture;
 
+  // Guidance tour GlobalKeys
+  final _exerciseCardKey = GlobalKey(
+    debugLabel: 'routine_detail_exercise_card',
+  );
+  final _analyzeFormKey = GlobalKey(debugLabel: 'routine_detail_analyze_form');
+  final _prescriptionKey = GlobalKey(debugLabel: 'routine_detail_prescription');
+  final _startWorkoutKey = GlobalKey(
+    debugLabel: 'routine_detail_start_workout',
+  );
+  bool _tourTriggered = false;
+
   @override
   void initState() {
     super.initState();
@@ -47,35 +59,140 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
         .then((result) => result.valueOrNull);
   }
 
-  Future<void> _startWorkout(RoutineModel routine) async {
+  Future<void> _startWorkout(RoutineModel routine, {int startIndex = 0}) async {
     await ref
         .read(workoutSessionProvider.notifier)
-        .startSession(routineModelId: routine.id);
+        .startSession(routineModelId: routine.id, routine: routine);
 
     if (!mounted) return;
 
     final sessionState = ref.read(workoutSessionProvider);
     if (sessionState is WorkoutSessionActive && routine.exercises.isNotEmpty) {
+      // When resuming, use the provider's calculated exercise index
+      // (which accounts for already-completed exercises).
+      final isResuming = sessionState.session.performedSets.isNotEmpty;
+      final resolvedStartIndex = isResuming
+          ? sessionState.currentExerciseIndex.clamp(
+              0,
+              routine.exercises.length - 1,
+            )
+          : startIndex.clamp(0, routine.exercises.length - 1);
+
       // Pre-cache reference forms for all exercises so they're available
       // offline if connectivity drops during the workout.
       final exerciseIds = routine.exercises.map((e) => e.exerciseId).toList();
       ref.read(clientPoseRepositoryProvider).preCacheExerciseForms(exerciseIds);
 
-      final firstExercise = routine.exercises.first;
+      final targetExercise = routine.exercises[resolvedStartIndex];
+      final completedSets = sessionState.session
+          .setsForExercise(targetExercise.id)
+          .length;
+      final nextSetNumber = completedSets + 1;
+
+      // If all exercises are completed, go to the session screen instead
+      // of back to recording.
+      if (sessionState.isAllExercisesCompleted) {
+        context.go(AppRoutes.workoutSession, extra: {'readOnly': true});
+        return;
+      }
+
       context.go(
-        '/client/exercise/${firstExercise.exerciseId}/unity-record',
+        '/client/exercise/${targetExercise.exerciseId}/unity-record',
         extra: {
           'workoutSessionId': sessionState.session.id,
-          'routineExerciseId': firstExercise.id,
+          'routineExerciseId': targetExercise.id,
           'routineExercises': routine.exercises,
-          'currentExerciseIndex': 0,
-          'currentSetNumber': 1,
+          'currentExerciseIndex': resolvedStartIndex,
+          'currentSetNumber': nextSetNumber,
         },
       );
     } else {
       // Fallback if no exercises or session failed
       context.go(AppRoutes.workoutSession);
     }
+  }
+
+  Future<void> _pickStartExerciseAndWorkout(RoutineModel routine) async {
+    if (routine.exercises.isEmpty) {
+      await _startWorkout(routine);
+      return;
+    }
+
+    if (routine.exercises.length == 1) {
+      await _startWorkout(routine, startIndex: 0);
+      return;
+    }
+
+    final selectedIndex = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return SafeArea(
+          child: FractionallySizedBox(
+            heightFactor: 0.75,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: Text(
+                    'Start From Exercise',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: routine.exercises.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final routineExercise = routine.exercises[index];
+                      final exerciseName =
+                          routineExercise.exercise?.name ??
+                          'Exercise ${index + 1}';
+
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 6,
+                        ),
+                        leading: CircleAvatar(
+                          radius: 16,
+                          backgroundColor: isDark
+                              ? AppColors.primaryDark.withValues(alpha: 0.2)
+                              : AppColors.primaryLight.withValues(alpha: 0.12),
+                          child: Text(
+                            '${index + 1}',
+                            style: TextStyle(
+                              color: isDark
+                                  ? AppColors.primaryDark
+                                  : AppColors.primaryLight,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        title: Text(exerciseName),
+                        subtitle: Text(
+                          '${routineExercise.sets} sets x ${routineExercise.repsMin}-${routineExercise.repsMax} reps',
+                        ),
+                        onTap: () => Navigator.of(context).pop(index),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted || selectedIndex == null) return;
+    await _startWorkout(routine, startIndex: selectedIndex);
   }
 
   @override
@@ -108,140 +225,232 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
           );
         }
 
-        return Scaffold(
-          backgroundColor: isDark
-              ? AppColors.backgroundDark
-              : AppColors.backgroundLight,
-          bottomNavigationBar: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: _StartWorkoutButton(
-                routine: routine,
-                onStart: () => _startWorkout(routine),
+        // Trigger guidance tour on first visit with exercises
+        if (!_tourTriggered && routine.exercises.isNotEmpty) {
+          _tourTriggered = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            final repo = ref.read(guidanceRepositoryProvider);
+            if (!repo.isCompleted(GuidanceRepository.kRoutineDetail)) {
+              ref
+                  .read(tourProvider.notifier)
+                  .startTour(
+                    GuidanceRepository.kRoutineDetail,
+                    kRoutineDetailTourSteps,
+                  );
+            }
+          });
+        }
+
+        final sessionState = ref.watch(workoutSessionProvider);
+        final todaySession = ref.watch(
+          todayCompletedSessionProvider(routine.id),
+        );
+        final bool isCompletedToday =
+            (sessionState is WorkoutSessionCompleted &&
+                sessionState.routine?.id == routine.id) ||
+            (todaySession.value?.isCompleted ?? false);
+
+        return TourOrchestrator(
+          tourKeys: {
+            'routine_detail_exercise_card': _exerciseCardKey,
+            'routine_detail_analyze_form': _analyzeFormKey,
+            'routine_detail_prescription': _prescriptionKey,
+            'routine_detail_start_workout': _startWorkoutKey,
+          },
+          child: Scaffold(
+            backgroundColor: isDark
+                ? AppColors.backgroundDark
+                : AppColors.backgroundLight,
+            bottomNavigationBar: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isCompletedToday) ...[
+                      Container(
+                        width: double.infinity,
+                        height: 44,
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: AppColors.success.withValues(alpha: 0.45),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.check_circle,
+                              size: 18,
+                              color: AppColors.success,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Workout Complete',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    color: AppColors.success,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    _StartWorkoutButton(
+                      key: _startWorkoutKey,
+                      routine: routine,
+                      onStart: () => _pickStartExerciseAndWorkout(routine),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          body: CustomScrollView(
-            slivers: [
-              // App Bar
-              SliverAppBar(
-                expandedHeight: 140,
-                pinned: true,
-                flexibleSpace: FlexibleSpaceBar(
-                  title: Text(
-                    routine.name,
-                    style: const TextStyle(fontSize: 18),
-                  ),
-                  background: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          isDark
-                              ? AppColors.primaryDark
-                              : AppColors.primaryLight,
-                          isDark
-                              ? AppColors.primaryDark.withValues(alpha: 0.7)
-                              : AppColors.primaryLight.withValues(alpha: 0.7),
-                        ],
+            body: CustomScrollView(
+              slivers: [
+                // App Bar
+                SliverAppBar(
+                  expandedHeight: 140,
+                  pinned: true,
+                  actions: [
+                    InfoIconButton(
+                      content: kRoutineDetailHelp,
+                      onTapOverride: () {
+                        ref
+                            .read(tourProvider.notifier)
+                            .startTour(
+                              GuidanceRepository.kRoutineDetail,
+                              kRoutineDetailTourSteps,
+                            );
+                      },
+                    ),
+                  ],
+                  flexibleSpace: FlexibleSpaceBar(
+                    title: Text(
+                      routine.name,
+                      style: const TextStyle(fontSize: 18),
+                    ),
+                    background: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            isDark
+                                ? AppColors.primaryDark
+                                : AppColors.primaryLight,
+                            isDark
+                                ? AppColors.primaryDark.withValues(alpha: 0.7)
+                                : AppColors.primaryLight.withValues(alpha: 0.7),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
 
-              // Routine Info
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Description
-                      if (routine.description.isNotEmpty) ...[
-                        Text(
-                          routine.description,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: isDark
-                                    ? AppColors.textSecondaryDark
-                                    : AppColors.textSecondaryLight,
-                              ),
+                // Routine Info
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Description
+                        if (routine.description.isNotEmpty) ...[
+                          Text(
+                            routine.description,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight,
+                                ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+
+                        // Stats row
+                        Row(
+                          children: [
+                            _StatChip(
+                              icon: Icons.fitness_center,
+                              label: '${routine.totalExercises} exercises',
+                              isDark: isDark,
+                            ),
+                            const SizedBox(width: 12),
+                            _StatChip(
+                              icon: Icons.repeat,
+                              label: '${routine.totalSets} sets',
+                              isDark: isDark,
+                            ),
+                            const SizedBox(width: 12),
+                            _StatChip(
+                              icon: Icons.timer_outlined,
+                              label: '${routine.estimatedDurationMinutes} min',
+                              isDark: isDark,
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 12),
-                      ],
 
-                      // Stats row
-                      Row(
-                        children: [
-                          _StatChip(
-                            icon: Icons.fitness_center,
-                            label: '${routine.totalExercises} exercises',
-                            isDark: isDark,
+                        // Muscle groups
+                        if (routine.muscleGroupsTargeted.isNotEmpty) ...[
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            children: routine.muscleGroupsTargeted
+                                .map(
+                                  (m) => AppBadge(
+                                    label: m.displayName,
+                                    variant: AppBadgeVariant.outline,
+                                  ),
+                                )
+                                .toList(),
                           ),
-                          const SizedBox(width: 12),
-                          _StatChip(
-                            icon: Icons.repeat,
-                            label: '${routine.totalSets} sets',
-                            isDark: isDark,
-                          ),
-                          const SizedBox(width: 12),
-                          _StatChip(
-                            icon: Icons.timer_outlined,
-                            label: '${routine.estimatedDurationMinutes} min',
-                            isDark: isDark,
-                          ),
+                          const SizedBox(height: 16),
                         ],
-                      ),
-                      const SizedBox(height: 12),
 
-                      // Muscle groups
-                      if (routine.muscleGroupsTargeted.isNotEmpty) ...[
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 4,
-                          children: routine.muscleGroupsTargeted
-                              .map(
-                                (m) => AppBadge(
-                                  label: m.displayName,
-                                  variant: AppBadgeVariant.outline,
-                                ),
-                              )
-                              .toList(),
+                        // Section header
+                        Text(
+                          'Exercises',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
-                        const SizedBox(height: 16),
                       ],
-
-                      // Section header
-                      Text(
-                        'Exercises',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
 
-              // Exercise List
-              if (routine.exercises.isEmpty)
-                SliverFillRemaining(
-                  child: AppEmptyState(
-                    icon: Icons.fitness_center,
-                    title: 'No Exercises',
-                    description: 'This routine has no exercises yet.',
+                // Exercise List
+                if (routine.exercises.isEmpty)
+                  SliverFillRemaining(
+                    child: AppEmptyState(
+                      icon: Icons.fitness_center,
+                      title: 'No Exercises',
+                      description: 'This routine has no exercises yet.',
+                    ),
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    sliver: _ExerciseListSliver(
+                      routine: routine,
+                      exerciseCardKey: _exerciseCardKey,
+                      analyzeFormKey: _analyzeFormKey,
+                      prescriptionKey: _prescriptionKey,
+                    ),
                   ),
-                )
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: _ExerciseListSliver(routine: routine),
-                ),
 
-              // Bottom spacing to account for persistent bottom bar
-              const SliverToBoxAdapter(child: SizedBox(height: 16)),
-            ],
+                // Bottom spacing to account for persistent bottom bar
+                const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              ],
+            ),
           ),
         );
       },
@@ -251,9 +460,17 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
 
 /// Extracted sliver that watches both active session and today's history.
 class _ExerciseListSliver extends ConsumerWidget {
-  const _ExerciseListSliver({required this.routine});
+  const _ExerciseListSliver({
+    required this.routine,
+    this.exerciseCardKey,
+    this.analyzeFormKey,
+    this.prescriptionKey,
+  });
 
   final RoutineModel routine;
+  final GlobalKey? exerciseCardKey;
+  final GlobalKey? analyzeFormKey;
+  final GlobalKey? prescriptionKey;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -289,15 +506,22 @@ class _ExerciseListSliver extends ConsumerWidget {
           routineExercise: exercise,
           index: index,
           completedSets: completedSets,
+          exerciseCardKey: index == 0 ? exerciseCardKey : null,
+          analyzeFormKey: index == 0 ? analyzeFormKey : null,
+          prescriptionKey: index == 0 ? prescriptionKey : null,
         );
       }, childCount: routine.exercises.length),
     );
   }
 }
 
-/// Button that shows "Workout Done Today" or "Start Workout" based on history.
+/// Primary routine action button based on today's completion state.
 class _StartWorkoutButton extends ConsumerWidget {
-  const _StartWorkoutButton({required this.routine, required this.onStart});
+  const _StartWorkoutButton({
+    super.key,
+    required this.routine,
+    required this.onStart,
+  });
 
   final RoutineModel routine;
   final VoidCallback onStart;
@@ -307,44 +531,33 @@ class _StartWorkoutButton extends ConsumerWidget {
     final sessionState = ref.watch(workoutSessionProvider);
     final todaySession = ref.watch(todayCompletedSessionProvider(routine.id));
 
+    // Check if there's an active (in-progress) session for this routine
+    final bool hasActiveSession =
+        sessionState is WorkoutSessionActive &&
+        sessionState.routine?.id == routine.id;
+
     final bool isCompletedToday =
         (sessionState is WorkoutSessionCompleted &&
             sessionState.routine?.id == routine.id) ||
         (todaySession.value?.isCompleted ?? false);
 
+    if (hasActiveSession) {
+      final setsLogged =
+          (sessionState as WorkoutSessionActive).session.performedSets.length;
+      return AppButton.primary(
+        label: 'Resume Workout ($setsLogged sets logged)',
+        icon: Icons.play_arrow,
+        isFullWidth: true,
+        onPressed: onStart,
+      );
+    }
+
     if (isCompletedToday) {
-      return Column(
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: AppColors.success.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.check_circle, color: AppColors.success, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Workout Done Today',
-                  style: TextStyle(
-                    color: AppColors.success,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          AppButton.outline(
-            label: 'Do Again',
-            icon: Icons.replay,
-            isFullWidth: true,
-            onPressed: onStart,
-          ),
-        ],
+      return AppButton.outline(
+        label: 'Start Again',
+        icon: Icons.replay,
+        isFullWidth: true,
+        onPressed: onStart,
       );
     }
 
@@ -401,11 +614,19 @@ class _ExerciseCard extends StatelessWidget {
     required this.routineExercise,
     required this.index,
     this.completedSets = 0,
+    this.onTap,
+    this.exerciseCardKey,
+    this.analyzeFormKey,
+    this.prescriptionKey,
   });
 
   final RoutineExerciseModel routineExercise;
   final int index;
   final int completedSets;
+  final void Function(int index)? onTap;
+  final GlobalKey? exerciseCardKey;
+  final GlobalKey? analyzeFormKey;
+  final GlobalKey? prescriptionKey;
 
   @override
   Widget build(BuildContext context) {
@@ -415,8 +636,10 @@ class _ExerciseCard extends StatelessWidget {
     final isExerciseComplete = completedSets >= routineExercise.sets;
 
     return Padding(
+      key: exerciseCardKey,
       padding: const EdgeInsets.only(bottom: 12),
       child: AppCard.elevated(
+        onTap: onTap == null ? null : () => onTap!(index),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -469,6 +692,7 @@ class _ExerciseCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
+                          key: prescriptionKey,
                           '${routineExercise.sets} sets x '
                           '${routineExercise.repsMin}-${routineExercise.repsMax} reps'
                           '${routineExercise.restSeconds > 0 ? ' • ${routineExercise.restSeconds}s rest' : ''}',
@@ -529,6 +753,7 @@ class _ExerciseCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton.icon(
+                    key: analyzeFormKey,
                     onPressed: () => context.push(
                       AppRoutes.clientViewForm.replaceFirst(
                         ':id',

@@ -50,7 +50,12 @@ class _ExerciseLogCardState extends ConsumerState<ExerciseLogCard> {
   @override
   void didUpdateWidget(covariant ExerciseLogCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.routineExercise.id != widget.routineExercise.id) {
+    final exerciseChanged =
+        oldWidget.routineExercise.id != widget.routineExercise.id;
+    final completedSetsChanged =
+        oldWidget.completedSets.length != widget.completedSets.length;
+
+    if (exerciseChanged || completedSetsChanged) {
       ref
           .read(exerciseLogProvider.notifier)
           .initializeForExercise(
@@ -133,10 +138,10 @@ class _ExerciseLogCardState extends ConsumerState<ExerciseLogCard> {
                 },
                 onComplete: () async {
                   ref.read(exerciseLogProvider.notifier).selectSet(index);
-                  await ref
+                  final logged = await ref
                       .read(exerciseLogProvider.notifier)
                       .completeCurrentSet();
-                  widget.onSetCompleted();
+                  if (logged) widget.onSetCompleted();
                 },
                 onTap: () {
                   ref.read(exerciseLogProvider.notifier).selectSet(index);
@@ -155,10 +160,10 @@ class _ExerciseLogCardState extends ConsumerState<ExerciseLogCard> {
                 isLoading: exerciseLogState.isSubmitting,
                 onPressed: () async {
                   HapticFeedback.mediumImpact();
-                  await ref
+                  final logged = await ref
                       .read(exerciseLogProvider.notifier)
                       .completeCurrentSet();
-                  widget.onSetCompleted();
+                  if (logged) widget.onSetCompleted();
                 },
               )
             else
@@ -189,12 +194,11 @@ class _ExerciseLogCardState extends ConsumerState<ExerciseLogCard> {
       return [
         Row(
           children: [
-            Icon(Icons.check_circle, color: AppColors.success),
             const SizedBox(width: 8),
             Text(
-              'All sets completed!',
+              'No sets logged',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: AppColors.success,
+                color: AppColors.warning,
                 fontWeight: FontWeight.bold,
               ),
             ),

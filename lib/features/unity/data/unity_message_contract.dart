@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// Flutter–Unity message contract.
 ///
 /// Shared constants and format so Flutter and Unity agree on
@@ -12,6 +14,17 @@ class UnityMessageContract {
 
   /// Method: set rotation speed (message = speed string, e.g. "50").
   static const String methodSetRotationSpeed = 'SetRotationSpeed';
+
+  /// Method: re-apply Cosmetic framing (restores close-up after user pans away).
+  /// Message: "" (empty string — ignored by Unity).
+  static const String methodResetCosmeticView = 'ResetCosmeticView';
+
+  /// Method: switch camera view mode.
+  /// Message: "WORKOUT" | "COSMETIC"
+  ///   WORKOUT  — full-figure framing, wide orbit limits (default for pose/recording screens).
+  ///   COSMETIC — upper-body close-up, front-facing, tighter zoom for accessory inspection.
+  /// Send immediately after scene_loaded, before LoadEquippedCosmetics or LoadPoseFrames.
+  static const String methodSetCameraViewMode = 'SetCameraViewMode';
 
   /// Method: receive custom string from Flutter (message = arbitrary string).
   static const String methodOnMessageFromFlutter = 'OnMessageFromFlutter';
@@ -51,6 +64,28 @@ class UnityMessageContract {
   /// Message = one of: "FRONT", "SIDE_LEFT", "SIDE_RIGHT", "REAR",
   ///                     "ANGLE_45_LEFT", "ANGLE_45_RIGHT"
   static const String methodSetCameraAngle = 'SetCameraAngle';
+
+  /// Debug / tuning for humanoid pose vs landmarks. Message: JSON, e.g.
+  /// `{"swapArmLandmarks":false,"swapLegLandmarks":false,"forceShowStickFigure":false,"invertArmDepthZ":true,"invertHeadDepthZ":true,"invertLegDepthZ":true}`
+  static const String methodSetPoseDebugOptions = 'SetPoseDebugOptions';
+
+  /// Defaults for [methodSetPoseDebugOptions] (inline 3D card, fullscreen preview, reset; matches Unity pose-debug shipped defaults).
+  static const bool defaultPoseDebugSwapArmLandmarks = false;
+  static const bool defaultPoseDebugSwapLegLandmarks = false;
+  static const bool defaultPoseDebugForceStickFigure = false;
+  static const bool defaultPoseDebugInvertArmDepthZ = true;
+  static const bool defaultPoseDebugInvertHeadDepthZ = true;
+  static const bool defaultPoseDebugInvertLegDepthZ = true;
+
+  /// JSON payload built from [defaultPoseDebugSwapArmLandmarks], etc.
+  static String defaultPoseDebugOptionsPayload() => jsonEncode({
+    'swapArmLandmarks': defaultPoseDebugSwapArmLandmarks,
+    'swapLegLandmarks': defaultPoseDebugSwapLegLandmarks,
+    'forceShowStickFigure': defaultPoseDebugForceStickFigure,
+    'invertArmDepthZ': defaultPoseDebugInvertArmDepthZ,
+    'invertHeadDepthZ': defaultPoseDebugInvertHeadDepthZ,
+    'invertLegDepthZ': defaultPoseDebugInvertLegDepthZ,
+  });
 
   // ── Events from Unity ────────────────────────────────────────────
 

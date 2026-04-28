@@ -117,9 +117,11 @@ class CoachRepository {
     return result.when(
       success: (data) {
         try {
-          final coach = CoachDetailModel.fromJson(
-            data['coach'] as Map<String, dynamic>,
-          );
+          final coachData = data['coach'] as Map<String, dynamic>?;
+          if (coachData == null) {
+            throw StateError('Response missing coach data');
+          }
+          final coach = CoachDetailModel.fromJson(coachData);
           AppLogger.info(
             'Fetched coach profile: ${coach.name}',
             tag: 'CoachRepo',
@@ -223,9 +225,11 @@ class CoachRepository {
     return result.when(
       success: (data) {
         try {
-          final coach = CoachSummaryModel.fromJson(
-            data['coach'] as Map<String, dynamic>,
-          );
+          final coachData = data['coach'] as Map<String, dynamic>?;
+          if (coachData == null) {
+            throw StateError('Response missing coach data');
+          }
+          final coach = CoachSummaryModel.fromJson(coachData);
           AppLogger.info(
             'Subscribed to coach: ${coach.name}',
             tag: 'CoachRepo',
