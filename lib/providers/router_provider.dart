@@ -21,6 +21,7 @@ import '../features/gains_coins/presentation/screens/shop_screen.dart';
 import '../features/gains_coins/presentation/screens/cosmetic_detail_screen.dart';
 import '../features/gains_coins/presentation/screens/inventory_screen.dart';
 import '../features/gains_coins/presentation/screens/leaderboard_screen.dart';
+import '../features/gains_coins/presentation/screens/missions_screen.dart';
 import '../features/gains_coins/data/models/cosmetic_model.dart';
 import 'auth_state_provider.dart';
 import '../features/programs/screens/program_screen.dart';
@@ -135,6 +136,7 @@ class AppRoutes {
   static const String cosmeticDetail = '/shop/cosmetic';
   static const String inventory = '/inventory';
   static const String leaderboard = '/leaderboard';
+  static const String missions = '/missions';
 }
 
 /// Router Provider
@@ -701,6 +703,10 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: AppRoutes.leaderboard,
         builder: (context, state) => const LeaderboardScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.missions,
+        builder: (context, state) => const MissionsScreen(),
       ),
     ],
 

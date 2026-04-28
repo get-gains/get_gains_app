@@ -122,4 +122,7 @@ class ApiConstants {
   // Leaderboard Endpoints
   static const String leaderboardClass = '/leaderboard/class';
   static const String leaderboardMyCoaches = '/leaderboard/my-coaches';
+
+  // Missions
+  static const String missions = '/missions';
 }
