@@ -123,7 +123,8 @@ class _LaunchPill extends StatelessWidget {
       onTap: item.onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        width: 112,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
           color: isDark ? AppColors.surface2Dark : AppColors.surface2Light,
           borderRadius: BorderRadius.circular(36),
@@ -132,14 +133,17 @@ class _LaunchPill extends StatelessWidget {
           ),
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(item.icon, color: item.color, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              item.label,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                item.label,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
