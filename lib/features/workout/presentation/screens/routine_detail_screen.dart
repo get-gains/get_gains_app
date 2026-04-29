@@ -56,8 +56,14 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
     }
   }
 
-  void _loadRoutine() {
+  Future<void> _loadRoutine() async {
     final repo = ref.read(workoutRepositoryProvider);
+    // Ensure program cache is hydrated so APRE CUID lookup succeeds.
+    // Mirrors the pattern in workout_session_provider._checkActiveSession().
+    final cached = await repo.getPrograms();
+    if (cached.valueOrNull?.isEmpty ?? true) {
+      await repo.syncPrograms();
+    }
     _routineFuture = repo
         .getRoutineByModelId(widget.routineId)
         .then((result) => result.valueOrNull);

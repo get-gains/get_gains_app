@@ -124,40 +124,46 @@ class WorkoutSyncService {
   /// was never synced (e.g. the create queue entry was lost or missing).
   ///
   /// If the server responds with 409 (active session already exists), it
-  /// fetches the existing active session and uses its ID instead.
+  /// auto-completes the stale session and retries the create so the local
+  /// session always receives a unique remote ID — never a duplicate.
   Future<String?> _autoCreateSession(WorkoutSession session) async {
     try {
-      final result = await _apiClient.post<Map<String, dynamic>>(
+      if (session.assignedProgramRoutineId == null) return null;
+
+      // First attempt
+      final first = await _apiClient.post<Map<String, dynamic>>(
         ApiConstants.workoutSessions,
-        data: {
-          if (session.assignedProgramRoutineId != null)
-            'assignedProgramRoutineId': session.assignedProgramRoutineId,
+        data: {'assignedProgramRoutineId': session.assignedProgramRoutineId},
+      );
+
+      String? remoteId;
+
+      await first.when(
+        success: (data) async {
+          remoteId =
+              (data['session'] as Map<String, dynamic>)['id'] as String;
+        },
+        failure: (error) async {
+          if (error.code == ApiErrorCode.workoutSessionAlreadyActive) {
+            remoteId = await _handle409AndRetry(session);
+          } else {
+            AppLogger.warning(
+              'Could not auto-create session ${session.id}: ${error.message}',
+              tag: _tag,
+            );
+          }
         },
       );
 
-      return result.when(
-        success: (data) async {
-          final sessionJson = data['session'] as Map<String, dynamic>;
-          final remoteId = sessionJson['id'] as String;
-          await _db.updateWorkoutSessionRemoteId(session.id, remoteId);
-          AppLogger.info(
-            'Auto-created session ${session.id} → $remoteId',
-            tag: _tag,
-          );
-          return remoteId;
-        },
-        failure: (error) async {
-          // Server returned 409 — active session already exists; fetch it
-          if (error.code == ApiErrorCode.workoutSessionAlreadyActive) {
-            return _fetchActiveSessionId(session.id);
-          }
-          AppLogger.warning(
-            'Could not auto-create session ${session.id}: ${error.message}',
-            tag: _tag,
-          );
-          return null;
-        },
-      );
+      final resolvedId = remoteId;
+      if (resolvedId != null) {
+        await _db.updateWorkoutSessionRemoteId(session.id, resolvedId);
+        AppLogger.info(
+          'Auto-created session ${session.id} → $resolvedId',
+          tag: _tag,
+        );
+      }
+      return remoteId;
     } catch (e) {
       AppLogger.error(
         'Error auto-creating session ${session.id}',
@@ -168,34 +174,113 @@ class WorkoutSyncService {
     }
   }
 
-  /// Fetch the server's active session and store its ID on the local session.
-  Future<String?> _fetchActiveSessionId(int localSessionId) async {
+  /// Handle 409: complete the old active session then retry the create.
+  Future<String?> _handle409AndRetry(WorkoutSession session) async {
+    final activeResult = await _apiClient.get<Map<String, dynamic>>(
+      '${ApiConstants.workoutSessions}/active',
+    );
+    final activeData = activeResult.valueOrNull;
+    final activeSession =
+        activeData?['session'] as Map<String, dynamic>?;
+    if (activeSession == null) return null;
+
+    final oldRemoteId = activeSession['id'] as String;
+    AppLogger.info(
+      'Auto-completing stale server session $oldRemoteId before retry',
+      tag: _tag,
+    );
+
     try {
-      final result = await _apiClient.get<Map<String, dynamic>>(
-        '${ApiConstants.workoutSessions}/active',
+      await _apiClient.post(
+        '${ApiConstants.workoutSessions}/$oldRemoteId/complete',
       );
-      return result.when(
-        success: (data) async {
-          final sessionJson = data['session'] as Map<String, dynamic>?;
-          if (sessionJson == null) return null;
-          final remoteId = sessionJson['id'] as String;
-          await _db.updateWorkoutSessionRemoteId(localSessionId, remoteId);
-          AppLogger.info(
-            'Resolved existing active session $localSessionId → $remoteId',
-            tag: _tag,
-          );
-          return remoteId;
-        },
-        failure: (_) => null,
-      );
-    } catch (e) {
-      return null;
+    } catch (_) {
+      // Best-effort
     }
+
+    final retry = await _apiClient.post<Map<String, dynamic>>(
+      ApiConstants.workoutSessions,
+      data: {
+        if (session.assignedProgramRoutineId != null)
+          'assignedProgramRoutineId': session.assignedProgramRoutineId,
+      },
+    );
+
+    return retry.when(
+      success: (data) async =>
+          (data['session'] as Map<String, dynamic>)['id'] as String,
+      failure: (error) {
+        AppLogger.warning(
+          'Retry after 409 also failed: ${error.message}',
+          tag: _tag,
+        );
+        return null;
+      },
+    );
   }
 
   // ──────────────────────────────────────────────────────────
   // Session Sync
   // ──────────────────────────────────────────────────────────
+
+  /// Handle 409 for a sync-queue session create:
+  /// completes the stale server session, retries the create,
+  /// and stores the new remote ID on the local session.
+  Future<String?> _handle409AndRetryForQueue(SyncQueueData item) async {
+    final payload = jsonDecode(item.payload) as Map<String, dynamic>;
+    final aprId = payload['assignedProgramRoutineId'] as String?;
+    if (aprId == null) return null;
+
+    final activeResult = await _apiClient.get<Map<String, dynamic>>(
+      '${ApiConstants.workoutSessions}/active',
+    );
+    final activeData = activeResult.valueOrNull;
+    final activeSession =
+        activeData?['session'] as Map<String, dynamic>?;
+    if (activeSession == null) return null;
+
+    final oldRemoteId = activeSession['id'] as String;
+    AppLogger.info(
+      'Auto-completing stale server session $oldRemoteId before retry (queue item ${item.id})',
+      tag: _tag,
+    );
+
+    try {
+      await _apiClient.post(
+        '${ApiConstants.workoutSessions}/$oldRemoteId/complete',
+      );
+    } catch (_) {
+      // Best-effort
+    }
+
+    final retry = await _apiClient.post<Map<String, dynamic>>(
+      ApiConstants.workoutSessions,
+      data: {'assignedProgramRoutineId': aprId},
+    );
+
+    return retry.when(
+      success: (data) async {
+        final remoteId =
+            (data['session'] as Map<String, dynamic>)['id'] as String;
+        final localId = int.tryParse(item.recordId);
+        if (localId != null) {
+          await _db.updateWorkoutSessionRemoteId(localId, remoteId);
+        }
+        AppLogger.debug(
+          'Resolved 409 for session ${item.recordId} → $remoteId',
+          tag: _tag,
+        );
+        return remoteId;
+      },
+      failure: (error) {
+        AppLogger.warning(
+          '409 retry for session ${item.recordId} also failed: ${error.message}',
+          tag: _tag,
+        );
+        return null;
+      },
+    );
+  }
 
   /// Sync locally-created sessions that have no `remoteId`.
   Future<int> _syncPendingSessions() async {
@@ -238,12 +323,23 @@ class WorkoutSyncService {
               tag: _tag,
             );
           },
-          failure: (error) {
-            AppLogger.error(
-              'Failed to sync session ${item.recordId}: ${error.message}',
-              tag: _tag,
-            );
-            _db.incrementRetryCount(item.id);
+          failure: (error) async {
+            if (error.code == ApiErrorCode.workoutSessionAlreadyActive) {
+              // 409 — stale session on server. Complete it and retry.
+              final resolved = await _handle409AndRetryForQueue(item);
+              if (resolved != null) {
+                await _db.removeFromSyncQueue(item.id);
+                synced++;
+              } else {
+                await _db.incrementRetryCount(item.id);
+              }
+            } else {
+              AppLogger.error(
+                'Failed to sync session ${item.recordId}: ${error.message}',
+                tag: _tag,
+              );
+              await _db.incrementRetryCount(item.id);
+            }
           },
         );
       } catch (e) {

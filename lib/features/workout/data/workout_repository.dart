@@ -395,43 +395,17 @@ class WorkoutRepository {
 
         if (programRoutineId != null) {
           try {
-            final serverResult = await _apiClient.post<Map<String, dynamic>>(
-              ApiConstants.workoutSessions,
-              data: {'assignedProgramRoutineId': programRoutineId},
+            final sessionData = await _resolveServerSession(
+              assignedProgramRoutineId: programRoutineId,
             );
-            await serverResult.when(
-              success: (data) async {
-                final sessionJson = data['session'] as Map<String, dynamic>;
-                final remoteId = sessionJson['id'] as String;
-                await _db.updateWorkoutSessionRemoteId(session.id, remoteId);
-                AppLogger.info(
-                  'Eagerly synced resumed session ${session.id} → $remoteId',
-                  tag: 'WorkoutRepo',
-                );
-              },
-              failure: (error) async {
-                if (error.code == ApiErrorCode.workoutSessionAlreadyActive) {
-                  final activeResult = await _apiClient
-                      .get<Map<String, dynamic>>(
-                        '${ApiConstants.workoutSessions}/active',
-                      );
-                  final activeData = activeResult.valueOrNull;
-                  final activeSession =
-                      activeData?['session'] as Map<String, dynamic>?;
-                  if (activeSession != null) {
-                    final remoteId = activeSession['id'] as String;
-                    await _db.updateWorkoutSessionRemoteId(
-                      session.id,
-                      remoteId,
-                    );
-                    AppLogger.info(
-                      'Resolved active session on resume ${session.id} → $remoteId',
-                      tag: 'WorkoutRepo',
-                    );
-                  }
-                }
-              },
-            );
+            if (sessionData != null) {
+              final remoteId = sessionData['id'] as String;
+              await _db.updateWorkoutSessionRemoteId(session.id, remoteId);
+              AppLogger.info(
+                'Eagerly synced resumed session ${session.id} → $remoteId',
+                tag: 'WorkoutRepo',
+              );
+            }
           } catch (_) {
             // Best-effort — sync queue will handle it eventually
           }
@@ -631,47 +605,23 @@ class WorkoutRepository {
       bool syncedEagerly = false;
       if (routineModelId != null) {
         try {
-          final serverResult = await _apiClient.post<Map<String, dynamic>>(
-            ApiConstants.workoutSessions,
-            data: {'assignedProgramRoutineId': routineModelId},
+          final sessionData = await _resolveServerSession(
+            assignedProgramRoutineId: routineModelId,
           );
-          await serverResult.when(
-            success: (data) async {
-              final sessionJson = data['session'] as Map<String, dynamic>;
-              final remoteId = sessionJson['id'] as String;
-              await _db.updateWorkoutSessionRemoteId(sessionId, remoteId);
-              syncedEagerly = true;
-              AppLogger.info(
-                'Eagerly synced session $sessionId → $remoteId',
-                tag: 'WorkoutRepo',
-              );
-            },
-            failure: (error) async {
-              // 409 — server already has an active session; fetch its ID
-              if (error.code == ApiErrorCode.workoutSessionAlreadyActive) {
-                final activeResult = await _apiClient.get<Map<String, dynamic>>(
-                  '${ApiConstants.workoutSessions}/active',
-                );
-                final activeData = activeResult.valueOrNull;
-                final activeSession =
-                    activeData?['session'] as Map<String, dynamic>?;
-                if (activeSession != null) {
-                  final remoteId = activeSession['id'] as String;
-                  await _db.updateWorkoutSessionRemoteId(sessionId, remoteId);
-                  syncedEagerly = true;
-                  AppLogger.info(
-                    'Resolved existing active session $sessionId → $remoteId',
-                    tag: 'WorkoutRepo',
-                  );
-                }
-              } else {
-                AppLogger.warning(
-                  'Eager session sync failed, will retry via queue: ${error.message}',
-                  tag: 'WorkoutRepo',
-                );
-              }
-            },
-          );
+          if (sessionData != null) {
+            final remoteId = sessionData['id'] as String;
+            await _db.updateWorkoutSessionRemoteId(sessionId, remoteId);
+            syncedEagerly = true;
+            AppLogger.info(
+              'Eagerly synced session $sessionId → $remoteId',
+              tag: 'WorkoutRepo',
+            );
+          } else {
+            AppLogger.warning(
+              'Eager session sync failed, will retry via queue',
+              tag: 'WorkoutRepo',
+            );
+          }
         } catch (e) {
           AppLogger.warning(
             'Eager session sync threw, will retry via queue: $e',
@@ -1035,17 +985,113 @@ class WorkoutRepository {
     }
   }
 
+  /// Resolve a server-side workout session for the given program routine.
+  ///
+  /// Attempts `POST /workout/sessions` to create a new session. On 409
+  /// (active session already exists), the old session is **completed** on
+  /// the server and the create is retried so the caller always receives a
+  /// unique, fresh `remoteId` — never a duplicate of another local session.
+  ///
+  /// Returns the server session JSON on success, or `null` on failure.
+  Future<Map<String, dynamic>?> _resolveServerSession({
+    required String assignedProgramRoutineId,
+  }) async {
+    Map<String, dynamic>? created;
+
+    final firstAttempt = await _apiClient.post<Map<String, dynamic>>(
+      ApiConstants.workoutSessions,
+      data: {'assignedProgramRoutineId': assignedProgramRoutineId},
+    );
+
+    await firstAttempt.when(
+      success: (data) async {
+        created = data['session'] as Map<String, dynamic>;
+      },
+      failure: (error) async {
+        if (error.code != ApiErrorCode.workoutSessionAlreadyActive) {
+          AppLogger.warning(
+            'Failed to resolve server session: ${error.message}',
+            tag: 'WorkoutRepo',
+          );
+          return;
+        }
+
+        // 409 — an old session is still active on the server.
+        // Complete it so we can create a fresh one.
+        final active = await _apiClient.get<Map<String, dynamic>>(
+          '${ApiConstants.workoutSessions}/active',
+        );
+        final activeData = active.valueOrNull;
+        final activeSession =
+            activeData?['session'] as Map<String, dynamic>?;
+        if (activeSession == null) {
+          AppLogger.warning(
+            '409 from server but no active session found',
+            tag: 'WorkoutRepo',
+          );
+          return;
+        }
+
+        final oldRemoteId = activeSession['id'] as String;
+        AppLogger.info(
+          'Auto-completing stale server session $oldRemoteId before retry',
+          tag: 'WorkoutRepo',
+        );
+
+        try {
+          await _apiClient.post(
+            '${ApiConstants.workoutSessions}/$oldRemoteId/complete',
+          );
+        } catch (_) {
+          // Best-effort — the server may allow a new create regardless.
+        }
+
+        // Retry the create now that the old session is closed.
+        final secondAttempt = await _apiClient.post<Map<String, dynamic>>(
+          ApiConstants.workoutSessions,
+          data: {'assignedProgramRoutineId': assignedProgramRoutineId},
+        );
+        await secondAttempt.when(
+          success: (data) async {
+            created = data['session'] as Map<String, dynamic>;
+          },
+          failure: (retryError) {
+            AppLogger.warning(
+              'Session create retry after 409 also failed: ${retryError.message}',
+              tag: 'WorkoutRepo',
+            );
+          },
+        );
+      },
+    );
+
+    return created;
+  }
+
   /// Ensure a local session exists on the server and return its remote ID.
   ///
-  /// Creates the session if absent; resolves the existing active session on 409.
-  /// Returns `null` if the request fails for any other reason.
+  /// Uses [_resolveServerSession] to get a unique remote ID. Falls back to
+  /// resolving an existing active session (without completing it) only when
+  /// the session has no `assignedProgramRoutineId`.
+  ///
+  /// Returns `null` if the request fails for any reason.
   Future<String?> _syncSessionToServer(WorkoutSession session) async {
+    if (session.assignedProgramRoutineId != null) {
+      final created = await _resolveServerSession(
+        assignedProgramRoutineId: session.assignedProgramRoutineId!,
+      );
+      if (created != null) {
+        final remoteId = created['id'] as String;
+        await _db.updateWorkoutSessionRemoteId(session.id, remoteId);
+        return remoteId;
+      }
+      return null;
+    }
+
+    // Legacy session without routine ID — cannot auto-complete on 409.
     final result = await _apiClient.post<Map<String, dynamic>>(
       ApiConstants.workoutSessions,
-      data: {
-        if (session.assignedProgramRoutineId != null)
-          'assignedProgramRoutineId': session.assignedProgramRoutineId,
-      },
+      data: {},
     );
     return result.when(
       success: (data) async {
@@ -1054,23 +1100,7 @@ class WorkoutRepository {
         await _db.updateWorkoutSessionRemoteId(session.id, remoteId);
         return remoteId;
       },
-      failure: (error) async {
-        if (error.code == ApiErrorCode.workoutSessionAlreadyActive) {
-          final active = await _apiClient.get<Map<String, dynamic>>(
-            '${ApiConstants.workoutSessions}/active',
-          );
-          return active.when(
-            success: (d) async {
-              final remoteId =
-                  (d['session'] as Map<String, dynamic>)['id'] as String;
-              await _db.updateWorkoutSessionRemoteId(session.id, remoteId);
-              return remoteId;
-            },
-            failure: (_) => null,
-          );
-        }
-        return null;
-      },
+      failure: (_) => null,
     );
   }
 
