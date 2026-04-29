@@ -9,6 +9,7 @@ import '../../../core/utils/app_error.dart';
 import '../../../core/utils/logger.dart';
 import '../../../core/utils/result.dart';
 import '../../../services/api/api_client.dart';
+import '../../../services/connectivity/connectivity_service.dart';
 import '../../../services/database/app_database.dart';
 import 'models/models.dart';
 import '../../home/data/models/today_status_model.dart';
@@ -28,11 +29,14 @@ class WorkoutRepository {
   WorkoutRepository({
     required AppDatabase database,
     required ApiClient apiClient,
+    required ConnectivityService connectivity,
   }) : _db = database,
-       _apiClient = apiClient;
+       _apiClient = apiClient,
+       _connectivity = connectivity;
 
   final AppDatabase _db;
   final ApiClient _apiClient;
+  final ConnectivityService _connectivity;
 
   // ============== Exercise Operations ==============
 
@@ -935,26 +939,74 @@ class WorkoutRepository {
         targetWeightKg: targetWeightKg,
       );
 
-      // Add to sync queue
-      await _db.addToSyncQueue(
-        SyncQueueCompanion.insert(
-          entityTable: 'performed_sets',
-          recordId: setId.toString(),
-          operation: 'create',
-          payload: jsonEncode({
-            'workoutSessionId': workoutSessionId,
-            'assignedProgramRoutineExerciseId': routineExerciseModelId,
-            'setNumber': setNumber,
-            'repsCompleted': repsCompleted,
-            'weightKg': weightKg,
-            'rpe': rpe,
-            'notes': notes,
-            if (recordedFramesKey != null)
-              'recordedFramesKey': recordedFramesKey,
-            if (overallScore != null) 'overallScore': overallScore,
-          }),
-        ),
-      );
+      // Online fast-path: sync directly to server, skip the queue.
+      // Falls back to the SyncQueue outbox if offline or the request fails.
+      var syncedToServer = false;
+      if (await _connectivity.isConnected()) {
+        final session = await _db.getWorkoutSessionById(workoutSessionId);
+        String? remoteSessionId = session?.remoteId;
+
+        if (remoteSessionId == null && session != null) {
+          remoteSessionId = await _syncSessionToServer(session);
+        }
+
+        if (remoteSessionId != null) {
+          final syncResult = await batchSyncSets(sets: [
+            {
+              'localId': setId.toString(),
+              'workoutSessionId': remoteSessionId,
+              'assignedProgramRoutineExerciseId': routineExerciseModelId,
+              'set_number': setNumber,
+              'reps': repsCompleted,
+              'weight': weightKg ?? 0,
+              'overallScore': overallScore != null
+                  ? (overallScore * 100).round()
+                  : 0,
+              'completedAt': DateTime.now().toUtc().toIso8601String(),
+              if (recordedFramesKey != null)
+                'recordedFramesKey': recordedFramesKey,
+            },
+          ]);
+
+          String? serverId;
+          syncResult.when(
+            success: (batch) {
+              final r = batch.results.isNotEmpty ? batch.results.first : null;
+              if (r != null && r.success && r.serverId != null) {
+                serverId = r.serverId;
+              }
+            },
+            failure: (_) {},
+          );
+          if (serverId != null) {
+            await _db.updatePerformedSetRemoteId(setId, serverId!);
+            syncedToServer = true;
+          }
+        }
+      }
+
+      if (!syncedToServer) {
+        await _db.addToSyncQueue(
+          SyncQueueCompanion.insert(
+            entityTable: 'performed_sets',
+            recordId: setId.toString(),
+            operation: 'create',
+            payload: jsonEncode({
+              'workoutSessionId': workoutSessionId,
+              'assignedProgramRoutineExerciseId': routineExerciseModelId,
+              'setNumber': setNumber,
+              'repsCompleted': repsCompleted,
+              'weightKg': weightKg,
+              'rpe': rpe,
+              'notes': notes,
+              'completedAt': DateTime.now().toUtc().toIso8601String(),
+              if (recordedFramesKey != null)
+                'recordedFramesKey': recordedFramesKey,
+              if (overallScore != null) 'overallScore': overallScore,
+            }),
+          ),
+        );
+      }
 
       return Success(
         PerformedSetModel(
@@ -981,6 +1033,45 @@ class WorkoutRepository {
       AppLogger.error('Failed to log set', tag: 'WorkoutRepo', error: e);
       return Failure(DatabaseError(message: 'Failed to log set: $e'));
     }
+  }
+
+  /// Ensure a local session exists on the server and return its remote ID.
+  ///
+  /// Creates the session if absent; resolves the existing active session on 409.
+  /// Returns `null` if the request fails for any other reason.
+  Future<String?> _syncSessionToServer(WorkoutSession session) async {
+    final result = await _apiClient.post<Map<String, dynamic>>(
+      ApiConstants.workoutSessions,
+      data: {
+        if (session.assignedProgramRoutineId != null)
+          'assignedProgramRoutineId': session.assignedProgramRoutineId,
+      },
+    );
+    return result.when(
+      success: (data) async {
+        final remoteId =
+            (data['session'] as Map<String, dynamic>)['id'] as String;
+        await _db.updateWorkoutSessionRemoteId(session.id, remoteId);
+        return remoteId;
+      },
+      failure: (error) async {
+        if (error.code == ApiErrorCode.workoutSessionAlreadyActive) {
+          final active = await _apiClient.get<Map<String, dynamic>>(
+            '${ApiConstants.workoutSessions}/active',
+          );
+          return active.when(
+            success: (d) async {
+              final remoteId =
+                  (d['session'] as Map<String, dynamic>)['id'] as String;
+              await _db.updateWorkoutSessionRemoteId(session.id, remoteId);
+              return remoteId;
+            },
+            failure: (_) => null,
+          );
+        }
+        return null;
+      },
+    );
   }
 
   /// Update an existing set
@@ -2051,6 +2142,7 @@ WorkoutRepository workoutRepository(Ref ref) {
   return WorkoutRepository(
     database: ref.watch(appDatabaseProvider),
     apiClient: ref.watch(apiClientProvider),
+    connectivity: ref.watch(connectivityServiceProvider),
   );
 }
 

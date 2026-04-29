@@ -323,16 +323,16 @@ class WorkoutSyncService {
           'localId': item.recordId,
           'workoutSessionId': remoteSessionId,
           'assignedProgramRoutineExerciseId': apreId,
-          'setNumber': payload['setNumber'],
-          'repsCompleted': payload['repsCompleted'],
-          if (payload['weightKg'] != null) 'weightKg': payload['weightKg'],
-          if (payload['rpe'] != null) 'rpe': payload['rpe'],
-          if (payload['notes'] != null) 'notes': payload['notes'],
+          'set_number': payload['setNumber'],
+          'reps': payload['repsCompleted'],
+          'weight': (payload['weightKg'] as num?)?.toDouble() ?? 0,
+          'overallScore': payload['overallScore'] != null
+              ? ((payload['overallScore'] as num).toDouble() * 100).round()
+              : 0,
+          'completedAt': (payload['completedAt'] as String?) ??
+              DateTime.now().toUtc().toIso8601String(),
           if (payload['recordedFramesKey'] != null)
             'recordedFramesKey': payload['recordedFramesKey'],
-          if (payload['overallScore'] != null)
-            'overallScore': ((payload['overallScore'] as num).toDouble() * 100)
-                .round(),
         });
       } catch (e) {
         AppLogger.error(
