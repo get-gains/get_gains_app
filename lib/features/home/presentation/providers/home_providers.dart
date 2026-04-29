@@ -42,6 +42,11 @@ enum HomeStatus {
   /// User has a coach but no active subscription → show upgrade CTA.
   noSubscription,
 
+  /// User had a coach + active subscription that has since expired,
+  /// AND the coach had already assigned a routine for today.
+  /// Show the routine card (read-only) + a "Renew" banner.
+  lapsedSubscription,
+
   /// User has a coach but no active program → show "Waiting for program".
   waitingForProgram,
 
@@ -56,17 +61,26 @@ enum HomeStatus {
 ///
 /// No 403 catching. All status information comes from the unified today response.
 ///
-/// Free / non-subscribed users fall back to standalone routine status so they
-/// see today's self-program on the hero card instead of always getting a CTA.
+/// Priority for non-subscribed users:
+///   1. Lapsed subscriber with coach today → [HomeStatus.lapsedSubscription]
+///   2. Any standalone program today → [HomeStatus.restDay] / [HomeStatus.hasRoutine]
+///   3. Everything else → existing CTAs
 @riverpod
 Future<HomeStatus> homeStatus(Ref ref) async {
   final s = await ref.watch(todayStatusProvider.future);
 
-  // Free / non-subscribed: prefer standalone routine over coach CTAs.
+  // Non-subscribed path
   if (!s.isSubscribed) {
+    // Lapsed subscriber: has a coach but subscription expired.
+    // The server may not populate coachToday for lapsed users (subscription-gated),
+    // so we check hasCoach alone — a user with a coach who isn't subscribed is
+    // always lapsed, never "noSubscription" (AccessGated paywall).
+    if (s.hasCoach) {
+      return HomeStatus.lapsedSubscription;
+    }
+    // Pure free user with no coach — fall back to standalone program.
     if (s.standaloneToday == null) {
-      // No self-program yet → keep existing CTAs (find coach / upgrade).
-      return s.hasCoach ? HomeStatus.noSubscription : HomeStatus.noCoach;
+      return HomeStatus.noCoach;
     }
     return s.standaloneToday!.isRestDay
         ? HomeStatus.restDay
