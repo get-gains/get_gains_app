@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text_styles.dart';
 import '../../../guidance/guidance.dart';
 
 /// Set Input Row
@@ -46,17 +47,24 @@ class SetInputRow extends StatelessWidget {
         : AppColors.primaryLight;
 
     Color backgroundColor;
-    Color borderColor;
+    Border border;
 
     if (isCompleted) {
-      backgroundColor = AppColors.success.withValues(alpha: 0.1);
-      borderColor = AppColors.success.withValues(alpha: 0.3);
+      backgroundColor = AppColors.success.withValues(alpha: 0.08);
+      border = Border(
+        left: BorderSide(
+          color: AppColors.success.withValues(alpha: 0.7),
+          width: 3,
+        ),
+      );
     } else if (isActive) {
       backgroundColor = primaryColor.withValues(alpha: 0.1);
-      borderColor = primaryColor;
+      border = Border.all(color: primaryColor, width: 2);
     } else {
       backgroundColor = isDark ? AppColors.surfaceDark : AppColors.surfaceLight;
-      borderColor = isDark ? AppColors.borderDark : AppColors.borderLight;
+      border = Border.all(
+        color: isDark ? AppColors.borderDark : AppColors.borderLight,
+      );
     }
 
     return GestureDetector(
@@ -67,7 +75,7 @@ class SetInputRow extends StatelessWidget {
         decoration: BoxDecoration(
           color: backgroundColor,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderColor, width: isActive ? 2 : 1),
+          border: border,
         ),
         child: Row(
           children: [
@@ -448,7 +456,7 @@ class _NumberInput extends StatelessWidget {
                   child: Text(
                     decimals ? value.toStringAsFixed(0) : value.toString(),
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    style: AppTextStyles.numericDisplaySmall.copyWith(
                       fontWeight: FontWeight.bold,
                       color: enabled
                           ? null

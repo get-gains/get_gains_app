@@ -35,7 +35,6 @@ class TodayHeroBlock extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final homeStatusAsync = ref.watch(homeStatusProvider);
-    final subscriptionTier = ref.watch(subscriptionTierProvider);
 
     Widget content = homeStatusAsync.when(
       data: (status) {
@@ -61,10 +60,10 @@ class TodayHeroBlock extends ConsumerWidget {
             return _WaitingForProgramCard(isDark: isDark);
 
           case HomeStatus.restDay:
-            return _buildTodayCard(context, ref, isDark, subscriptionTier);
+            return _buildTodayCard(context, ref, isDark);
 
           case HomeStatus.hasRoutine:
-            return _buildTodayCard(context, ref, isDark, subscriptionTier);
+            return _buildTodayCard(context, ref, isDark);
         }
       },
       loading: () => _buildSkeleton(isDark),
@@ -85,12 +84,13 @@ class TodayHeroBlock extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     bool isDark,
-    SubscriptionTier subscriptionTier,
   ) {
     final todayAsync = ref.watch(activeTodayProvider);
+    final subscriptionTier = ref.watch(subscriptionTierProvider);
 
     return todayAsync.when(
       data: (today) {
+        // Rest day — show card but no CTA (hide button entirely).
         if (today.isRestDay) {
           return WorkoutSummaryCard(
             routineName: 'Rest Day',
@@ -99,13 +99,7 @@ class TodayHeroBlock extends ConsumerWidget {
             exerciseCount: 0,
             estimatedMinutes: 0,
             isPlaceholder: true,
-            onStartPressed: () {
-              if (isCoach || subscriptionTier != SubscriptionTier.free) {
-                context.push(AppRoutes.myProgram);
-              } else {
-                context.push(AppRoutes.selfPrograms);
-              }
-            },
+            // onStartPressed intentionally null → no button rendered.
           );
         }
         if (today.hasRoutine) {
@@ -121,11 +115,13 @@ class TodayHeroBlock extends ConsumerWidget {
             onStartPressed: today.completedToday
                 ? null
                 : () {
-                    if (isCoach || subscriptionTier != SubscriptionTier.free) {
-                      context.push(AppRoutes.myProgram);
-                    } else {
-                      context.push(AppRoutes.selfPrograms);
-                    }
+                    context.push(
+                      AppRoutes.routineDetail.replaceFirst(
+                        ':id',
+                        details.routine.id,
+                      ),
+                      extra: details.routine,
+                    );
                   },
           );
         }
