@@ -31,9 +31,9 @@ class LaunchDock extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
             'Quick Launch',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
         ),
         const SizedBox(height: 10),
@@ -44,10 +44,7 @@ class LaunchDock extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: items.length,
             separatorBuilder: (_, __) => const SizedBox(width: 10),
-            itemBuilder: (_, i) => _LaunchPill(
-              item: items[i],
-              isDark: isDark,
-            ),
+            itemBuilder: (_, i) => _LaunchPill(item: items[i], isDark: isDark),
           ),
         ),
       ],
@@ -123,7 +120,7 @@ class _LaunchPill extends StatelessWidget {
       onTap: item.onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        width: 112,
+        width: 150,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
           color: isDark ? AppColors.surface2Dark : AppColors.surface2Light,
@@ -141,9 +138,9 @@ class _LaunchPill extends StatelessWidget {
               child: Text(
                 item.label,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
             ),
           ],
