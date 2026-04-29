@@ -56,17 +56,22 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
     }
   }
 
-  Future<void> _loadRoutine() async {
+  void _loadRoutine() {
     final repo = ref.read(workoutRepositoryProvider);
-    // Ensure program cache is hydrated so APRE CUID lookup succeeds.
-    // Mirrors the pattern in workout_session_provider._checkActiveSession().
-    final cached = await repo.getPrograms();
-    if (cached.valueOrNull?.isEmpty ?? true) {
-      await repo.syncPrograms();
-    }
-    _routineFuture = repo
-        .getRoutineByModelId(widget.routineId)
-        .then((result) => result.valueOrNull);
+    _routineFuture = _doLoadRoutine(repo);
+  }
+
+  Future<RoutineModel?> _doLoadRoutine(WorkoutRepository repo) async {
+    // Try local cache first.
+    final firstAttempt = await repo.getRoutineByModelId(widget.routineId);
+    if (firstAttempt.valueOrNull != null) return firstAttempt.valueOrNull;
+
+    // Not found in cache — refresh programs from server and retry.
+    // An empty cache check is insufficient because old cached programs
+    // from a prior session won't contain a newly-assigned program.
+    await repo.syncPrograms();
+    final retry = await repo.getRoutineByModelId(widget.routineId);
+    return retry.valueOrNull;
   }
 
   Future<void> _startWorkout(RoutineModel routine, {int startIndex = 0}) async {
