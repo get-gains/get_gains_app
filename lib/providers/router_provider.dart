@@ -31,6 +31,7 @@ import '../features/programs/screens/calendar_screen.dart';
 import '../features/programs/screens/create_program_screen.dart';
 import '../features/self_program/presentation/screens/self_program_builder_screen.dart';
 import '../features/self_program/presentation/screens/self_program_list_screen.dart';
+import '../features/exercises/presentation/screens/create_exercise_screen.dart' as shared_exercises;
 
 import 'deep_link_provider.dart';
 
@@ -72,6 +73,9 @@ class AppRoutes {
   // Self Program routes (free tier)
   static const String selfPrograms = '/self-programs';
   static const String selfProgramBuilder = '/self-programs/builder';
+
+  // Shared exercise creation (available to all authenticated users)
+  static const String exerciseCreate = '/exercises/create';
 
   // Coach Hub
   static const String coachHub = '/coach/hub';
@@ -335,6 +339,11 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: AppRoutes.selfPrograms,
         builder: (context, state) => const SelfProgramListScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.exerciseCreate,
+        builder: (context, state) =>
+            const shared_exercises.CreateExerciseScreen(),
       ),
       GoRoute(
         path: AppRoutes.selfProgramBuilder,

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 
+import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../coach_pose/presentation/providers/exercise_list_provider.dart';
 import '../../../workout/data/models/exercise_model.dart';
@@ -107,6 +108,11 @@ class _SelfAddExerciseSheetState extends ConsumerState<_SelfAddExerciseSheet> {
 
     return Column(
       children: [
+        // Create Custom Exercise affordance
+        _CreateCustomExerciseTile(
+          isDark: isDark,
+          onTap: _onCreateCustomExercise,
+        ),
         // Search bar
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -278,6 +284,15 @@ class _SelfAddExerciseSheetState extends ConsumerState<_SelfAddExerciseSheet> {
     );
   }
 
+  Future<void> _onCreateCustomExercise() async {
+    final created = await context.push<ExerciseModel>(AppRoutes.exerciseCreate);
+    if (created == null || !mounted) return;
+    // Refresh library so the new exercise is visible in the list.
+    ref.invalidate(exerciseListProvider);
+    // Auto-select the new exercise → jump straight to prescription form.
+    setState(() => _selectedExercise = created);
+  }
+
   Future<void> _saveExercise() async {
     if (_selectedExercise == null) return;
 
@@ -393,6 +408,75 @@ class _FilterChipItem extends StatelessWidget {
         onSelected: (_) => onTap(),
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+}
+
+/// Prominent tile at the top of the exercise picker that lets the user jump
+/// to the exercise-creation flow.
+class _CreateCustomExerciseTile extends StatelessWidget {
+  const _CreateCustomExerciseTile({
+    required this.isDark,
+    required this.onTap,
+  });
+
+  final bool isDark;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = isDark ? AppColors.primaryDark : AppColors.primaryLight;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: accent.withValues(alpha: 0.4)),
+              color: accent.withValues(alpha: 0.06),
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: accent.withValues(alpha: 0.15),
+                  child: Icon(Icons.add, size: 18, color: accent),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Create Custom Exercise',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: accent,
+                        ),
+                      ),
+                      Text(
+                        "Add a movement that's not in the library",
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isDark
+                              ? AppColors.mutedForegroundDark
+                              : AppColors.mutedForegroundLight,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right, color: accent, size: 20),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

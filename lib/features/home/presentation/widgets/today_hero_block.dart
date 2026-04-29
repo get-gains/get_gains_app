@@ -58,20 +58,10 @@ class TodayHeroBlock extends ConsumerWidget {
             return _WaitingForProgramCard(isDark: isDark);
 
           case HomeStatus.restDay:
-            return _buildTodayCard(
-              context,
-              ref,
-              isDark,
-              subscriptionTier,
-            );
+            return _buildTodayCard(context, ref, isDark, subscriptionTier);
 
           case HomeStatus.hasRoutine:
-            return _buildTodayCard(
-              context,
-              ref,
-              isDark,
-              subscriptionTier,
-            );
+            return _buildTodayCard(context, ref, isDark, subscriptionTier);
         }
       },
       loading: () => _buildSkeleton(isDark),
@@ -101,11 +91,18 @@ class TodayHeroBlock extends ConsumerWidget {
         if (today.isRestDay) {
           return WorkoutSummaryCard(
             routineName: 'Rest Day',
-            description: 'No routine scheduled today. Recovery is part of the process!',
+            description:
+                'No routine scheduled today. Recovery is part of the process!',
             exerciseCount: 0,
             estimatedMinutes: 0,
             isPlaceholder: true,
-            onStartPressed: () => context.push(AppRoutes.myProgram),
+            onStartPressed: () {
+              if (isCoach || subscriptionTier != SubscriptionTier.free) {
+                context.push(AppRoutes.myProgram);
+              } else {
+                context.push(AppRoutes.selfPrograms);
+              }
+            },
           );
         }
         if (today.hasRoutine) {
@@ -199,10 +196,7 @@ class _StartProgramCta extends StatelessWidget {
                 const Expanded(
                   child: Text(
                     'Start a Program',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                 ),
               ],
@@ -328,10 +322,7 @@ class _WaitingForProgramCard extends StatelessWidget {
                 children: [
                   const Text(
                     'Waiting for Program',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                   ),
                   const SizedBox(height: 4),
                   Text(

@@ -55,11 +55,26 @@ enum HomeStatus {
 /// Derives [HomeStatus] from [todayStatusProvider].
 ///
 /// No 403 catching. All status information comes from the unified today response.
+///
+/// Free / non-subscribed users fall back to standalone routine status so they
+/// see today's self-program on the hero card instead of always getting a CTA.
 @riverpod
 Future<HomeStatus> homeStatus(Ref ref) async {
   final s = await ref.watch(todayStatusProvider.future);
+
+  // Free / non-subscribed: prefer standalone routine over coach CTAs.
+  if (!s.isSubscribed) {
+    if (s.standaloneToday == null) {
+      // No self-program yet → keep existing CTAs (find coach / upgrade).
+      return s.hasCoach ? HomeStatus.noSubscription : HomeStatus.noCoach;
+    }
+    return s.standaloneToday!.isRestDay
+        ? HomeStatus.restDay
+        : HomeStatus.hasRoutine;
+  }
+
+  // Subscribed path unchanged — coach program wins.
   if (!s.hasCoach) return HomeStatus.noCoach;
-  if (!s.isSubscribed) return HomeStatus.noSubscription;
   if (s.coachToday == null) return HomeStatus.waitingForProgram;
   if (s.coachToday!.isRestDay) return HomeStatus.restDay;
   return HomeStatus.hasRoutine;
