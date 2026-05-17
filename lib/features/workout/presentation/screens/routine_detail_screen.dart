@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text_styles.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../client_pose/data/client_pose_repository.dart';
@@ -45,7 +46,10 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.routine != null) {
+    // Only short-circuit if the passed routine already has exercises populated.
+    // The today endpoint returns a skeleton RoutineModel with exercises: [] so
+    // we must still fetch from the local cache in that case.
+    if (widget.routine != null && widget.routine!.exercises.isNotEmpty) {
       _routineFuture = Future.value(widget.routine);
     } else {
       _loadRoutine();
@@ -54,9 +58,20 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
 
   void _loadRoutine() {
     final repo = ref.read(workoutRepositoryProvider);
-    _routineFuture = repo
-        .getRoutineByModelId(widget.routineId)
-        .then((result) => result.valueOrNull);
+    _routineFuture = _doLoadRoutine(repo);
+  }
+
+  Future<RoutineModel?> _doLoadRoutine(WorkoutRepository repo) async {
+    // Try local cache first.
+    final firstAttempt = await repo.getRoutineByModelId(widget.routineId);
+    if (firstAttempt.valueOrNull != null) return firstAttempt.valueOrNull;
+
+    // Not found in cache — refresh programs from server and retry.
+    // An empty cache check is insufficient because old cached programs
+    // from a prior session won't contain a newly-assigned program.
+    await repo.syncPrograms();
+    final retry = await repo.getRoutineByModelId(widget.routineId);
+    return retry.valueOrNull;
   }
 
   Future<void> _startWorkout(RoutineModel routine, {int startIndex = 0}) async {
@@ -127,59 +142,125 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      backgroundColor: AppColors.surface2Dark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
+        final sheetBg = isDark ? AppColors.surface2Dark : AppColors.surfaceLight;
         return SafeArea(
           child: FractionallySizedBox(
             heightFactor: 0.75,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Header
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                  child: Text(
-                    'Start From Exercise',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Start From Exercise',
+                        style: AppTextStyles.titleLarge.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: isDark
+                              ? AppColors.foregroundDark
+                              : AppColors.foregroundLight,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Pick the exercise you want to start with',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: isDark
+                              ? AppColors.mutedForegroundDark
+                              : AppColors.mutedForegroundLight,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const Divider(height: 1),
+                // Exercise list
                 Expanded(
                   child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     itemCount: routine.exercises.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final routineExercise = routine.exercises[index];
                       final exerciseName =
                           routineExercise.exercise?.name ??
                           'Exercise ${index + 1}';
+                      final prescription =
+                          '${routineExercise.sets} × '
+                          '${routineExercise.repsMin}–${routineExercise.repsMax} reps'
+                          '${routineExercise.restSeconds > 0 ? ' · ${routineExercise.restSeconds}s rest' : ''}';
 
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 6,
-                        ),
-                        leading: CircleAvatar(
-                          radius: 16,
-                          backgroundColor: isDark
-                              ? AppColors.primaryDark.withValues(alpha: 0.2)
-                              : AppColors.primaryLight.withValues(alpha: 0.12),
-                          child: Text(
-                            '${index + 1}',
-                            style: TextStyle(
-                              color: isDark
-                                  ? AppColors.primaryDark
-                                  : AppColors.primaryLight,
-                              fontWeight: FontWeight.w700,
-                            ),
+                      return AppCard.flat(
+                        onTap: () => Navigator.of(context).pop(index),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              // Numbered tile
+                              Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryDark.withValues(
+                                    alpha: 0.15,
+                                  ),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '${index + 1}',
+                                    style: AppTextStyles.numericBody.copyWith(
+                                      color: AppColors.primaryDark,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              // Name + prescription
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      exerciseName,
+                                      style: AppTextStyles.titleSmall.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark
+                                            ? AppColors.foregroundDark
+                                            : AppColors.foregroundLight,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      prescription,
+                                      style: AppTextStyles.numericBody.copyWith(
+                                        color: isDark
+                                            ? AppColors.mutedForegroundDark
+                                            : AppColors.mutedForegroundLight,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.chevron_right,
+                                color: isDark
+                                    ? AppColors.mutedForegroundDark
+                                    : AppColors.mutedForegroundLight,
+                              ),
+                            ],
                           ),
                         ),
-                        title: Text(exerciseName),
-                        subtitle: Text(
-                          '${routineExercise.sets} sets x ${routineExercise.repsMin}-${routineExercise.repsMax} reps',
-                        ),
-                        onTap: () => Navigator.of(context).pop(index),
                       );
                     },
                   ),
@@ -265,58 +346,66 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
             bottomNavigationBar: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isCompletedToday) ...[
-                      Container(
-                        width: double.infinity,
-                        height: 44,
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: AppColors.success.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: AppColors.success.withValues(alpha: 0.45),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.check_circle,
-                              size: 18,
-                              color: AppColors.success,
+                child: AppCard.flat(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isCompletedToday) ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 16,
                             ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Workout Complete',
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: AppColors.success.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: AppColors.success.withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.check_circle,
+                                  size: 18,
+                                  color: AppColors.success,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Workout Complete',
+                                  style: AppTextStyles.labelLarge.copyWith(
                                     color: AppColors.success,
                                     fontWeight: FontWeight.w700,
                                   ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
+                        ],
+                        _StartWorkoutButton(
+                          key: _startWorkoutKey,
+                          routine: routine,
+                          onStart: () => _pickStartExerciseAndWorkout(routine),
                         ),
-                      ),
-                    ],
-                    _StartWorkoutButton(
-                      key: _startWorkoutKey,
-                      routine: routine,
-                      onStart: () => _pickStartExerciseAndWorkout(routine),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
             body: CustomScrollView(
               slivers: [
-                // App Bar
+                // App Bar — vibrant gradient hero
                 SliverAppBar(
-                  expandedHeight: 140,
+                  expandedHeight: 200,
                   pinned: true,
+                  backgroundColor: AppColors.primaryDark,
+                  foregroundColor: Colors.white,
                   actions: [
                     InfoIconButton(
                       content: kRoutineDetailHelp,
@@ -331,25 +420,10 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
                     ),
                   ],
                   flexibleSpace: FlexibleSpaceBar(
-                    title: Text(
-                      routine.name,
-                      style: const TextStyle(fontSize: 18),
-                    ),
-                    background: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            isDark
-                                ? AppColors.primaryDark
-                                : AppColors.primaryLight,
-                            isDark
-                                ? AppColors.primaryDark.withValues(alpha: 0.7)
-                                : AppColors.primaryLight.withValues(alpha: 0.7),
-                          ],
-                        ),
-                      ),
+                    collapseMode: CollapseMode.pin,
+                    background: _RoutineHeroHeader(
+                      routine: routine,
+                      isDark: isDark,
                     ),
                   ),
                 ),
@@ -357,7 +431,7 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
                 // Routine Info
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -372,47 +446,6 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
                                       : AppColors.textSecondaryLight,
                                 ),
                           ),
-                          const SizedBox(height: 12),
-                        ],
-
-                        // Stats row
-                        Row(
-                          children: [
-                            _StatChip(
-                              icon: Icons.fitness_center,
-                              label: '${routine.totalExercises} exercises',
-                              isDark: isDark,
-                            ),
-                            const SizedBox(width: 12),
-                            _StatChip(
-                              icon: Icons.repeat,
-                              label: '${routine.totalSets} sets',
-                              isDark: isDark,
-                            ),
-                            const SizedBox(width: 12),
-                            _StatChip(
-                              icon: Icons.timer_outlined,
-                              label: '${routine.estimatedDurationMinutes} min',
-                              isDark: isDark,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Muscle groups
-                        if (routine.muscleGroupsTargeted.isNotEmpty) ...[
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 4,
-                            children: routine.muscleGroupsTargeted
-                                .map(
-                                  (m) => AppBadge(
-                                    label: m.displayName,
-                                    variant: AppBadgeVariant.outline,
-                                  ),
-                                )
-                                .toList(),
-                          ),
                           const SizedBox(height: 16),
                         ],
 
@@ -422,6 +455,7 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.bold),
                         ),
+                        const SizedBox(height: 12),
                       ],
                     ),
                   ),
@@ -570,7 +604,7 @@ class _StartWorkoutButton extends ConsumerWidget {
   }
 }
 
-/// Stat chip widget
+/// Stat chip widget (used in _RoutineHeroHeader).
 class _StatChip extends StatelessWidget {
   const _StatChip({
     required this.icon,
@@ -608,7 +642,7 @@ class _StatChip extends StatelessWidget {
   }
 }
 
-/// Exercise card inside routine detail
+/// Exercise card inside routine detail — block-based dark/vibrant design.
 class _ExerciseCard extends StatelessWidget {
   const _ExerciseCard({
     required this.routineExercise,
@@ -635,146 +669,298 @@ class _ExerciseCard extends StatelessWidget {
     final exerciseName = exercise?.name ?? 'Exercise ${index + 1}';
     final isExerciseComplete = completedSets >= routineExercise.sets;
 
+    // Mono prescription line: "3 × 8–12 reps · 90s rest"
+    final prescription =
+        '${routineExercise.sets} × '
+        '${routineExercise.repsMin}–${routineExercise.repsMax} reps'
+        '${routineExercise.restSeconds > 0 ? ' · ${routineExercise.restSeconds}s rest' : ''}';
+
     return Padding(
       key: exerciseCardKey,
       padding: const EdgeInsets.only(bottom: 12),
       child: AppCard.elevated(
         onTap: onTap == null ? null : () => onTap!(index),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Exercise header
-              Row(
-                children: [
-                  // Order number / completion indicator
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: isExerciseComplete
-                          ? AppColors.success.withValues(alpha: 0.2)
-                          : isDark
-                          ? AppColors.primaryDark.withValues(alpha: 0.2)
-                          : AppColors.primaryLight.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: isExerciseComplete
-                          ? Icon(
-                              Icons.check,
-                              size: 18,
-                              color: AppColors.success,
-                            )
-                          : Text(
-                              '${index + 1}',
-                              style: Theme.of(context).textTheme.titleSmall
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: isDark
-                                        ? AppColors.primaryDark
-                                        : AppColors.primaryLight,
-                                  ),
-                            ),
-                    ),
+        child: Container(
+          decoration: isExerciseComplete
+              ? BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: AppColors.success.withValues(alpha: 0.3),
+                    width: 1.5,
                   ),
-                  const SizedBox(width: 12),
-                  // Exercise name and details
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          exerciseName,
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          key: prescriptionKey,
-                          '${routineExercise.sets} sets x '
-                          '${routineExercise.repsMin}-${routineExercise.repsMax} reps'
-                          '${routineExercise.restSeconds > 0 ? ' • ${routineExercise.restSeconds}s rest' : ''}',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: isDark
-                                    ? AppColors.textSecondaryDark
-                                    : AppColors.textSecondaryLight,
+                )
+              : null,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Exercise header row
+                Row(
+                  children: [
+                    // 40×40 numbered tile — success tint when complete
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: isExerciseComplete
+                            ? AppColors.success.withValues(alpha: 0.15)
+                            : AppColors.primaryDark.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Center(
+                        child: isExerciseComplete
+                            ? const Icon(
+                                Icons.check,
+                                size: 20,
+                                color: AppColors.success,
+                              )
+                            : Text(
+                                '${index + 1}',
+                                style: AppTextStyles.numericBody.copyWith(
+                                  color: AppColors.primaryDark,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
-                        ),
-                      ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Exercise name + prescription
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            exerciseName,
+                            style: AppTextStyles.titleSmall.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: isDark
+                                  ? AppColors.foregroundDark
+                                  : AppColors.foregroundLight,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            key: prescriptionKey,
+                            prescription,
+                            style: AppTextStyles.numericBody.copyWith(
+                              color: isDark
+                                  ? AppColors.mutedForegroundDark
+                                  : AppColors.mutedForegroundLight,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Muscle-group badge
+                    if (exercise != null)
+                      AppBadge(
+                        label: exercise.primaryMuscleGroup.displayName,
+                        variant: AppBadgeVariant.outline,
+                      ),
+                  ],
+                ),
+
+                // Notes
+                if (routineExercise.notes != null &&
+                    routineExercise.notes!.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    routineExercise.notes!,
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: isDark
+                          ? AppColors.mutedForegroundDark
+                          : AppColors.mutedForegroundLight,
+                      fontStyle: FontStyle.italic,
                     ),
                   ),
-                  // Muscle group badge + set progress
-                  if (completedSets > 0)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: Text(
-                        '$completedSets/${routineExercise.sets}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                ],
+
+                // Divider + action row
+                const SizedBox(height: 10),
+                const Divider(height: 1),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    // Completed sets pill (left)
+                    if (completedSets > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
                           color: isExerciseComplete
-                              ? AppColors.success
-                              : isDark
-                              ? AppColors.textSecondaryDark
-                              : AppColors.textSecondaryLight,
-                          fontWeight: FontWeight.w600,
+                              ? AppColors.success.withValues(alpha: 0.12)
+                              : AppColors.primaryDark.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isExerciseComplete
+                                ? AppColors.success.withValues(alpha: 0.4)
+                                : AppColors.primaryDark.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Text(
+                          '$completedSets/${routineExercise.sets} sets',
+                          style: AppTextStyles.labelSmall.copyWith(
+                            color: isExerciseComplete
+                                ? AppColors.success
+                                : AppColors.primaryDark,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    const Spacer(),
+                    // Analyze Form ghost button (right)
+                    AppButton.ghost(
+                      key: analyzeFormKey,
+                      label: 'Analyze Form',
+                      icon: Icons.analytics_outlined,
+                      onPressed: () => context.push(
+                        AppRoutes.clientViewForm.replaceFirst(
+                          ':id',
+                          routineExercise.exerciseId,
                         ),
                       ),
                     ),
-                  if (exercise != null)
-                    AppBadge(
-                      label: exercise.primaryMuscleGroup.displayName,
-                      variant: AppBadgeVariant.outline,
-                    ),
-                ],
-              ),
-
-              // Notes
-              if (routineExercise.notes != null &&
-                  routineExercise.notes!.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  routineExercise.notes!,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
-                    fontStyle: FontStyle.italic,
-                  ),
+                  ],
                 ),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
-              // Analyze Form action
-              const SizedBox(height: 8),
-              const Divider(height: 1),
-              const SizedBox(height: 4),
+/// Vibrant gradient hero header for the Routine Detail SliverAppBar.
+///
+/// Shows: routine name, program context chip, stats strip (exercises/sets/min)
+/// in JetBrains Mono, and muscle-group badges.
+class _RoutineHeroHeader extends StatelessWidget {
+  const _RoutineHeroHeader({
+    required this.routine,
+    required this.isDark,
+  });
+
+  final RoutineModel routine;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    // Vibrant gradient: primaryDark → slightly darker shade
+    const gradientStart = AppColors.primaryDark;
+    const gradientEnd = Color(0xFFC46524); // ~20% darker than E07D3B
+
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [gradientStart, gradientEnd],
+        ),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 56, 20, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              // Routine name
+              Text(
+                routine.name,
+                style: AppTextStyles.headlineMedium.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 12),
+
+              // Stats strip — three vibrant metric tiles
               Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton.icon(
-                    key: analyzeFormKey,
-                    onPressed: () => context.push(
-                      AppRoutes.clientViewForm.replaceFirst(
-                        ':id',
-                        routineExercise.exerciseId,
-                      ),
-                    ),
-                    icon: const Icon(Icons.analytics_outlined, size: 16),
-                    label: const Text('Analyze Form'),
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                    ),
+                  _HeroStatTile(
+                    value: '${routine.totalExercises}',
+                    label: 'Exercises',
+                  ),
+                  const SizedBox(width: 8),
+                  _HeroStatTile(
+                    value: '${routine.totalSets}',
+                    label: 'Sets',
+                  ),
+                  const SizedBox(width: 8),
+                  _HeroStatTile(
+                    value: '~${routine.estimatedDurationMinutes}',
+                    label: 'Min',
                   ),
                 ],
               ),
+
+              // Muscle-group badges
+              if (routine.muscleGroupsTargeted.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: routine.muscleGroupsTargeted
+                      .map(
+                        (m) => AppBadge(
+                          label: m.displayName,
+                          variant: AppBadgeVariant.outline,
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Small vibrant stat tile used in [_RoutineHeroHeader].
+class _HeroStatTile extends StatelessWidget {
+  const _HeroStatTile({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            style: AppTextStyles.numericBody.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+            ),
+          ),
+          Text(
+            label,
+            style: AppTextStyles.labelSmall.copyWith(
+              color: Colors.white.withValues(alpha: 0.8),
+            ),
+          ),
+        ],
       ),
     );
   }

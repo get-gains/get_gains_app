@@ -34,6 +34,7 @@ class ApiConstants {
   // User Endpoints
   static const String userProfile = '/users/profile';
   static const String updateProfile = '/users/profile';
+  static const String userPrograms = '/user/programs';
 
   // Profile Endpoints (fitness profile / onboarding)
   static const String profile = '/profile';

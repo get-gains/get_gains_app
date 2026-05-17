@@ -181,27 +181,29 @@ class WorkoutSummaryCard extends StatelessWidget {
                     .toList(),
               ),
             ],
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: isPlaceholder
-                  ? AppButton.secondary(
-                      label: 'View Program',
-                      icon: Icons.arrow_forward,
-                      onPressed: onStartPressed,
-                    )
-                  : completedToday
-                  ? AppButton.secondary(
-                      label: 'Routine Done',
-                      icon: Icons.check_circle_outline,
-                      onPressed: null,
-                    )
-                  : AppButton.primary(
-                      label: 'Start Workout',
-                      icon: Icons.play_arrow,
-                      onPressed: onStartPressed,
-                    ),
-            ),
+            // Only render a CTA when there's something actionable.
+            if (!isPlaceholder && completedToday) ...[ 
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: AppButton.secondary(
+                  label: 'Routine Done',
+                  icon: Icons.check_circle_outline,
+                  onPressed: null,
+                ),
+              ),
+            ] else if (!isPlaceholder && onStartPressed != null) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: AppButton.primary(
+                  label: 'Start Workout',
+                  icon: Icons.play_arrow,
+                  onPressed: onStartPressed,
+                ),
+              ),
+            ],
+            // isPlaceholder with null onStartPressed → no button (rest day).
           ],
         ),
       ),

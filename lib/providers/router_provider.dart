@@ -22,12 +22,16 @@ import '../features/gains_coins/presentation/screens/cosmetic_detail_screen.dart
 import '../features/gains_coins/presentation/screens/inventory_screen.dart';
 import '../features/gains_coins/presentation/screens/leaderboard_screen.dart';
 import '../features/gains_coins/presentation/screens/missions_screen.dart';
+import '../features/gains_coins/presentation/screens/mission_detail_screen.dart';
 import '../features/gains_coins/data/models/cosmetic_model.dart';
 import 'auth_state_provider.dart';
 import '../features/programs/screens/program_screen.dart';
 import '../features/programs/screens/program_details_screen.dart';
 import '../features/programs/screens/calendar_screen.dart';
 import '../features/programs/screens/create_program_screen.dart';
+import '../features/self_program/presentation/screens/self_program_builder_screen.dart';
+import '../features/self_program/presentation/screens/self_program_list_screen.dart';
+import '../features/exercises/presentation/screens/create_exercise_screen.dart' as shared_exercises;
 
 import 'deep_link_provider.dart';
 
@@ -65,6 +69,13 @@ class AppRoutes {
   // Client My Program routes (program-first navigation)
   static const String myProgram = '/my-program';
   static const String myProgramDetail = '/my-program/:programId';
+
+  // Self Program routes (free tier)
+  static const String selfPrograms = '/self-programs';
+  static const String selfProgramBuilder = '/self-programs/builder';
+
+  // Shared exercise creation (available to all authenticated users)
+  static const String exerciseCreate = '/exercises/create';
 
   // Coach Hub
   static const String coachHub = '/coach/hub';
@@ -137,6 +148,7 @@ class AppRoutes {
   static const String inventory = '/inventory';
   static const String leaderboard = '/leaderboard';
   static const String missions = '/missions';
+  static const String missionDetail = '/missions/:id';
 }
 
 /// Router Provider
@@ -322,6 +334,22 @@ GoRouter router(Ref ref) {
           // If navigated without extra (e.g. deep-link), fallback gracefully.
           if (program == null) return const MyProgramListScreen();
           return MyProgramDetailScreen(program: program);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.selfPrograms,
+        builder: (context, state) => const SelfProgramListScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.exerciseCreate,
+        builder: (context, state) =>
+            const shared_exercises.CreateExerciseScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.selfProgramBuilder,
+        builder: (context, state) {
+          final programId = state.uri.queryParameters['programId'];
+          return SelfProgramBuilderScreen(programId: programId);
         },
       ),
       GoRoute(
@@ -707,6 +735,13 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: AppRoutes.missions,
         builder: (context, state) => const MissionsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.missionDetail,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return MissionDetailScreen(missionId: id);
+        },
       ),
     ],
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text_styles.dart';
 import '../../data/models/models.dart';
 
 /// Exercise Tab Bar
@@ -142,10 +143,10 @@ class _ExerciseTab extends StatelessWidget {
             const SizedBox(width: 4),
             Text(
               '$completedSets/$totalSets',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: textColor.withValues(alpha: 0.7),
-                    fontSize: 10,
-                  ),
+              style: AppTextStyles.numericBody.copyWith(
+                fontSize: 10,
+                color: textColor.withValues(alpha: 0.7),
+              ),
             ),
           ],
         ),

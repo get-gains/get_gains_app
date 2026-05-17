@@ -460,7 +460,7 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
     final result = await _repository.getActiveSession(_userId!);
     if (!ref.mounted) return;
 
-    result.when(
+    await result.when(
       success: (session) async {
         if (session == null) {
           state = const WorkoutSessionInitial();
@@ -503,7 +503,7 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
           currentExerciseIndex: resolvedIndex,
         );
       },
-      failure: (_) {},
+      failure: (_) async {},
     );
   }
 
