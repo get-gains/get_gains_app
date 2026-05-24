@@ -132,4 +132,12 @@ class ApiConstants {
   // Form Library & Exercise Ratings
   static const String formLibrary = '/form-library';
   static const String exerciseRatings = '/exercise-ratings';
+
+  // Notifications
+  static const String notifications = '/notifications';
+  static const String notificationUnreadCount = '/notifications/unread-count';
+
+  static String notificationMarkRead(String id) =>
+      '/notifications/$id/read';
+  static const String notificationReadAll = '/notifications/read-all';
 }

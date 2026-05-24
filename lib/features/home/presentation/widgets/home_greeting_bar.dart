@@ -10,6 +10,7 @@ import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../gains_coins/presentation/widgets/coin_balance_widget.dart';
 import '../../../guidance/guidance.dart';
+import '../../../notifications/presentation/providers/notification_providers.dart';
 import '../../../profile/profile.dart';
 import '../../../subscription/subscription.dart';
 
@@ -61,15 +62,7 @@ class HomeGreetingBar extends ConsumerWidget {
             onTap: () => context.push(AppRoutes.coinHistory),
           ),
           const SizedBox(width: 4),
-          IconButton(
-            icon: Icon(
-              Icons.notifications_outlined,
-              color: isDark
-                  ? AppColors.textSecondaryDark
-                  : AppColors.textSecondaryLight,
-            ),
-            onPressed: () {},
-          ),
+          _NotificationBell(),
           InfoIconButton(
             content: kHomeHelp,
             onTapOverride: () {
@@ -91,5 +84,39 @@ class HomeGreetingBar extends ConsumerWidget {
     if (hour < 12) return 'Good Morning';
     if (hour < 17) return 'Good Afternoon';
     return 'Good Evening';
+  }
+}
+
+class _NotificationBell extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final unreadCount = ref.watch(notificationPollProvider);
+
+    final icon = Icon(
+      Icons.notifications_outlined,
+      color: isDark
+          ? AppColors.textSecondaryDark
+          : AppColors.textSecondaryLight,
+    );
+
+    if (unreadCount == 0) {
+      return IconButton(
+        icon: icon,
+        onPressed: () => context.push(AppRoutes.notifications),
+      );
+    }
+
+    return IconButton(
+      icon: Badge(
+        label: Text(
+          unreadCount > 99 ? '99+' : unreadCount.toString(),
+          style: const TextStyle(fontSize: 10, color: Colors.white),
+        ),
+        backgroundColor: AppColors.error,
+        child: icon,
+      ),
+      onPressed: () => context.push(AppRoutes.notifications),
+    );
   }
 }
