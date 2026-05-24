@@ -7,9 +7,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../providers/router_provider.dart';
 import '../../../../services/database/app_database.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../coach_pose/data/models/landmark_models.dart';
+import '../../../form_library/presentation/widgets/ad_gate_dialog.dart';
+import '../../../form_library/presentation/widgets/rating_bottom_sheet.dart';
+import '../../../form_library/data/models/library_exercise_model.dart';
 import '../../../guidance/guidance.dart';
 import '../../../unity/data/unity_cosmetics_loader.dart';
 import '../../../unity/data/unity_message_contract.dart';
@@ -22,9 +26,10 @@ import '../widgets/pose_view_widget.dart';
 /// skeleton playback of the recorded landmarks. Users can watch the
 /// coach's form and then navigate to compare their own.
 class ViewFormScreen extends ConsumerStatefulWidget {
-  const ViewFormScreen({super.key, required this.exerciseId});
+  const ViewFormScreen({super.key, required this.exerciseId, this.isFromLibrary = false});
 
   final String exerciseId;
+  final bool isFromLibrary;
 
   @override
   ConsumerState<ViewFormScreen> createState() => _ViewFormScreenState();
@@ -33,6 +38,9 @@ class ViewFormScreen extends ConsumerStatefulWidget {
 class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
   late Future<Map<String, dynamic>?> _formFuture;
   bool _overlayDismissed = false;
+  bool _hasForms = false;
+  String _exerciseName = 'Exercise';
+  String _coachName = '';
 
   @override
   void initState() {
@@ -94,6 +102,12 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
 
           final exerciseName = data['exerciseName'] as String? ?? 'Exercise';
           final forms = data['forms'] as List? ?? [];
+          final coachName = data['coachName'] as String? ?? '';
+
+          if (!mounted) return const SizedBox.shrink();
+          _hasForms = forms.isNotEmpty;
+          _exerciseName = exerciseName;
+          _coachName = coachName;
 
           if (forms.isEmpty) {
             return AppEmptyState(
@@ -171,7 +185,60 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
           );
         },
       ),
+      bottomNavigationBar: widget.isFromLibrary && _hasForms
+          ? SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: FilledButton.icon(
+                  onPressed: _onComparePressed,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: isDark
+                        ? AppColors.primaryDark
+                        : AppColors.primaryLight,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: const Icon(Icons.compare_arrows),
+                  label: const Text(
+                    'Record & Compare',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            )
+          : null,
     );
+  }
+
+  Future<void> _onComparePressed() async {
+    if (!mounted) return;
+
+    final adDismissed = await showAdGateDialog(context);
+    if (adDismissed != true) return;
+
+    if (!mounted) return;
+
+    final result = await context.push<bool>(
+      AppRoutes.clientCompareForm.replaceAll(':id', widget.exerciseId),
+    );
+
+    if (!mounted) return;
+
+    if (result == true) {
+      await showRatingBottomSheet(
+        context: context,
+        ref: ref,
+        exercise: LibraryExerciseModel(
+          id: widget.exerciseId,
+          name: _exerciseName,
+          description: '',
+          coachName: _coachName,
+          createdAt: DateTime.now(),
+        ),
+      );
+    }
   }
 }
 

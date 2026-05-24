@@ -950,7 +950,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
                 child: AppButton.primary(
                   label: 'Done',
                   icon: Icons.check,
-                  onPressed: () => context.pop(),
+                  onPressed: () => context.pop(true),
                 ),
               ),
             ],
