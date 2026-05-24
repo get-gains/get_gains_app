@@ -25,11 +25,14 @@ class HomeGreetingBar extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final authState = ref.watch(authStateProvider);
     final profileAsync = ref.watch(profileProvider);
+    final fitnessProfileAsync = ref.watch(userProfileProvider);
     final email = authState.email ?? '';
     final emailPrefix = email.isNotEmpty ? email.split('@').first : 'Athlete';
     final userName = profileAsync.asData?.value.name.isNotEmpty == true
         ? profileAsync.asData!.value.name
         : emailPrefix;
+    final fitnessProfile = fitnessProfileAsync.asData?.value;
+    final avatarUrl = fitnessProfile?.avatarUrl;
     final greeting = _getGreeting();
 
     return Padding(
@@ -71,7 +74,7 @@ class HomeGreetingBar extends ConsumerWidget {
           ),
           GestureDetector(
             onTap: () => showProfileSheet(context),
-            child: AppAvatar(name: userName, size: AppAvatarSize.sm),
+            child: AppAvatar(name: userName, imageUrl: avatarUrl, size: AppAvatarSize.sm),
           ),
           const SizedBox(width: 4),
         ],
