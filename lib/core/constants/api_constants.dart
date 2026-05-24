@@ -39,6 +39,7 @@ class ApiConstants {
 
   // Profile Endpoints (fitness profile / onboarding)
   static const String profile = '/profile';
+  static const String profileStats = '/profile/stats';
 
   /// Coach → client profile: GET /profile/clients/:userId
   static String clientProfile(String userId) => '/profile/clients/$userId';
