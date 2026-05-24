@@ -70,6 +70,7 @@ class CoachPoseRepository {
     required String primaryMuscleGroup,
     List<String> targetMuscles = const [],
     List<String> equipmentNeeded = const [],
+    bool isPublic = true,
   }) async {
     final normalizedTargetMuscles = <String>{
       primaryMuscleGroup.toUpperCase(),
@@ -82,7 +83,7 @@ class CoachPoseRepository {
         'name': name,
         'description': description,
         'target_muscles': normalizedTargetMuscles,
-        'is_public': true,
+        'is_public': isPublic,
 
         // Backward compatibility for environments still expecting camelCase.
         'primaryMuscleGroup': primaryMuscleGroup,
@@ -119,10 +120,12 @@ class CoachPoseRepository {
     String? primaryMuscleGroup,
     List<String>? targetMuscles,
     List<String>? equipmentNeeded,
+    bool? isPublic,
   }) async {
     final Map<String, dynamic> data = {};
     if (name != null) data['name'] = name;
     if (description != null) data['description'] = description;
+    if (isPublic != null) data['is_public'] = isPublic;
 
     if (primaryMuscleGroup != null || targetMuscles != null) {
       final normalizedTargetMuscles = <String>{
