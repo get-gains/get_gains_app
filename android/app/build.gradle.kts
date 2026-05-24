@@ -85,7 +85,7 @@ afterEvaluate {
     // has no x86_64 .so files. Override the split to ARM-only.
     extensions.findByType(ApplicationExtension::class.java)?.splits?.let { splits ->
         val abi = splits.abi
-        if (abi.isEnable && "x86_64" in abi.applicationAbiFilters) {
+        if (abi.isEnable) {
             abi.reset()
             abi.include("armeabi-v7a", "arm64-v8a")
             abi.isUniversalApk = true
