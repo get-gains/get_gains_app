@@ -464,6 +464,12 @@ class _ClientUnityRecordingScreenState
 
     try {
       final file = await _cameraController!.stopVideoRecording();
+      // Dispose camera immediately — we don't need the preview during
+      // processing, and leaving it alive triggers CameraPreview.buildPreview()
+      // on a controller invalidated by stopVideoRecording() on some devices.
+      await _cameraController?.dispose();
+      _cameraController = null;
+      if (mounted) setState(() => _isCameraInitialized = false);
       notifier.setRecordedVideo(file.path);
     } catch (e) {
       AppLogger.error(
@@ -494,7 +500,8 @@ class _ClientUnityRecordingScreenState
     setState(() {
       _setupValidation = _setupValidator.validate(null);
     });
-    _startSetupStream();
+    // Camera was disposed after stopRecording — reinitialize
+    _initCamera();
   }
 
   // ── Flip camera ──────────────────────────────────────────────────────────
