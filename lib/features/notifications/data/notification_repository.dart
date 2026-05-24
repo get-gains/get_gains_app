@@ -103,11 +103,22 @@ class NotificationRepository {
 
     return result.when(
       success: (data) {
-        final notification = NotificationModel.fromJson(
-          data['notification'] as Map<String, dynamic>,
-        );
-        _updateCachedNotification(notification);
-        return Success(notification);
+        try {
+          final notification = NotificationModel.fromJson(
+            data['notification'] as Map<String, dynamic>,
+          );
+          _updateCachedNotification(notification);
+          return Success(notification);
+        } catch (e) {
+          AppLogger.error(
+            'Failed to parse markAsRead response',
+            tag: 'NotificationRepo',
+            error: e,
+          );
+          return Failure(
+            DatabaseError(message: 'Failed to parse notification: $e'),
+          );
+        }
       },
       failure: (error) => Failure(error),
     );
