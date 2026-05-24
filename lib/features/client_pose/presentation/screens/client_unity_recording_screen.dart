@@ -462,14 +462,16 @@ class _ClientUnityRecordingScreenState
     );
     notifier.stopRecording();
 
+    // Unmount CameraPreview BEFORE stopVideoRecording. The camera plugin
+    // fires an internal value-notifier during recording stop that triggers
+    // CameraPreview.buildPreview() — but the controller is in a transitional
+    // state where buildPreview() throws on some Android devices.
+    if (mounted) setState(() => _isCameraInitialized = false);
+
     try {
       final file = await _cameraController!.stopVideoRecording();
-      // Dispose camera immediately — we don't need the preview during
-      // processing, and leaving it alive triggers CameraPreview.buildPreview()
-      // on a controller invalidated by stopVideoRecording() on some devices.
       await _cameraController?.dispose();
       _cameraController = null;
-      if (mounted) setState(() => _isCameraInitialized = false);
       notifier.setRecordedVideo(file.path);
     } catch (e) {
       AppLogger.error(
