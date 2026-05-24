@@ -79,7 +79,7 @@ class AppLogger {
           stackTrace: stackTrace,
           withScope: (scope) {
             scope.setTag('logger_tag', logTag);
-            scope.setLevel(SentryLevel.error);
+            scope.level = SentryLevel.error;
           },
         );
       } else if (level == LogLevel.warning) {
