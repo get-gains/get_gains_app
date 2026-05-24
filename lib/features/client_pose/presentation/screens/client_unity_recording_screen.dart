@@ -76,6 +76,10 @@ class _ClientUnityRecordingScreenState
   bool _isStoppingRecording = false;
   int _frameSkipCount = 0; // for setup validation stream throttle
 
+  // Snapshot of the last Active state, used to keep EmbedUnity alive behind
+  // the Processing overlay so Unity isn't torn down during ffmpeg/MLKit work.
+  ClientRecordingActive? _lastActiveState;
+
   // ── Unity ───────────────────────────────────────────────────────────────
   bool _isUnityLoaded = false;
 
@@ -445,6 +449,14 @@ class _ClientUnityRecordingScreenState
     if (_isStoppingRecording) return;
     _isStoppingRecording = true;
 
+    // Capture the active state so we can keep EmbedUnity alive behind the
+    // processing overlay. Removing EmbedUnity from the widget tree while
+    // ffmpeg + MLKit processing runs can cause a native crash.
+    final currentState = ref.read(clientRecordingProvider(widget.exerciseId));
+    if (currentState is ClientRecordingActive) {
+      _lastActiveState = currentState;
+    }
+
     final notifier = ref.read(
       clientRecordingProvider(widget.exerciseId).notifier,
     );
@@ -468,6 +480,7 @@ class _ClientUnityRecordingScreenState
   }
 
   void _onTryAgain() {
+    _lastActiveState = null;
     _isNavigatingAfterLog = false;
     _cancelAutoStartCountdown();
     _repsController.clear();
@@ -637,6 +650,15 @@ class _ClientUnityRecordingScreenState
                 height: 1,
                 child: EmbedUnity(onMessageFromUnity: _onMessageFromUnity),
               ),
+            // Processing overlay — shown on top of the recording body
+            // (which keeps EmbedUnity alive) to prevent Unity platform-view
+            // teardown during ffmpeg + MLKit work.
+            if (state is ClientRecordingProcessing)
+              _buildProcessingOverlay(
+                context,
+                progress: state.progress,
+                message: state.message,
+              ),
           ],
         ),
       ),
@@ -682,7 +704,7 @@ class _ClientUnityRecordingScreenState
       ClientRecordingReady() => _buildReady(context, state, isDark),
       ClientRecordingActive() => _buildRecording(context, state, isDark),
       ClientRecordingProcessing(:final progress, :final message) =>
-        _buildProcessing(context, progress: progress, message: message),
+        _buildProcessingBody(context, state, progress: progress, message: message),
       ClientRecordingComplete() => _buildResults(context, state, isDark),
     };
   }
@@ -712,7 +734,42 @@ class _ClientUnityRecordingScreenState
     context.go(AppRoutes.workoutSession, extra: {'readOnly': true});
   }
 
-  Widget _buildProcessing(
+  /// During processing, keep EmbedUnity alive behind the overlay by
+  /// rendering the last recording body. This prevents Unity platform-view
+  /// teardown while ffmpeg + MLKit run concurrently on the main isolate.
+  Widget _buildProcessingBody(
+    BuildContext context,
+    ClientRecordingProcessing state, {
+    required double progress,
+    required String message,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (_lastActiveState != null) {
+      return _buildRecording(context, _lastActiveState!, isDark);
+    }
+    // Fallback: at minimum keep an EmbedUnity widget mounted so Unity stays alive
+    return _buildEmbedUnityPlaceholder(isDark);
+  }
+
+  /// Minimal widget that keeps EmbedUnity mounted during processing when
+  /// no _lastActiveState snapshot is available.
+  Widget _buildEmbedUnityPlaceholder(bool isDark) {
+    return SizedBox.expand(
+      child: _showUnity
+          ? EmbedUnity(onMessageFromUnity: _onMessageFromUnity)
+          : Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F0F1A),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Center(
+                child: Text('Processing...', style: TextStyle(color: Colors.grey)),
+              ),
+            ),
+    );
+  }
+
+  Widget _buildProcessingOverlay(
     BuildContext context, {
     required double progress,
     required String message,
