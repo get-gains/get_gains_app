@@ -10,9 +10,7 @@
         android:label="get_gains_app"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:extractNativeLibs="true"
-        android:appCategory=""
-        tools:replace="android:appCategory">
+        android:extractNativeLibs="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
