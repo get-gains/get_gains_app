@@ -235,9 +235,9 @@ class _EnterOtpScreenState extends ConsumerState<EnterOtpScreen>
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: List.generate(6, (index) {
-                          return SizedBox(
-                            width: 48,
-                            height: 56,
+                            return SizedBox(
+                              width: 56,
+                              height: 56,
                             child: TextField(
                               controller: _controllers[index],
                               focusNode: _focusNodes[index],
