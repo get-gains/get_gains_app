@@ -735,8 +735,10 @@ class _ClientUnityRecordingScreenState
   }
 
   /// During processing, keep EmbedUnity alive behind the overlay by
-  /// rendering the last recording body. This prevents Unity platform-view
-  /// teardown while ffmpeg + MLKit run concurrently on the main isolate.
+  /// rendering only the skeleton view. The full recording body (with
+  /// CameraPreview) is NOT re-rendered because stopVideoRecording leaves
+  /// the controller in a state where CameraPreview.buildPreview() throws
+  /// "Disposed CameraController".
   Widget _buildProcessingBody(
     BuildContext context,
     ClientRecordingProcessing state, {
@@ -744,11 +746,15 @@ class _ClientUnityRecordingScreenState
     required String message,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    if (_lastActiveState != null) {
-      return _buildRecording(context, _lastActiveState!, isDark);
-    }
-    // Fallback: at minimum keep an EmbedUnity widget mounted so Unity stays alive
-    return _buildEmbedUnityPlaceholder(isDark);
+    return Container(
+      color: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+      child: _lastActiveState != null
+          ? _buildMainSkeletonView(
+              isDark: isDark,
+              referenceFrames: _lastActiveState!.referenceLandmarkFrames,
+            )
+          : _buildEmbedUnityPlaceholder(isDark),
+    );
   }
 
   /// Minimal widget that keeps EmbedUnity mounted during processing when
