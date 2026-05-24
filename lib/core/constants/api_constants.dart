@@ -27,7 +27,8 @@ class ApiConstants {
   static const String googleLink = '/auth/google/link';
   static const String refreshToken = '/auth/refresh';
   static const String logout = '/auth/logout';
-  static const String sendRecoveryEmail = '/auth/send-recovery-email';
+  static const String sendOtp = '/auth/send-otp';
+  static const String verifyOtp = '/auth/verify-otp';
   static const String resetPassword = '/auth/reset-password';
   static const String checkEmailVerified = '/auth/check-email-verified';
 

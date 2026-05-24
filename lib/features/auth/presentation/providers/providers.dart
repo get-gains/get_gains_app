@@ -4,5 +4,6 @@
 library;
 
 export 'login_provider.dart';
+export 'otp_provider.dart';
 export 'register_provider.dart';
 export 'reset_password_provider.dart';
