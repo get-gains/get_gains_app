@@ -17,8 +17,8 @@ plugins {
 android {
     namespace = "com.getgains.app"
     compileSdk = 36
-    // Unity 6000.0 requires NDK r27c (27.2.12479018)
-    ndkVersion = "28.2.13676358"
+    // Unity 6000.4 requires NDK r27c (27.2.12479018) — must match unityLibrary
+    ndkVersion = "27.2.12479018"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
