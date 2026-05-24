@@ -1,4 +1,3 @@
-import com.android.build.api.dsl.ApplicationExtension
 import java.util.Properties
 import java.io.FileInputStream
 
@@ -41,11 +40,11 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         // Unity only ships ARM native libs (libmain.so etc).
-        // ndk.abiFilters is intentionally left unset here — AGP auto-detects
-        // available ABIs from dependencies. Setting it conflicts with
-        // --split-per-abi because Flutter adds x86_64 to the split filter,
-        // but Unity doesn't provide x86_64 .so files. The split is
-        // overridden to ARM-only in afterEvaluate below.
+        // ndk.abiFilters is intentionally left unset to avoid conflicts with
+        // --split-per-abi (Flutter adds x86_64 to the split filter, and AGP
+        // requires ndk.abiFilters to be a superset of split ABIs).
+        // The x86_64 split APK won't include Unity .so files (x86_64 is
+        // emulator-only, so this has no real-world impact).
     }
 
     signingConfigs {
@@ -80,18 +79,6 @@ dependencies {
 
 // Ensure Unity library's native libs are built and merged before packaging (only when present)
 afterEvaluate {
-    // Unity only ships ARM native libraries. When --split-per-abi is active,
-    // Flutter's Gradle Plugin adds x86_64 to the split filter, but unityLibrary
-    // has no x86_64 .so files. Override the split to ARM-only.
-    extensions.findByType(ApplicationExtension::class.java)?.splits?.let { splits ->
-        val abi = splits.abi
-        if (abi.isEnable) {
-            abi.reset()
-            abi.include("armeabi-v7a", "arm64-v8a")
-            abi.isUniversalApk = true
-        }
-    }
-
     if (findProject(":unityLibrary") != null) {
         tasks.findByName("mergeDebugJniLibFolders")?.dependsOn(":unityLibrary:buildIl2Cpp")
         tasks.findByName("mergeDebugJniLibFolders")?.dependsOn(":unityLibrary:mergeDebugJniLibFolders")
