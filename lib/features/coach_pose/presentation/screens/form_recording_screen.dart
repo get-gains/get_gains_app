@@ -262,6 +262,13 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
   Future<void> _stopRecording() async {
     // Stop video recording and pass the file to the provider.
     // Timeout guards against Android MPEG4Writer hanging indefinitely.
+
+    // Unmount CameraPreview BEFORE stopVideoRecording. The camera plugin
+    // fires an internal value-notifier during recording stop that triggers
+    // CameraPreview.buildPreview() — but the controller is in a transitional
+    // state where buildPreview() throws on some Android devices.
+    if (mounted) setState(() => _isCameraInitialized = false);
+
     try {
       final file = await _cameraController!.stopVideoRecording().timeout(
         const Duration(seconds: 10),
@@ -373,6 +380,8 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
       if (previous?.phase == RecordingPhase.recording &&
           next.phase == RecordingPhase.processing &&
           next.videoFilePath == null) {
+        // Unmount CameraPreview before stopVideoRecording (same race fix).
+        if (mounted) setState(() => _isCameraInitialized = false);
         _cameraController
             ?.stopVideoRecording()
             .timeout(
