@@ -377,38 +377,45 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
       // When the provider auto-stops recording (transitions to processing),
       // we need to stop the video recording and pass the file path.
       // Timeout guards against Android MPEG4Writer hanging indefinitely.
+      // Deferred via addPostFrameCallback because ref.listen fires during
+      // the build phase and setState() is illegal at that point.
       if (previous?.phase == RecordingPhase.recording &&
           next.phase == RecordingPhase.processing &&
           next.videoFilePath == null) {
-        // Unmount CameraPreview before stopVideoRecording (same race fix).
-        if (mounted) setState(() => _isCameraInitialized = false);
-        _cameraController
-            ?.stopVideoRecording()
-            .timeout(
-              const Duration(seconds: 10),
-              onTimeout: () {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          // Unmount CameraPreview before stopVideoRecording (same race fix).
+          setState(() => _isCameraInitialized = false);
+          _cameraController
+              ?.stopVideoRecording()
+              .timeout(
+                const Duration(seconds: 10),
+                onTimeout: () {
+                  AppLogger.error(
+                    'stopVideoRecording (auto-stop) timed out after 10s',
+                    tag: 'FormRecording',
+                  );
+                  throw TimeoutException('stopVideoRecording timed out');
+                },
+              )
+              .then((file) {
+                ref
+                    .read(formRecordingProvider(widget.exerciseId).notifier)
+                    .setRecordedVideo(file.path);
+              })
+              .catchError((Object e) {
                 AppLogger.error(
-                  'stopVideoRecording (auto-stop) timed out after 10s',
+                  'Failed to stop video recording on auto-stop',
                   tag: 'FormRecording',
+                  error: e,
                 );
-                throw TimeoutException('stopVideoRecording timed out');
-              },
-            )
-            .then((file) {
-              ref
-                  .read(formRecordingProvider(widget.exerciseId).notifier)
-                  .setRecordedVideo(file.path);
-            })
-            .catchError((Object e) {
-              AppLogger.error(
-                'Failed to stop video recording on auto-stop',
-                tag: 'FormRecording',
-                error: e,
-              );
-              ref
-                  .read(formRecordingProvider(widget.exerciseId).notifier)
-                  .setRecordingError('Recording timed out. Please try again.');
-            });
+                ref
+                    .read(formRecordingProvider(widget.exerciseId).notifier)
+                    .setRecordingError(
+                      'Recording timed out. Please try again.',
+                    );
+              });
+        });
       }
     });
 

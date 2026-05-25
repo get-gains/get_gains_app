@@ -603,7 +603,9 @@ class _ClientUnityRecordingScreenState
           (prev is! ClientRecordingActive || !prev.autoStopRequested);
 
       if (autoStopTriggered) {
-        unawaited(_onStopRecording());
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          unawaited(_onStopRecording());
+        });
       }
     });
 
