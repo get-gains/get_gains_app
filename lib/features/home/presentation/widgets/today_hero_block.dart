@@ -53,8 +53,11 @@ class TodayHeroBlock extends ConsumerWidget {
               child: const SizedBox.shrink(),
             );
 
-          case HomeStatus.lapsedSubscription:
-            return _LapsedSubscriptionCard(isDark: isDark);
+          case HomeStatus.buildProgram:
+            return _StartProgramCta(
+              isDark: isDark,
+              isFreeTier: true,
+            );
 
           case HomeStatus.waitingForProgram:
             return _WaitingForProgramCard(isDark: isDark);
@@ -104,6 +107,10 @@ class TodayHeroBlock extends ConsumerWidget {
         }
         if (today.hasRoutine) {
           final details = today.today!;
+          final todayStatusValue = ref.watch(todayStatusProvider).value;
+          final isCoachFlow = todayStatusValue != null &&
+              todayStatusValue.hasCoach &&
+              todayStatusValue.isSubscribed;
           return WorkoutSummaryCard(
             routineName: today.displayName,
             description:
@@ -115,13 +122,17 @@ class TodayHeroBlock extends ConsumerWidget {
             onStartPressed: today.completedToday
                 ? null
                 : () {
-                    context.push(
-                      AppRoutes.routineDetail.replaceFirst(
-                        ':id',
-                        details.routine.id,
-                      ),
-                      extra: details.routine,
-                    );
+                    if (isCoachFlow) {
+                      context.push(
+                        AppRoutes.routineDetail.replaceFirst(
+                          ':id',
+                          details.routine.id,
+                        ),
+                        extra: details.routine,
+                      );
+                    } else {
+                      context.push(AppRoutes.standaloneToday);
+                    }
                   },
           );
         }
@@ -342,125 +353,4 @@ class _WaitingForProgramCard extends StatelessWidget {
   }
 }
 
-/// Card shown when the user's subscription has lapsed but they have a coach
-/// routine scheduled for today. Displays the routine name (read-only) and
-/// a prominent renew CTA.
-class _LapsedSubscriptionCard extends ConsumerWidget {
-  const _LapsedSubscriptionCard({required this.isDark});
 
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final todayAsync = ref.watch(activeTodayProvider);
-    const amber = Color(0xFFF59E0B);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Renewal banner
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: amber.withValues(alpha: 0.12),
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(16),
-              topRight: Radius.circular(16),
-            ),
-            border: Border.all(color: amber.withValues(alpha: 0.35)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.warning_amber_rounded, color: amber, size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Your subscription has expired. Renew to start workouts.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: isDark ? Colors.amber.shade200 : Colors.amber.shade900,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        // Routine preview card
-        AppCard(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: todayAsync.when(
-              loading: () => const SizedBox(
-                height: 64,
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (_, __) => const SizedBox.shrink(),
-              data: (today) {
-                final details = today.hasRoutine ? today.today : null;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: amber.withValues(alpha: 0.10),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.lock_outline,
-                            color: amber,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                details != null
-                                    ? today.displayName
-                                    : 'Coach Workout',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleSmall
-                                    ?.copyWith(fontWeight: FontWeight.bold),
-                              ),
-                              if (details != null)
-                                Text(
-                                  details.programName,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(
-                                        color: isDark
-                                            ? AppColors.textSecondaryDark
-                                            : AppColors.textSecondaryLight,
-                                      ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      width: double.infinity,
-                      child: AppButton.primary(
-                        label: 'Renew & View Programs',
-                        icon: Icons.refresh,
-                        onPressed: () => context.push(AppRoutes.myProgram),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
