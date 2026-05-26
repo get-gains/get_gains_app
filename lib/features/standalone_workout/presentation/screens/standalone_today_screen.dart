@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
@@ -335,7 +334,7 @@ class _StandaloneTodayScreenState extends ConsumerState<StandaloneTodayScreen> {
             const SizedBox(height: 16),
             AppButton.primary(
               label: 'Start Workout',
-              onPressed: () => _startSession(details.assignedProgramId),
+              onPressed: () => _startSession(details),
               isFullWidth: true,
             ),
           ],
@@ -360,16 +359,24 @@ class _StandaloneTodayScreenState extends ConsumerState<StandaloneTodayScreen> {
     );
   }
 
-  Future<void> _startSession(String? assignedProgramId) async {
+  Future<void> _startSession(StandaloneTodayDetails details) async {
     final success = await ref
         .read(standaloneSessionProvider.notifier)
-        .startSession(assignedProgramId: assignedProgramId);
-    if (mounted) {
-      if (success) {
-        AppToast.success(context, 'Workout started!');
-      } else {
-        AppToast.error(context, 'Failed to start workout');
+        .startSession(assignedProgramId: details.programRoutineId);
+    if (mounted && success) {
+      final sessionState = ref.read(standaloneSessionProvider);
+      if (sessionState is StandaloneSessionActive) {
+        context.push(
+          AppRoutes.standaloneWorkout,
+          extra: <String, dynamic>{
+            'session': sessionState.session,
+            'exercises': details.routine.exercises,
+            'routineName': details.programName,
+          },
+        );
       }
+    } else if (mounted) {
+      AppToast.error(context, 'Failed to start workout');
     }
   }
 

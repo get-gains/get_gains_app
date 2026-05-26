@@ -1133,15 +1133,113 @@ class StandaloneWorkoutRepository {
     );
 
     return result.when(
-      success: (data) {
+      success: (data) async {
         try {
-          final model = StandaloneTodayModel.fromJson(data);
+          // ── Debug: log raw data shape ──
+          AppLogger.debug(
+            'Raw data keys: ${data.keys.toList()}',
+            tag: 'StandaloneRepo',
+          );
+
+          // ── 1. Extract today list ──
+          final todayRaw = data['today'];
+          AppLogger.debug(
+            'today type: ${todayRaw.runtimeType}',
+            tag: 'StandaloneRepo',
+          );
+
+          // Defensive: unwrap if server ever sends a bare Map instead of List
+          final todayList = todayRaw is List<dynamic>
+              ? todayRaw
+              : todayRaw != null
+                  ? [todayRaw]
+                  : null;
+
+          final isRestDay = data['is_rest_day'] as bool? ?? false;
+          if (isRestDay || todayList == null || todayList.isEmpty) {
+            return Success(const StandaloneTodayModel(isRestDay: true));
+          }
+
+          // ── 2. Extract routine map ──
+          final firstItem = todayList.first;
+          AppLogger.debug(
+            'firstItem type: ${firstItem.runtimeType}',
+            tag: 'StandaloneRepo',
+          );
+          if (firstItem is! Map<String, dynamic>) {
+            return Failure(
+              UnknownError(
+                message:
+                    'Expected today[0] to be Map<String,dynamic>, '
+                    'got ${firstItem.runtimeType}',
+              ),
+            );
+          }
+          final routineJson = Map<String, dynamic>.from(firstItem);
+
+          // ── 3. Map fields ──
+          final daysOfWeek = routineJson['days_of_week'];
+          AppLogger.debug(
+            'days_of_week type: ${daysOfWeek.runtimeType}',
+            tag: 'StandaloneRepo',
+          );
+          final dayOfWeek = (daysOfWeek is List && daysOfWeek.isNotEmpty)
+              ? daysOfWeek.first.toString()
+              : _todayDayOfWeek();
+
+          // Rename exercises key
+          if (!routineJson.containsKey('exercises')) {
+            final rawExercises = routineJson['assigned_program_routine_exercises'];
+            AppLogger.debug(
+              'raw exercises type: ${rawExercises.runtimeType}',
+              tag: 'StandaloneRepo',
+            );
+            routineJson['exercises'] = rawExercises ?? const [];
+          }
+
+          // ── 4. Parse routine ──
+          AppLogger.debug(
+            'About to call RoutineModel.fromJson',
+            tag: 'StandaloneRepo',
+          );
+          final routine = RoutineModel.fromJson(routineJson);
+
+          // ── 5. Enrich exercises from local DB ──
+          final enrichedExercises = await Future.wait(
+            routine.exercises.map((re) async {
+              final dbExercise = await _findExerciseByRemoteId(re.exerciseId);
+              if (dbExercise == null) return re;
+              final exerciseModel = _driftExerciseToModel(dbExercise);
+              return re.copyWith(exercise: exerciseModel);
+            }),
+          );
+          final enrichedRoutine = routine.copyWith(exercises: enrichedExercises);
+
+          // ── 6. Build model ──
+          final model = StandaloneTodayModel(
+            isRestDay: false,
+            today: StandaloneTodayDetails(
+              programRoutineId: routineJson['id'] as String,
+              dayOfWeek: dayOfWeek,
+              assignedProgramId:
+                  routineJson['assigned_program_id'] as String? ?? '',
+              programName: routineJson['name'] as String? ?? '',
+              routine: enrichedRoutine,
+            ),
+          );
+
           AppLogger.info(
-            'Standalone today: ${model.isRestDay ? "Rest Day" : model.today?.routine.name}',
+            'Standalone today parsed OK: ${model.today?.routine.name}',
             tag: 'StandaloneRepo',
           );
           return Success(model);
-        } catch (e) {
+        } catch (e, stackTrace) {
+          AppLogger.error(
+            'Parse error in getTodayRoutine: $e',
+            tag: 'StandaloneRepo',
+            error: e,
+          );
+          AppLogger.debug('Stack: $stackTrace', tag: 'StandaloneRepo');
           return Failure(
             UnknownError(
               message: 'Failed to parse today routine: $e',
@@ -1173,6 +1271,7 @@ class StandaloneWorkoutRepository {
   /// Creates the session on the server. Returns 409 if a session
   /// is already in progress.
   Future<Result<WorkoutSessionModel, AppError>> startSession({
+    required String userId,
     String? assignedProgramId,
   }) async {
     AppLogger.debug('Starting standalone session', tag: 'StandaloneRepo');
@@ -1180,22 +1279,38 @@ class StandaloneWorkoutRepository {
     final result = await _apiClient.post<Map<String, dynamic>>(
       ApiConstants.standaloneSessions,
       data: {
-        if (assignedProgramId != null) 'assignedProgramId': assignedProgramId,
+        if (assignedProgramId != null) 'assigned_program_routine_id': assignedProgramId,
       },
     );
 
     return result.when(
-      success: (data) {
+      success: (data) async {
         try {
-          final session = WorkoutSessionModel.fromJson(
-            data['session'] as Map<String, dynamic>,
+          final sessionJson = data['session'] as Map<String, dynamic>;
+          final session = _parseWorkoutSessionModel(sessionJson);
+
+          // Persist to local DB so set-logging can resolve the session
+          await _db.startWorkoutSession(
+            WorkoutSessionsCompanion.insert(
+              userId: userId,
+              remoteId: Value(session.id),
+              assignedProgramRoutineId: Value(session.assignedProgramRoutineId),
+              startedAt: session.startedAt,
+              isSynced: const Value(true),
+            ),
           );
           AppLogger.info(
             'Standalone session started: ${session.id}',
             tag: 'StandaloneRepo',
           );
           return Success(session);
-        } catch (e) {
+        } catch (e, st) {
+          AppLogger.error(
+            'Failed to parse or persist standalone session',
+            tag: 'StandaloneRepo',
+            error: e,
+            stackTrace: st,
+          );
           return Failure(
             UnknownError(
               message: 'Failed to parse session: $e',
@@ -1224,7 +1339,7 @@ class StandaloneWorkoutRepository {
         try {
           final sessionJson = data['session'];
           if (sessionJson == null) return const Success(null);
-          final session = WorkoutSessionModel.fromJson(
+          final session = _parseWorkoutSessionModel(
             sessionJson as Map<String, dynamic>,
           );
           return Success(session);
@@ -1262,7 +1377,7 @@ class StandaloneWorkoutRepository {
     return result.when(
       success: (data) {
         try {
-          final session = WorkoutSessionModel.fromJson(
+          final session = _parseWorkoutSessionModel(
             data['session'] as Map<String, dynamic>,
           );
           return Success(session);
@@ -1276,6 +1391,47 @@ class StandaloneWorkoutRepository {
         }
       },
       failure: (error) => Failure(error),
+    );
+  }
+
+  /// Parses a server session response handling both snake_case and camelCase.
+  WorkoutSessionModel _parseWorkoutSessionModel(
+    Map<String, dynamic> json,
+  ) {
+    final String id = json['id'] as String;
+    final String userId =
+        (json['user_id'] ?? json['userId'] ?? '') as String;
+    final String? assignedProgramRoutineId =
+        (json['assigned_program_routine_id'] ?? json['assignedProgramRoutineId'])
+            as String?;
+    final DateTime startedAt =
+        DateTime.parse((json['started_at'] ?? json['startedAt']) as String);
+    final DateTime? completedAt = json['completed_at'] != null
+        ? DateTime.parse(json['completed_at'] as String)
+        : json['completedAt'] != null
+            ? DateTime.parse(json['completedAt'] as String)
+            : null;
+    final String? notes = (json['notes'] ?? json['notes']) as String?;
+    final DateTime? createdAt = json['created_at'] != null
+        ? DateTime.parse(json['created_at'] as String)
+        : json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'] as String)
+            : null;
+    final DateTime? updatedAt = json['updated_at'] != null
+        ? DateTime.parse(json['updated_at'] as String)
+        : json['updatedAt'] != null
+            ? DateTime.parse(json['updatedAt'] as String)
+            : null;
+
+    return WorkoutSessionModel(
+      id: id,
+      userId: userId,
+      assignedProgramRoutineId: assignedProgramRoutineId,
+      startedAt: startedAt,
+      completedAt: completedAt,
+      notes: notes,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
     );
   }
 
@@ -1343,7 +1499,7 @@ class StandaloneWorkoutRepository {
     return result.when(
       success: (data) {
         try {
-          final session = WorkoutSessionModel.fromJson(
+          final session = _parseWorkoutSessionModel(
             data['session'] as Map<String, dynamic>,
           );
           AppLogger.info(
@@ -1602,6 +1758,45 @@ class StandaloneWorkoutRepository {
     } catch (_) {
       return [];
     }
+  }
+
+  /// Convert a Drift [Exercise] row into a domain [ExerciseModel].
+  ExerciseModel _driftExerciseToModel(Exercise e) {
+    MuscleGroup muscleGroup;
+    try {
+      muscleGroup = MuscleGroup.values.firstWhere(
+        (mg) => mg.name.toUpperCase() == e.primaryMuscleGroup.toUpperCase(),
+        orElse: () => MuscleGroup.chest,
+      );
+    } catch (_) {
+      muscleGroup = MuscleGroup.chest;
+    }
+
+    List<String> equipment;
+    try {
+      equipment = (jsonDecode(e.equipmentNeeded) as List)
+          .map((item) => item.toString())
+          .toList();
+    } catch (_) {
+      equipment = [];
+    }
+
+    return ExerciseModel(
+      id: e.remoteId ?? e.id.toString(),
+      name: e.name,
+      description: e.description,
+      primaryMuscleGroup: muscleGroup,
+      equipmentNeeded: equipment,
+    );
+  }
+
+  /// Current day of week as a server-style string (e.g. 'MONDAY').
+  String _todayDayOfWeek() {
+    const days = [
+      'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY',
+      'FRIDAY', 'SATURDAY', 'SUNDAY',
+    ];
+    return days[DateTime.now().weekday - 1];
   }
 }
 

@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/utils/app_error.dart';
 import '../../../../core/utils/logger.dart';
+import '../../../../providers/auth_state_provider.dart';
 import '../../../workout/data/models/workout_session_model.dart';
 import '../../data/models/models.dart';
 import '../../data/standalone_workout_repository.dart';
@@ -79,8 +80,17 @@ class StandaloneSessionNotifier extends _$StandaloneSessionNotifier {
 
   /// Start a new workout session.
   Future<bool> startSession({String? assignedProgramId}) async {
+    final userId = ref.read(authStateProvider).userId;
+    if (userId == null || userId.isEmpty) {
+      state = const StandaloneSessionError(
+        UnknownError(message: 'User not authenticated'),
+      );
+      return false;
+    }
+
     state = const StandaloneSessionLoading();
     final result = await _repo.startSession(
+      userId: userId,
       assignedProgramId: assignedProgramId,
     );
     return result.when(
