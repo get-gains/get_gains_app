@@ -41,11 +41,13 @@ class ShareStatsCard extends StatelessWidget {
     required this.template,
     required this.stats,
     required this.user,
+    this.avatarUrl,
   });
 
   final ShareStatTemplate template;
   final ProfileStatsModel stats;
   final UserModel user;
+  final String? avatarUrl;
 
   static const _cardWidth = 1080.0;
   static const _cardHeight = 1080.0;
@@ -341,16 +343,33 @@ class ShareStatsCard extends StatelessWidget {
         shape: BoxShape.circle,
         color: Color(0xFF363636),
       ),
+      clipBehavior: Clip.antiAlias,
       alignment: Alignment.center,
-      child: Text(
-        initials,
-        style: const TextStyle(
-          fontFamily: AppTextStyles.fontFamilySans,
-          fontSize: 28,
-          fontWeight: FontWeight.w600,
-          color: _accentColor,
-        ),
-      ),
+      child: avatarUrl != null && avatarUrl!.isNotEmpty
+          ? Image.network(
+              avatarUrl!,
+              width: 72,
+              height: 72,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Text(
+                initials,
+                style: const TextStyle(
+                  fontFamily: AppTextStyles.fontFamilySans,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w600,
+                  color: _accentColor,
+                ),
+              ),
+            )
+          : Text(
+              initials,
+              style: const TextStyle(
+                fontFamily: AppTextStyles.fontFamilySans,
+                fontSize: 28,
+                fontWeight: FontWeight.w600,
+                color: _accentColor,
+              ),
+            ),
     );
   }
 }

@@ -12,10 +12,12 @@ class ShareTemplatePicker extends StatelessWidget {
     super.key,
     required this.stats,
     required this.user,
+    this.avatarUrl,
   });
 
   final ProfileStatsModel stats;
   final UserModel user;
+  final String? avatarUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -98,6 +100,7 @@ class ShareTemplatePicker extends StatelessWidget {
           template: template,
           stats: stats,
           user: user,
+          avatarUrl: avatarUrl,
           repaintKey: repaintKey,
         ),
       ),

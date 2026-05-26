@@ -76,6 +76,10 @@ class _ClientUnityRecordingScreenState
   bool _isStoppingRecording = false;
   int _frameSkipCount = 0; // for setup validation stream throttle
 
+  // Snapshot of the last Active state, used to keep EmbedUnity alive behind
+  // the Processing overlay so Unity isn't torn down during ffmpeg/MLKit work.
+  ClientRecordingActive? _lastActiveState;
+
   // ── Unity ───────────────────────────────────────────────────────────────
   bool _isUnityLoaded = false;
 
@@ -445,13 +449,29 @@ class _ClientUnityRecordingScreenState
     if (_isStoppingRecording) return;
     _isStoppingRecording = true;
 
+    // Capture the active state so we can keep EmbedUnity alive behind the
+    // processing overlay. Removing EmbedUnity from the widget tree while
+    // ffmpeg + MLKit processing runs can cause a native crash.
+    final currentState = ref.read(clientRecordingProvider(widget.exerciseId));
+    if (currentState is ClientRecordingActive) {
+      _lastActiveState = currentState;
+    }
+
     final notifier = ref.read(
       clientRecordingProvider(widget.exerciseId).notifier,
     );
     notifier.stopRecording();
 
+    // Unmount CameraPreview BEFORE stopVideoRecording. The camera plugin
+    // fires an internal value-notifier during recording stop that triggers
+    // CameraPreview.buildPreview() — but the controller is in a transitional
+    // state where buildPreview() throws on some Android devices.
+    if (mounted) setState(() => _isCameraInitialized = false);
+
     try {
       final file = await _cameraController!.stopVideoRecording();
+      await _cameraController?.dispose();
+      _cameraController = null;
       notifier.setRecordedVideo(file.path);
     } catch (e) {
       AppLogger.error(
@@ -468,6 +488,7 @@ class _ClientUnityRecordingScreenState
   }
 
   void _onTryAgain() {
+    _lastActiveState = null;
     _isNavigatingAfterLog = false;
     _cancelAutoStartCountdown();
     _repsController.clear();
@@ -481,7 +502,8 @@ class _ClientUnityRecordingScreenState
     setState(() {
       _setupValidation = _setupValidator.validate(null);
     });
-    _startSetupStream();
+    // Camera was disposed after stopRecording — reinitialize
+    _initCamera();
   }
 
   // ── Flip camera ──────────────────────────────────────────────────────────
@@ -581,7 +603,9 @@ class _ClientUnityRecordingScreenState
           (prev is! ClientRecordingActive || !prev.autoStopRequested);
 
       if (autoStopTriggered) {
-        unawaited(_onStopRecording());
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          unawaited(_onStopRecording());
+        });
       }
     });
 
@@ -637,6 +661,15 @@ class _ClientUnityRecordingScreenState
                 height: 1,
                 child: EmbedUnity(onMessageFromUnity: _onMessageFromUnity),
               ),
+            // Processing overlay — shown on top of the recording body
+            // (which keeps EmbedUnity alive) to prevent Unity platform-view
+            // teardown during ffmpeg + MLKit work.
+            if (state is ClientRecordingProcessing)
+              _buildProcessingOverlay(
+                context,
+                progress: state.progress,
+                message: state.message,
+              ),
           ],
         ),
       ),
@@ -682,7 +715,7 @@ class _ClientUnityRecordingScreenState
       ClientRecordingReady() => _buildReady(context, state, isDark),
       ClientRecordingActive() => _buildRecording(context, state, isDark),
       ClientRecordingProcessing(:final progress, :final message) =>
-        _buildProcessing(context, progress: progress, message: message),
+        _buildProcessingBody(context, state, progress: progress, message: message),
       ClientRecordingComplete() => _buildResults(context, state, isDark),
     };
   }
@@ -712,7 +745,48 @@ class _ClientUnityRecordingScreenState
     context.go(AppRoutes.workoutSession, extra: {'readOnly': true});
   }
 
-  Widget _buildProcessing(
+  /// During processing, keep EmbedUnity alive behind the overlay by
+  /// rendering only the skeleton view. The full recording body (with
+  /// CameraPreview) is NOT re-rendered because stopVideoRecording leaves
+  /// the controller in a state where CameraPreview.buildPreview() throws
+  /// "Disposed CameraController".
+  Widget _buildProcessingBody(
+    BuildContext context,
+    ClientRecordingProcessing state, {
+    required double progress,
+    required String message,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      color: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+      child: _lastActiveState != null
+          ? _buildMainSkeletonView(
+              isDark: isDark,
+              referenceFrames: _lastActiveState!.referenceLandmarkFrames,
+            )
+          : _buildEmbedUnityPlaceholder(isDark),
+    );
+  }
+
+  /// Minimal widget that keeps EmbedUnity mounted during processing when
+  /// no _lastActiveState snapshot is available.
+  Widget _buildEmbedUnityPlaceholder(bool isDark) {
+    return SizedBox.expand(
+      child: _showUnity
+          ? EmbedUnity(onMessageFromUnity: _onMessageFromUnity)
+          : Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F0F1A),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Center(
+                child: Text('Processing...', style: TextStyle(color: Colors.grey)),
+              ),
+            ),
+    );
+  }
+
+  Widget _buildProcessingOverlay(
     BuildContext context, {
     required double progress,
     required String message,

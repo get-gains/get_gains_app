@@ -42,6 +42,7 @@ class CreateExerciseNotifier extends _$CreateExerciseNotifier {
     required MuscleGroup primaryMuscleGroup,
     List<String> targetMuscles = const [],
     List<String> equipmentNeeded = const [],
+    bool isPublic = true,
   }) async {
     state = const CreateExerciseLoading();
 
@@ -52,6 +53,7 @@ class CreateExerciseNotifier extends _$CreateExerciseNotifier {
       primaryMuscleGroup: primaryMuscleGroup.name.toUpperCase(),
       targetMuscles: targetMuscles,
       equipmentNeeded: equipmentNeeded,
+      isPublic: isPublic,
     );
 
     result.when(

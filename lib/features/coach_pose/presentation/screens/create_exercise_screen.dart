@@ -25,6 +25,7 @@ class _CreateExerciseScreenState extends ConsumerState<CreateExerciseScreen> {
   final _equipmentController = TextEditingController();
   MuscleGroup _selectedMuscleGroup = MuscleGroup.chest;
   final List<String> _equipment = [];
+  bool _isPublic = true;
 
   @override
   void dispose() {
@@ -232,7 +233,11 @@ class _CreateExerciseScreenState extends ConsumerState<CreateExerciseScreen> {
               ),
             ],
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+
+            // Public / Private toggle
+            _buildVisibilityToggle(isDark),
+            const SizedBox(height: 24),
 
             // Submit button
             SizedBox(
@@ -273,6 +278,54 @@ class _CreateExerciseScreenState extends ConsumerState<CreateExerciseScreen> {
     );
   }
 
+  Widget _buildVisibilityToggle(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surface1Dark : AppColors.inputLight,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _isPublic ? Icons.public : Icons.lock,
+            color: _isPublic
+                ? (isDark ? AppColors.primaryDark : AppColors.primaryLight)
+                : (isDark ? AppColors.mutedForegroundDark : AppColors.mutedForegroundLight),
+            size: 22,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _isPublic ? 'Public Exercise' : 'Private Exercise',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  _isPublic
+                      ? 'Visible in the Form Library for all users'
+                      : 'Only visible to you',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: isDark ? AppColors.mutedForegroundDark : AppColors.mutedForegroundLight,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: _isPublic,
+            activeTrackColor: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+            onChanged: (value) => setState(() => _isPublic = value),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _addEquipment() {
     final text = _equipmentController.text.trim();
     if (text.isNotEmpty && !_equipment.contains(text)) {
@@ -293,6 +346,7 @@ class _CreateExerciseScreenState extends ConsumerState<CreateExerciseScreen> {
           description: _descriptionController.text.trim(),
           primaryMuscleGroup: _selectedMuscleGroup,
           equipmentNeeded: _equipment,
+          isPublic: _isPublic,
         );
   }
 }

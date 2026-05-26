@@ -20,12 +20,14 @@ class ShareCardPreview extends StatelessWidget {
     required this.stats,
     required this.user,
     required this.repaintKey,
+    this.avatarUrl,
   });
 
   final ShareStatTemplate template;
   final ProfileStatsModel stats;
   final UserModel user;
   final GlobalKey repaintKey;
+  final String? avatarUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +64,7 @@ class ShareCardPreview extends StatelessWidget {
               template: template,
               stats: stats,
               user: user,
+              avatarUrl: avatarUrl,
             ),
           ),
         ),

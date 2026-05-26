@@ -456,7 +456,7 @@ class _StatsGrid extends ConsumerWidget {
                       color: isDark ? AppColors.cardDark : AppColors.cardLight,
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                     ),
-                    child: ShareTemplatePicker(stats: stats, user: user),
+                    child: ShareTemplatePicker(stats: stats, user: user, avatarUrl: fitnessProfile?.avatarUrl),
                   ),
                 );
               },

@@ -11,6 +11,7 @@ Map<String, dynamic> _normalizeExerciseModelJson(Map<String, dynamic> json) {
   normalizedJson['equipmentNeeded'] = normalizeStringList(
     normalizedJson['equipmentNeeded'] ?? normalizedJson['equipment_needed'],
   );
+  normalizedJson['isPublic'] ??= normalizedJson['is_public'];
   normalizedJson['createdAt'] ??= normalizedJson['created_at'];
   normalizedJson['updatedAt'] ??= normalizedJson['updated_at'];
   normalizedJson['description'] ??= '';
@@ -172,6 +173,7 @@ abstract class ExerciseModel with _$ExerciseModel {
     required String name,
     required String description,
     required MuscleGroup primaryMuscleGroup,
+    @Default(false) bool isPublic,
     @Default([]) List<String> equipmentNeeded,
     DateTime? createdAt,
     DateTime? updatedAt,
