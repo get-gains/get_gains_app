@@ -11,6 +11,7 @@ import '../../../../services/api/api_client.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../guidance/guidance.dart';
 import '../../../profile/profile.dart';
+import '../../../form_library/presentation/widgets/featured_forms_strip.dart';
 import '../providers/home_providers.dart';
 import '../widgets/widgets.dart';
 
@@ -174,6 +175,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                           // ── Weekly pulse ───────────────────────────
                           WeeklyPulseBlock(weeklyKey: _weeklyProgressKey),
+
+                          const SizedBox(height: 20),
+
+                          // ── Featured form library ──────────────
+                          const FeaturedFormsStrip(),
 
                           const SizedBox(height: 20),
 

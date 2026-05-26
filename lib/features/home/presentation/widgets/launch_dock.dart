@@ -8,8 +8,8 @@ import '../../../../providers/router_provider.dart';
 
 /// Horizontal-scrolling pill row of compact navigation shortcuts.
 ///
-/// Client: Shop, Wardrobe, Leaderboard, History.
-/// Coach: Shop, Leaderboard, History (no Wardrobe).
+/// Client: Shop, Wardrobe, Leaderboard, History, Missions, Library.
+/// Coach: Shop, Leaderboard, History, Missions, Library (no Wardrobe).
 ///
 /// @param dockKey [GlobalKey] forwarded for tour anchoring.
 /// @param isCoach When true, omits the Wardrobe pill.
@@ -89,6 +89,12 @@ class LaunchDock extends StatelessWidget {
         label: 'Missions',
         color: const Color(0xFFF59E0B),
         onTap: () => context.push(AppRoutes.missions),
+      ),
+      _DockItem(
+        icon: Icons.border_all_rounded,
+        label: 'Library',
+        color: const Color(0xFF22C55E),
+        onTap: () => context.push(AppRoutes.formLibrary),
       ),
     ];
   }

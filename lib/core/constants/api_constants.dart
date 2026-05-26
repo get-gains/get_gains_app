@@ -127,4 +127,8 @@ class ApiConstants {
 
   // Missions
   static const String missions = '/missions';
+
+  // Form Library & Exercise Ratings
+  static const String formLibrary = '/form-library';
+  static const String exerciseRatings = '/exercise-ratings';
 }

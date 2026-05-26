@@ -32,6 +32,7 @@ import '../features/programs/screens/create_program_screen.dart';
 import '../features/self_program/presentation/screens/self_program_builder_screen.dart';
 import '../features/self_program/presentation/screens/self_program_list_screen.dart';
 import '../features/exercises/presentation/screens/create_exercise_screen.dart' as shared_exercises;
+import '../features/form_library/presentation/screens/form_library_screen.dart';
 
 import 'deep_link_provider.dart';
 
@@ -150,6 +151,7 @@ class AppRoutes {
   static const String leaderboard = '/leaderboard';
   static const String missions = '/missions';
   static const String missionDetail = '/missions/:id';
+  static const String formLibrary = '/form-library';
 }
 
 /// Router Provider
@@ -478,7 +480,11 @@ GoRouter router(Ref ref) {
         path: AppRoutes.clientViewForm,
         builder: (context, state) {
           final id = state.pathParameters['id']!;
-          return ViewFormScreen(exerciseId: id);
+          final extra = state.extra as Map<String, dynamic>?;
+          return ViewFormScreen(
+            exerciseId: id,
+            isFromLibrary: extra?['fromLibrary'] == true,
+          );
         },
       ),
       GoRoute(
@@ -755,6 +761,10 @@ GoRouter router(Ref ref) {
           final id = state.pathParameters['id']!;
           return MissionDetailScreen(missionId: id);
         },
+      ),
+      GoRoute(
+        path: AppRoutes.formLibrary,
+        builder: (context, state) => const FormLibraryScreen(),
       ),
     ],
 
