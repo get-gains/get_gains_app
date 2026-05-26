@@ -4,10 +4,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/app_error.dart';
+import '../../../../core/utils/result.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../client_pose/data/client_pose_repository.dart';
 import '../../../guidance/guidance.dart';
+import '../../../subscription/subscription.dart';
 import '../../data/models/models.dart';
 import '../../data/workout_repository.dart';
 import '../providers/workout_session_provider.dart';
@@ -69,7 +72,17 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
     // Not found in cache — refresh programs from server and retry.
     // An empty cache check is insufficient because old cached programs
     // from a prior session won't contain a newly-assigned program.
-    await repo.syncPrograms();
+    final syncResult = await repo.syncPrograms();
+    if (syncResult is Failure<List<AssignedProgramModel>, AppError>) {
+      final error = syncResult.error;
+      if (error is SubscriptionRequiredError) {
+        throw error;
+      }
+      // For other sync failures (network, server error) fall through to
+      // the local retry — the routine may already be cached from a prior
+      // session even though the first lookup missed it.
+    }
+
     final retry = await repo.getRoutineByModelId(widget.routineId);
     return retry.valueOrNull;
   }
@@ -289,6 +302,38 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
                 ? AppColors.backgroundDark
                 : AppColors.backgroundLight,
             body: const Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.hasError) {
+          final error = snapshot.error;
+          if (error is SubscriptionRequiredError) {
+            return Scaffold(
+              appBar: AppBar(title: const Text('Routine')),
+              body: AppEmptyState(
+                icon: Icons.lock_outline,
+                title: 'Subscription Required',
+                description:
+                    'Active subscription required to access '
+                    'coach-assigned routines. Build your own program or '
+                    'renew to continue.',
+                actionLabel: 'View Plans',
+                onAction: () => showUpgradeSheet(
+                  context: context,
+                  feature: SubscriptionFeature.coachWorkout,
+                ),
+              ),
+            );
+          }
+          return Scaffold(
+            appBar: AppBar(title: const Text('Routine')),
+            body: AppEmptyState(
+              icon: Icons.error_outline,
+              title: 'Something Went Wrong',
+              description: 'Could not load this routine. Please try again.',
+              actionLabel: 'Retry',
+              onAction: () => setState(_loadRoutine),
+            ),
           );
         }
 
