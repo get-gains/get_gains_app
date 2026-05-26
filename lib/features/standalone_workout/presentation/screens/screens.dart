@@ -14,4 +14,5 @@ export 'standalone_program_detail_screen.dart';
 export 'standalone_program_form_screen.dart';
 export 'standalone_assign_routine_sheet.dart';
 export 'standalone_today_screen.dart';
+export 'standalone_workout_screen.dart';
 export 'standalone_session_history_screen.dart';
