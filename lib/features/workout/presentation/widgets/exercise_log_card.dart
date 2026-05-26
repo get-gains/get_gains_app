@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text_styles.dart';
 import '../../../../widgets/widgets.dart';
 import '../../data/models/models.dart';
 import '../providers/exercise_log_provider.dart';
@@ -77,13 +78,16 @@ class _ExerciseLogCardState extends ConsumerState<ExerciseLogCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Exercise header
-          _ExerciseHeader(
-            name: exercise?.name ?? 'Exercise',
-            description: exercise?.description ?? '',
-            muscleGroup: exercise?.primaryMuscleGroup,
+          AppCard.elevated(
+            padding: const EdgeInsets.all(16),
+            child: _ExerciseHeader(
+              name: exercise?.name ?? 'Exercise',
+              description: exercise?.description ?? '',
+              muscleGroup: exercise?.primaryMuscleGroup,
+            ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
 
           // Prescription info
           _PrescriptionInfo(
@@ -222,7 +226,12 @@ class _ExerciseLogCardState extends ConsumerState<ExerciseLogCard> {
           decoration: BoxDecoration(
             color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.success.withValues(alpha: 0.4)),
+            border: Border(
+              left: BorderSide(
+                color: AppColors.success.withValues(alpha: 0.7),
+                width: 3,
+              ),
+            ),
           ),
           child: Row(
             children: [
@@ -237,13 +246,21 @@ class _ExerciseLogCardState extends ConsumerState<ExerciseLogCard> {
               const Spacer(),
               Text(
                 '${s.repsCompleted} reps',
-                style: Theme.of(context).textTheme.bodyMedium,
+                style: AppTextStyles.numericBody.copyWith(
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                ),
               ),
               if (s.weightKg != null && s.weightKg! > 0) ...[
                 const SizedBox(width: 16),
                 Text(
                   '${s.weightKg!.toStringAsFixed(1)} kg',
-                  style: Theme.of(context).textTheme.bodyMedium,
+                  style: AppTextStyles.numericBody.copyWith(
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                  ),
                 ),
               ],
             ],
@@ -326,58 +343,53 @@ class _PrescriptionInfo extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return AppCard.flat(
-      backgroundColor: isDark
-          ? AppColors.surfaceDark.withValues(alpha: 0.5)
-          : AppColors.surfaceLight,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    return AppCard.elevated(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _InfoChip(icon: Icons.repeat, label: '$sets sets'),
+              const SizedBox(width: 12),
+              _InfoChip(
+                icon: Icons.fitness_center,
+                label: '$repsMin-$repsMax reps',
+              ),
+              const SizedBox(width: 12),
+              _InfoChip(
+                icon: Icons.timer_outlined,
+                label: '${restSeconds}s rest',
+              ),
+            ],
+          ),
+          if (notes != null && notes!.isNotEmpty) ...[
+            const SizedBox(height: 8),
             Row(
               children: [
-                _InfoChip(icon: Icons.repeat, label: '$sets sets'),
-                const SizedBox(width: 12),
-                _InfoChip(
-                  icon: Icons.fitness_center,
-                  label: '$repsMin-$repsMax reps',
+                Icon(
+                  Icons.notes,
+                  size: 16,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
                 ),
-                const SizedBox(width: 12),
-                _InfoChip(
-                  icon: Icons.timer_outlined,
-                  label: '${restSeconds}s rest',
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    notes!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
                 ),
               ],
             ),
-            if (notes != null && notes!.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(
-                    Icons.notes,
-                    size: 16,
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      notes!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isDark
-                            ? AppColors.textSecondaryDark
-                            : AppColors.textSecondaryLight,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
           ],
-        ),
+        ],
       ),
     );
   }

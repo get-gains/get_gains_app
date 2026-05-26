@@ -9,13 +9,15 @@ import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../providers/reset_password_provider.dart';
 
-/// Reset Password Screen
-///
-/// Shown after user arrives from deep link with recovery token.
-/// Provides new password + confirm password fields.
-/// On success, logs out user and redirects to login.
 class ResetPasswordScreen extends ConsumerStatefulWidget {
-  const ResetPasswordScreen({super.key});
+  const ResetPasswordScreen({
+    super.key,
+    required this.email,
+    required this.resetToken,
+  });
+
+  final String email;
+  final String resetToken;
 
   @override
   ConsumerState<ResetPasswordScreen> createState() =>
@@ -71,9 +73,11 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen>
   void _onSubmit() {
     if (!_formKey.currentState!.validate()) return;
 
-    ref
-        .read(resetPasswordProvider.notifier)
-        .resetPassword(newPassword: _passwordController.text);
+    ref.read(resetPasswordProvider.notifier).resetPassword(
+          email: widget.email,
+          resetToken: widget.resetToken,
+          newPassword: _passwordController.text,
+        );
   }
 
   @override
@@ -82,7 +86,6 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen>
     final size = MediaQuery.of(context).size;
     final state = ref.watch(resetPasswordProvider);
 
-    // Listen for state changes
     ref.listen(resetPasswordProvider, (_, next) {
       if (next is ResetPasswordSuccess) {
         AppToast.success(
@@ -95,11 +98,6 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen>
       }
     });
 
-    // Token missing state — use AppErrorState
-    if (state is ResetPasswordTokenMissing) {
-      return _buildTokenMissingState(isDark, size);
-    }
-
     final isLoading = state is ResetPasswordLoading;
 
     return Scaffold(
@@ -111,8 +109,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen>
           physics: const BouncingScrollPhysics(),
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              minHeight:
-                  size.height -
+              minHeight: size.height -
                   MediaQuery.of(context).padding.top -
                   MediaQuery.of(context).padding.bottom,
             ),
@@ -124,8 +121,6 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: AppTheme.spacing4),
-
-                  // Back button
                   SlideTransition(
                     position: _slideAnimation,
                     child: FadeTransition(
@@ -136,21 +131,17 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen>
                       ),
                     ),
                   ),
-
                   const SizedBox(height: AppTheme.spacing8),
-
-                  // Icon
                   FadeTransition(
                     opacity: _fadeAnimation,
                     child: Container(
                       width: 80,
                       height: 80,
                       decoration: BoxDecoration(
-                        color:
-                            (isDark
-                                    ? AppColors.primaryDark
-                                    : AppColors.primaryLight)
-                                .withOpacity(0.12),
+                        color: (isDark
+                                ? AppColors.primaryDark
+                                : AppColors.primaryLight)
+                            .withOpacity(0.12),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
@@ -162,10 +153,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen>
                       ),
                     ),
                   ),
-
                   const SizedBox(height: AppTheme.spacing6),
-
-                  // Title
                   SlideTransition(
                     position: _slideAnimation,
                     child: FadeTransition(
@@ -180,10 +168,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen>
                       ),
                     ),
                   ),
-
                   const SizedBox(height: AppTheme.spacing2),
-
-                  // Subtitle
                   SlideTransition(
                     position: _slideAnimation,
                     child: FadeTransition(
@@ -198,10 +183,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen>
                       ),
                     ),
                   ),
-
                   const SizedBox(height: AppTheme.spacing8),
-
-                  // Form
                   SlideTransition(
                     position: _slideAnimation,
                     child: FadeTransition(
@@ -211,7 +193,6 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // New Password
                             AppTextField.password(
                               controller: _passwordController,
                               label: 'New Password',
@@ -239,10 +220,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen>
                                 return null;
                               },
                             ),
-
                             const SizedBox(height: AppTheme.spacing4),
-
-                            // Confirm Password
                             AppTextField.password(
                               controller: _confirmPasswordController,
                               label: 'Confirm Password',
@@ -258,10 +236,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen>
                                 return null;
                               },
                             ),
-
                             const SizedBox(height: AppTheme.spacing3),
-
-                            // Password requirements hint
                             Container(
                               padding: const EdgeInsets.all(AppTheme.spacing4),
                               decoration: BoxDecoration(
@@ -306,10 +281,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen>
                                 ],
                               ),
                             ),
-
                             const SizedBox(height: AppTheme.spacing8),
-
-                            // Submit Button
                             AppButton.primary(
                               label: 'Reset Password',
                               onPressed: isLoading ? null : _onSubmit,
@@ -325,30 +297,6 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen>
                   ),
                 ],
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTokenMissingState(bool isDark, Size screenSize) {
-    return Scaffold(
-      backgroundColor: isDark
-          ? AppColors.backgroundDark
-          : AppColors.backgroundLight,
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacing6),
-            child: AppErrorState(
-              title: 'Invalid Reset Link',
-              description:
-                  'This password reset link is invalid or has expired.\nPlease request a new one.',
-              icon: Icons.link_off_rounded,
-              size: AppEmptyStateSize.lg,
-              retryLabel: 'Request New Link',
-              onRetry: () => context.go(AppRoutes.forgotPassword),
             ),
           ),
         ),

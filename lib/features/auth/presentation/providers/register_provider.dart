@@ -225,43 +225,6 @@ class RegisterNotifier extends _$RegisterNotifier {
   }
 }
 
-/// Password Recovery Provider
-///
-/// Handles password recovery email sending.
-///
-/// Usage:
-/// ```dart
-/// final result = await ref.read(passwordRecoveryProvider.notifier).sendRecoveryEmail(
-///   email: 'user@example.com',
-/// );
-/// ```
-@riverpod
-class PasswordRecoveryNotifier extends _$PasswordRecoveryNotifier {
-  @override
-  AsyncValue<void> build() {
-    return const AsyncData(null);
-  }
-
-  /// Send password recovery email
-  Future<bool> sendRecoveryEmail({required String email}) async {
-    state = const AsyncLoading();
-
-    final authRepository = ref.read(authRepositoryProvider);
-    final result = await authRepository.sendRecoveryEmail(email: email);
-
-    return result.when(
-      success: (_) {
-        state = const AsyncData(null);
-        return true;
-      },
-      failure: (error) {
-        state = AsyncError(error, StackTrace.current);
-        return false;
-      },
-    );
-  }
-}
-
 /// Pending Google Profile Provider
 ///
 /// Provides access to pending Google profile data.

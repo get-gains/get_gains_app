@@ -12,7 +12,7 @@ abstract class WorkoutSessionSummary with _$WorkoutSessionSummary {
   const factory WorkoutSessionSummary({
     required String id,
     required String userId,
-    String? assignedProgramId,
+    @JsonKey(name: 'assignedProgramRoutineId') String? assignedProgramId,
     String? routineId,
     required DateTime startedAt,
     DateTime? completedAt,

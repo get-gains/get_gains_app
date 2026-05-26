@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text_styles.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../guidance/guidance.dart';
@@ -299,7 +300,16 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
       return AppBar(title: const Text('Workout'));
     }
 
+    // Compute progress metrics for the chunky block
+    final totalSets = state.routine?.exercises
+            .fold<int>(0, (sum, e) => sum + e.sets) ??
+        0;
+    final completedSets = state.session.completedSetsCount;
+
     return AppBar(
+      backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+      elevation: 0,
+      scrolledUnderElevation: 0,
       leading: IconButton(
         icon: const Icon(Icons.close),
         onPressed: () async {
@@ -311,21 +321,9 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
           }
         },
       ),
-      title: Column(
-        children: [
-          Text(
-            state.routine?.name ?? 'Workout',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          Text(
-            _formatDuration(state.session.duration),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: isDark
-                  ? AppColors.textSecondaryDark
-                  : AppColors.textSecondaryLight,
-            ),
-          ),
-        ],
+      title: Text(
+        state.routine?.name ?? 'Workout',
+        style: Theme.of(context).textTheme.titleMedium,
       ),
       centerTitle: true,
       actions: [
@@ -339,17 +337,14 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
         ),
       ],
       bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(4),
+        preferredSize: const Size.fromHeight(56),
         child: KeyedSubtree(
           key: _progressKey,
-          child: LinearProgressIndicator(
-            value: state.progress,
-            backgroundColor: isDark
-                ? AppColors.surfaceDark
-                : AppColors.surfaceLight,
-            valueColor: AlwaysStoppedAnimation<Color>(
-              isDark ? AppColors.primaryDark : AppColors.primaryLight,
-            ),
+          child: _WorkoutProgressBlock(
+            completedSets: completedSets,
+            totalSets: totalSets,
+            duration: state.session.duration,
+            isDark: isDark,
           ),
         ),
       ),
@@ -406,7 +401,7 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
         title: 'No Exercises',
         description: 'This routine has no exercises.',
         actionLabel: 'Go Back',
-        onAction: () => context.go(AppRoutes.routines),
+        onAction: () => context.go(AppRoutes.home),
       );
     }
 
@@ -475,6 +470,12 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
     WorkoutSessionActive state,
     bool isDark,
   ) {
+    final divider = Divider(
+      height: 1,
+      thickness: 1,
+      color: isDark ? AppColors.borderDark : AppColors.borderLight,
+    );
+
     if (widget.readOnly) {
       final canStartNextSet = widget.nextSetNavigation != null;
       final canFinishWorkout = state.isAllExercisesCompleted;
@@ -497,95 +498,107 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
           ? _completeWorkout
           : _continueWorkout;
 
-      return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: AppButton.primary(
-            label: label,
-            icon: icon,
-            isFullWidth: true,
-            onPressed: onPressed,
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          divider,
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: AppButton.primary(
+                label: label,
+                icon: icon,
+                isFullWidth: true,
+                onPressed: onPressed,
+              ),
+            ),
           ),
-        ),
+        ],
       );
     }
 
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            // Previous exercise
-            if (state.currentExerciseIndex > 0)
-              Expanded(
-                child: AppButton.outline(
-                  label: 'Previous',
-                  icon: Icons.arrow_back,
-                  onPressed: () {
-                    ref
-                        .read(workoutSessionProvider.notifier)
-                        .previousExercise();
-                    _pageController.previousPage(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                    );
-                  },
-                ),
-              )
-            else
-              const Spacer(),
-
-            const SizedBox(width: 16),
-
-            // Next exercise or Finish
-            Expanded(
-              child: state.isAllExercisesCompleted
-                  ? AppButton.primary(
-                      label: 'Finish Workout',
-                      icon: Icons.check,
-                      onPressed: _completeWorkout,
-                    )
-                  : AppButton.primary(
-                      label: 'Next',
-                      icon: Icons.arrow_forward,
-                      iconPosition: IconPosition.trailing,
-                      onPressed: () async {
-                        final routine = state.routine;
-                        if (routine != null &&
-                            state.currentExerciseIndex <
-                                routine.exercises.length) {
-                          final currentExercise =
-                              routine.exercises[state.currentExerciseIndex];
-                          final currentCompletedSets = state.session
-                              .setsForExercise(currentExercise.id)
-                              .length;
-                          final isCurrentExerciseCompleted =
-                              currentCompletedSets >= currentExercise.sets;
-
-                          final nextIndex = state.currentExerciseIndex + 1;
-                          if (isCurrentExerciseCompleted &&
-                              nextIndex < routine.exercises.length) {
-                            await _goToRecordingForExercise(
-                              state: state,
-                              exerciseIndex: nextIndex,
-                            );
-                            return;
-                          }
-                        }
-
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        divider,
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                // Previous exercise
+                if (state.currentExerciseIndex > 0)
+                  Expanded(
+                    child: AppButton.outline(
+                      label: 'Previous',
+                      icon: Icons.arrow_back,
+                      onPressed: () {
                         ref
                             .read(workoutSessionProvider.notifier)
-                            .nextExercise();
-                        _pageController.nextPage(
+                            .previousExercise();
+                        _pageController.previousPage(
                           duration: const Duration(milliseconds: 300),
                           curve: Curves.easeInOut,
                         );
                       },
                     ),
+                  )
+                else
+                  const Spacer(),
+
+                const SizedBox(width: 16),
+
+                // Next exercise or Finish
+                Expanded(
+                  child: state.isAllExercisesCompleted
+                      ? AppButton.primary(
+                          label: 'Finish Workout',
+                          icon: Icons.check,
+                          onPressed: _completeWorkout,
+                        )
+                      : AppButton.primary(
+                          label: 'Next',
+                          icon: Icons.arrow_forward,
+                          iconPosition: IconPosition.trailing,
+                          onPressed: () async {
+                            final routine = state.routine;
+                            if (routine != null &&
+                                state.currentExerciseIndex <
+                                    routine.exercises.length) {
+                              final currentExercise =
+                                  routine.exercises[state.currentExerciseIndex];
+                              final currentCompletedSets = state.session
+                                  .setsForExercise(currentExercise.id)
+                                  .length;
+                              final isCurrentExerciseCompleted =
+                                  currentCompletedSets >= currentExercise.sets;
+
+                              final nextIndex = state.currentExerciseIndex + 1;
+                              if (isCurrentExerciseCompleted &&
+                                  nextIndex < routine.exercises.length) {
+                                await _goToRecordingForExercise(
+                                  state: state,
+                                  exerciseIndex: nextIndex,
+                                );
+                                return;
+                              }
+                            }
+
+                            ref
+                                .read(workoutSessionProvider.notifier)
+                                .nextExercise();
+                            _pageController.nextPage(
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
+                            );
+                          },
+                        ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -676,26 +689,110 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
   Future<String?> _showNotesDialog() async {
     final controller = TextEditingController();
 
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Notes'),
-        content: TextField(
-          controller: controller,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            hintText: 'How did the workout feel?',
-            border: OutlineInputBorder(),
+    try {
+      return await showAppDialog<String>(
+        context: context,
+        builder: (ctx) => AppDialogContent(
+          icon: Icons.edit_note,
+          iconColor: AppColors.primaryDark,
+          title: 'Workout Notes',
+          contentWidget: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'How did it feel? Optional — totally fine to skip.',
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.mutedForegroundDark,
+                ),
+              ),
+              const SizedBox(height: 12),
+              AppTextField(
+                controller: controller,
+                maxLines: 4,
+                hint: 'e.g. Felt strong on bench, lower back tight on squat…',
+              ),
+            ],
           ),
+          actionsDirection: Axis.vertical,
+          actions: [
+            AppDialogAction(
+              label: 'Save & Finish',
+              onPressed: () => Navigator.pop(ctx, controller.text),
+              isPrimary: true,
+              expanded: true,
+            ),
+            AppDialogAction(
+              label: 'Skip',
+              onPressed: () => Navigator.pop(ctx, null),
+              expanded: true,
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(null),
-            child: const Text('Skip'),
+      );
+    } finally {
+      controller.dispose();
+    }
+  }
+}
+
+class _WorkoutProgressBlock extends StatelessWidget {
+  const _WorkoutProgressBlock({
+    required this.completedSets,
+    required this.totalSets,
+    required this.duration,
+    required this.isDark,
+  });
+
+  final int completedSets;
+  final int totalSets;
+  final Duration? duration;
+  final bool isDark;
+
+  String _formatDuration(Duration? d) {
+    if (d == null) return '00:00';
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = totalSets > 0 ? completedSets / totalSets : 0.0;
+    final trackColor = isDark ? AppColors.surface2Dark : AppColors.surface2Light;
+
+    return Container(
+      height: 56,
+      color: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Text(
+            '$completedSets/$totalSets sets',
+            style: AppTextStyles.numericBody.copyWith(
+              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+            ),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Save'),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 12,
+                backgroundColor: trackColor,
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  AppColors.primaryDark,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            _formatDuration(duration),
+            style: AppTextStyles.numericBody.copyWith(
+              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+            ),
           ),
         ],
       ),

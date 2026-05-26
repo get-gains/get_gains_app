@@ -17,8 +17,8 @@ plugins {
 android {
     namespace = "com.getgains.app"
     compileSdk = 36
-    // Unity 6000.0 requires NDK r27c (27.2.12479018)
-    ndkVersion = "28.2.13676358"
+    // Unity 6000.4 requires NDK r27c (27.2.12479018) — must match unityLibrary
+    ndkVersion = "27.2.12479018"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -39,11 +39,12 @@ android {
         targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        // Unity only ships ARM native libs (libmain.so etc). Use an ARM64 emulator or a real device.
-        ndk {
-            abiFilters.clear()
-            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a"))
-        }
+        // Unity only ships ARM native libs (libmain.so etc).
+        // ndk.abiFilters is intentionally left unset to avoid conflicts with
+        // --split-per-abi (Flutter adds x86_64 to the split filter, and AGP
+        // requires ndk.abiFilters to be a superset of split ABIs).
+        // The x86_64 split APK won't include Unity .so files (x86_64 is
+        // emulator-only, so this has no real-world impact).
     }
 
     signingConfigs {
@@ -58,6 +59,12 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
     

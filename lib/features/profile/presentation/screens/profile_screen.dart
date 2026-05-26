@@ -1,5 +1,3 @@
-// lib/features/profile/presentation/screens/profile_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,11 +14,12 @@ import '../../../guidance/guidance.dart';
 import '../../../home/presentation/screens/home_screen.dart'
     show isCoachProvider;
 import '../../data/models/user_profile_model.dart';
+import '../../data/models/profile_stats_model.dart';
 import '../providers/profile_provider.dart';
+import '../providers/profile_stats_provider.dart';
 import '../providers/user_profile_provider.dart';
+import '../widgets/share_template_picker.dart';
 
-/// Placeholder achievement entry for the profile achievements grid.
-/// Replace with API-backed model when backend is ready.
 class _PlaceholderAchievement {
   const _PlaceholderAchievement({
     required this.id,
@@ -74,10 +73,6 @@ const List<_PlaceholderAchievement> _placeholderAchievements = [
   ),
 ];
 
-/// User profile screen.
-///
-/// Displays the current user's profile (avatar, name, nickname, email,
-/// member since) with pull-to-refresh and error/retry.
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
@@ -96,6 +91,7 @@ class ProfileScreen extends ConsumerWidget {
           onRefresh: () async {
             ref.invalidate(profileProvider);
             ref.invalidate(userProfileProvider);
+            ref.invalidate(profileStatsProvider);
             await ref.read(profileProvider.future);
             await ref.read(userProfileProvider.future);
           },
@@ -119,7 +115,7 @@ class ProfileScreen extends ConsumerWidget {
   }
 }
 
-class _ProfileContent extends StatelessWidget {
+class _ProfileContent extends ConsumerWidget {
   const _ProfileContent({
     required this.user,
     required this.fitnessProfile,
@@ -135,10 +131,8 @@ class _ProfileContent extends StatelessWidget {
   final bool isCoach;
 
   @override
-  Widget build(BuildContext context) {
-    final memberSince = user.createdAt != null
-        ? DateFormat.yMMM().format(user.createdAt!)
-        : null;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final statsAsync = ref.watch(profileStatsProvider);
 
     return CustomScrollView(
       slivers: [
@@ -149,9 +143,10 @@ class _ProfileContent extends StatelessWidget {
           ),
           title: Text(
             'Profile',
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(context)
+                .textTheme
+                .titleLarge
+                ?.copyWith(fontWeight: FontWeight.bold),
           ),
           actions: [
             Padding(
@@ -162,9 +157,9 @@ class _ProfileContent extends StatelessWidget {
                 onPressed: canEdit
                     ? () => context.push(AppRoutes.editProfile)
                     : () => AppToast.warning(
-                        context,
-                        'Editing requires an internet connection',
-                      ),
+                          context,
+                          'Editing requires an internet connection',
+                        ),
               ),
             ),
           ],
@@ -176,87 +171,17 @@ class _ProfileContent extends StatelessWidget {
           sliver: SliverList(
             delegate: SliverChildListDelegate([
               const SizedBox(height: 8),
-              // ── Avatar and name block ─────────────────────────────
-              Center(
-                child: Column(
-                  children: [
-                    AppAvatar(
-                      name: user.name,
-                      imageUrl: fitnessProfile?.avatarUrl,
-                      size: AppAvatarSize.xxl,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      user.name,
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            fontFamily: AppTextStyles.fontFamilySans,
-                          ),
-                      textAlign: TextAlign.center,
-                    ),
-                    if (user.nickname.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        user.nickname,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              color: isDark
-                                  ? AppColors.textSecondaryDark
-                                  : AppColors.textSecondaryLight,
-                              fontFamily: AppTextStyles.fontFamilySans,
-                            ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                    if (fitnessProfile?.bio != null &&
-                        fitnessProfile!.bio!.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        fitnessProfile!.bio!,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: isDark
-                              ? AppColors.textSecondaryDark
-                              : AppColors.textSecondaryLight,
-                          fontFamily: AppTextStyles.fontFamilySans,
-                        ),
-                        textAlign: TextAlign.center,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 32),
+              _ProfileHeader(user: user, fitnessProfile: fitnessProfile, isDark: isDark),
+              const SizedBox(height: 24),
 
-              // ── Account info card ─────────────────────────────────
-              AppCard(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _ProfileRow(
-                      icon: Icons.email_outlined,
-                      label: 'Email',
-                      value: user.email,
-                      isDark: isDark,
-                    ),
-                    if (memberSince != null) ...[
-                      const SizedBox(height: 16),
-                      _ProfileRow(
-                        icon: Icons.calendar_today_outlined,
-                        label: 'Member since',
-                        value: memberSince,
-                        isDark: isDark,
-                      ),
-                    ],
-                  ],
-                ),
+              _StatsGrid(
+                statsAsync: statsAsync,
+                isDark: isDark,
+                user: user,
+                fitnessProfile: fitnessProfile,
               ),
               const SizedBox(height: 24),
 
-              // ── Quick Navigation Links (M-CF1-5) ──────────────
               _SectionHeader(title: 'Quick Links', isDark: isDark),
               const SizedBox(height: 12),
               AppCard(
@@ -330,23 +255,12 @@ class _ProfileContent extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
-              // ── Fitness profile card ──────────────────────────────
               if (fitnessProfile != null) ...[
                 _SectionHeader(title: 'Fitness Profile', isDark: isDark),
                 const SizedBox(height: 12),
                 _FitnessProfileCard(profile: fitnessProfile!, isDark: isDark),
                 const SizedBox(height: 24),
 
-                // ── Training preferences card ─────────────────────
-                _SectionHeader(title: 'Training Preferences', isDark: isDark),
-                const SizedBox(height: 12),
-                _TrainingPreferencesCard(
-                  profile: fitnessProfile!,
-                  isDark: isDark,
-                ),
-                const SizedBox(height: 24),
-
-                // ── Equipment card ────────────────────────────────
                 if (fitnessProfile!.equipment.isNotEmpty) ...[
                   _SectionHeader(title: 'Equipment', isDark: isDark),
                   const SizedBox(height: 12),
@@ -357,7 +271,6 @@ class _ProfileContent extends StatelessWidget {
                   const SizedBox(height: 24),
                 ],
 
-                // ── Injury history ────────────────────────────────
                 if (fitnessProfile!.injuryHistory != null &&
                     fitnessProfile!.injuryHistory!.isNotEmpty) ...[
                   _SectionHeader(title: 'Injury History', isDark: isDark),
@@ -367,21 +280,12 @@ class _ProfileContent extends StatelessWidget {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          Icons.healing_outlined,
-                          size: 22,
-                          color: isDark
-                              ? AppColors.textSecondaryDark
-                              : AppColors.textSecondaryLight,
-                        ),
+                        Icon(Icons.healing_outlined, size: 22, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
                         const SizedBox(width: 14),
                         Expanded(
                           child: Text(
                             fitnessProfile!.injuryHistory!,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  fontFamily: AppTextStyles.fontFamilySans,
-                                ),
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontFamily: AppTextStyles.fontFamilySans),
                           ),
                         ),
                       ],
@@ -391,7 +295,6 @@ class _ProfileContent extends StatelessWidget {
                 ],
               ],
 
-              // ── Gains Coins section ────────────────────────────────
               _SectionHeader(title: 'Gains Coins', isDark: isDark),
               const SizedBox(height: 12),
               CoinBalanceWidget(
@@ -399,32 +302,6 @@ class _ProfileContent extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
-              // ── Stats placeholder section ─────────────────────────
-              _SectionHeader(title: 'Stats', isDark: isDark),
-              const SizedBox(height: 12),
-              AppCard(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _ProfileRow(
-                      icon: Icons.fitness_center_outlined,
-                      label: 'Workouts this week',
-                      value: '—',
-                      isDark: isDark,
-                    ),
-                    const SizedBox(height: 16),
-                    _ProfileRow(
-                      icon: Icons.local_fire_department_outlined,
-                      label: 'Current streak',
-                      value: '—',
-                      isDark: isDark,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              // Achievements section
               _SectionHeader(title: 'Achievements', isDark: isDark),
               const SizedBox(height: 12),
               GridView.count(
@@ -435,13 +312,11 @@ class _ProfileContent extends StatelessWidget {
                 crossAxisSpacing: 12,
                 childAspectRatio: 0.85,
                 children: _placeholderAchievements
-                    .map(
-                      (a) => _AchievementTile(achievement: a, isDark: isDark),
-                    )
+                    .map((a) => _AchievementTile(achievement: a, isDark: isDark))
                     .toList(),
               ),
               const SizedBox(height: 24),
-              // Logout
+
               Consumer(
                 builder: (context, ref, _) {
                   return OutlinedButton.icon(
@@ -454,14 +329,8 @@ class _ProfileContent extends StatelessWidget {
                     icon: const Icon(Icons.logout),
                     label: const Text('Sign out'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: isDark
-                          ? AppColors.error
-                          : AppColors.destructiveLight,
-                      side: BorderSide(
-                        color: isDark
-                            ? AppColors.error
-                            : AppColors.destructiveLight,
-                      ),
+                      foregroundColor: isDark ? AppColors.error : AppColors.destructiveLight,
+                      side: BorderSide(color: isDark ? AppColors.error : AppColors.destructiveLight),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                   );
@@ -472,6 +341,371 @@ class _ProfileContent extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ProfileHeader extends StatelessWidget {
+  const _ProfileHeader({
+    required this.user,
+    required this.fitnessProfile,
+    required this.isDark,
+  });
+
+  final UserModel user;
+  final UserProfileModel? fitnessProfile;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        children: [
+          AppAvatar(
+            name: user.name,
+            imageUrl: fitnessProfile?.avatarUrl,
+            size: AppAvatarSize.xxl,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            user.name,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontFamily: AppTextStyles.fontFamilySans,
+                ),
+            textAlign: TextAlign.center,
+          ),
+          if (user.nickname.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              user.nickname,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                    fontFamily: AppTextStyles.fontFamilySans,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+          if (fitnessProfile?.bio != null && fitnessProfile!.bio!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              fitnessProfile!.bio!,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                    fontFamily: AppTextStyles.fontFamilySans,
+                  ),
+              textAlign: TextAlign.center,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.email_outlined, size: 16, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+              const SizedBox(width: 6),
+              Text(
+                user.email,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                      fontFamily: AppTextStyles.fontFamilySans,
+                    ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatsGrid extends ConsumerWidget {
+  const _StatsGrid({
+    required this.statsAsync,
+    required this.isDark,
+    required this.user,
+    required this.fitnessProfile,
+  });
+
+  final AsyncValue<ProfileStatsModel> statsAsync;
+  final bool isDark;
+  final UserModel user;
+  final UserProfileModel? fitnessProfile;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _SectionHeader(title: 'Your Stats', isDark: isDark),
+            _ShareButton(
+              isDark: isDark,
+              onTap: () {
+                final stats = statsAsync.value;
+                if (stats == null) return;
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => Container(
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.cardDark : AppColors.cardLight,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                    ),
+                    child: ShareTemplatePicker(stats: stats, user: user, avatarUrl: fitnessProfile?.avatarUrl),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        statsAsync.when(
+          data: (stats) => _buildStatsContent(context, stats, isDark),
+          loading: () => const _StatsLoading(),
+          error: (_, __) => _emptyStats(isDark),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatsContent(BuildContext context, ProfileStatsModel stats, bool isDark) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _StatBlock(
+                icon: Icons.fitness_center_outlined,
+                label: 'Workouts\nthis week',
+                value: '${stats.workoutsThisWeek}',
+                isDark: isDark,
+                accentColor: AppColors.primaryDark,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _StatBlock(
+                icon: Icons.repeat,
+                label: 'Sets\ntoday',
+                value: '${stats.setsToday}',
+                isDark: isDark,
+                accentColor: AppColors.success,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _StatBlock(
+                icon: Icons.local_fire_department_outlined,
+                label: 'Day\nstreak',
+                value: '${stats.streakDays}',
+                isDark: isDark,
+                accentColor: const Color(0xFFFBBF24),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _StatBlock(
+                icon: Icons.timer_outlined,
+                label: 'Minutes\nthis week',
+                value: '${stats.totalMinutesWeek}',
+                isDark: isDark,
+                accentColor: const Color(0xFF60A5FA),
+              ),
+            ),
+          ],
+        ),
+        if (stats.allTimeWorkouts > 0 || stats.allTimeSets > 0) ...[
+          const SizedBox(height: 12),
+          AppCard(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _ProfileRow(
+                    icon: Icons.emoji_events_outlined,
+                    label: 'All-time workouts',
+                    value: '${stats.allTimeWorkouts}',
+                    isDark: isDark,
+                  ),
+                ),
+                Container(
+                  width: 1,
+                  height: 40,
+                  color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 16),
+                    child: _ProfileRow(
+                      icon: Icons.fitness_center_outlined,
+                      label: 'All-time sets',
+                      value: '${stats.allTimeSets}',
+                      isDark: isDark,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _emptyStats(bool isDark) {
+    return AppCard(
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: Text(
+          'Complete a workout to see your stats',
+          style: TextStyle(
+            fontFamily: AppTextStyles.fontFamilySans,
+            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+            fontSize: 14,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatBlock extends StatelessWidget {
+  const _StatBlock({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.isDark,
+    required this.accentColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool isDark;
+  final Color accentColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.cardDark : AppColors.cardLight,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : AppColors.borderLight,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            alignment: Alignment.center,
+            child: Icon(icon, color: accentColor, size: 22),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            value,
+            style: TextStyle(
+              fontFamily: AppTextStyles.fontFamilyMono,
+              fontSize: 32,
+              fontWeight: FontWeight.w700,
+              color: accentColor,
+              height: 1.0,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: AppTextStyles.fontFamilySans,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+              height: 1.3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShareButton extends StatelessWidget {
+  const _ShareButton({required this.isDark, required this.onTap});
+
+  final bool isDark;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.primaryDark.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.share, size: 16, color: AppColors.primaryDark),
+            const SizedBox(width: 6),
+            Text(
+              'Share',
+              style: TextStyle(
+                fontFamily: AppTextStyles.fontFamilySans,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primaryDark,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatsLoading extends StatelessWidget {
+  const _StatsLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.primaryDark,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text('Loading stats...'),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -494,13 +728,7 @@ class _ProfileRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          icon,
-          size: 22,
-          color: isDark
-              ? AppColors.textSecondaryDark
-              : AppColors.textSecondaryLight,
-        ),
+        Icon(icon, size: 22, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
         const SizedBox(width: 14),
         Expanded(
           child: Column(
@@ -509,19 +737,17 @@ class _ProfileRow extends StatelessWidget {
               Text(
                 label,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight,
-                  fontFamily: AppTextStyles.fontFamilySans,
-                ),
+                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                      fontFamily: AppTextStyles.fontFamilySans,
+                    ),
               ),
               const SizedBox(height: 2),
               Text(
                 value,
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  fontFamily: AppTextStyles.fontFamilySans,
-                ),
+                      fontWeight: FontWeight.w500,
+                      fontFamily: AppTextStyles.fontFamilySans,
+                    ),
               ),
             ],
           ),
@@ -539,25 +765,16 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          title,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+    return Text(
+      title,
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.bold,
-            color: isDark
-                ? AppColors.foregroundDark
-                : AppColors.foregroundLight,
+            color: isDark ? AppColors.foregroundDark : AppColors.foregroundLight,
             fontFamily: AppTextStyles.fontFamilySans,
           ),
-        ),
-      ],
     );
   }
 }
-
-// ─── Fitness profile display cards ──────────────────────────────────────
 
 class _FitnessProfileCard extends StatelessWidget {
   const _FitnessProfileCard({required this.profile, required this.isDark});
@@ -565,19 +782,11 @@ class _FitnessProfileCard extends StatelessWidget {
   final UserProfileModel profile;
   final bool isDark;
 
-  String _formatHeight(double cm) {
-    return '${cm.toStringAsFixed(1)} cm';
-  }
-
-  String _formatWeight(double kg) {
-    return '${kg.toStringAsFixed(1)} kg';
-  }
+  String _formatHeight(double cm) => '${cm.toStringAsFixed(1)} cm';
+  String _formatWeight(double kg) => '${kg.toStringAsFixed(1)} kg';
 
   String _formatSex(Sex sex) {
-    return switch (sex) {
-      Sex.male => 'Male',
-      Sex.female => 'Female',
-    };
+    return switch (sex) { Sex.male => 'Male', Sex.female => 'Female' };
   }
 
   String _formatExperience(ExperienceLevel level) {
@@ -588,11 +797,6 @@ class _FitnessProfileCard extends StatelessWidget {
     };
   }
 
-  String _formatDateOfBirth(DateTime dob) {
-    final age = DateTime.now().difference(dob).inDays ~/ 365;
-    return '${DateFormat.yMMMd().format(dob)} ($age yrs)';
-  }
-
   @override
   Widget build(BuildContext context) {
     return AppCard(
@@ -601,113 +805,25 @@ class _FitnessProfileCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (profile.heightCm != null) ...[
-            _ProfileRow(
-              icon: Icons.straighten_outlined,
-              label: 'Height',
-              value: _formatHeight(profile.heightCm!),
-              isDark: isDark,
-            ),
+            _ProfileRow(icon: Icons.straighten_outlined, label: 'Height', value: _formatHeight(profile.heightCm!), isDark: isDark),
             const SizedBox(height: 16),
           ],
           if (profile.weightKg != null) ...[
-            _ProfileRow(
-              icon: Icons.monitor_weight_outlined,
-              label: 'Weight',
-              value: _formatWeight(profile.weightKg!),
-              isDark: isDark,
-            ),
+            _ProfileRow(icon: Icons.monitor_weight_outlined, label: 'Weight', value: _formatWeight(profile.weightKg!), isDark: isDark),
             const SizedBox(height: 16),
           ],
           if (profile.sex != null) ...[
-            _ProfileRow(
-              icon: Icons.person_outline,
-              label: 'Sex',
-              value: _formatSex(profile.sex!),
-              isDark: isDark,
-            ),
+            _ProfileRow(icon: Icons.person_outline, label: 'Sex', value: _formatSex(profile.sex!), isDark: isDark),
             const SizedBox(height: 16),
           ],
           if (profile.dateOfBirth != null) ...[
-            _ProfileRow(
-              icon: Icons.cake_outlined,
-              label: 'Date of Birth',
-              value: _formatDateOfBirth(profile.dateOfBirth!),
-              isDark: isDark,
-            ),
+            _ProfileRow(icon: Icons.cake_outlined, label: 'Date of Birth', value: DateFormat.yMMMd().format(profile.dateOfBirth!), isDark: isDark),
             const SizedBox(height: 16),
           ],
           if (profile.experienceLevel != null)
-            _ProfileRow(
-              icon: Icons.trending_up_outlined,
-              label: 'Experience',
-              value: _formatExperience(profile.experienceLevel!),
-              isDark: isDark,
-            ),
-          // If no fields are populated, show a hint
-          if (profile.heightCm == null &&
-              profile.weightKg == null &&
-              profile.sex == null &&
-              profile.dateOfBirth == null &&
-              profile.experienceLevel == null)
-            _ProfileRow(
-              icon: Icons.info_outline,
-              label: 'Tip',
-              value: 'Tap the edit button to complete your fitness profile',
-              isDark: isDark,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TrainingPreferencesCard extends StatelessWidget {
-  const _TrainingPreferencesCard({required this.profile, required this.isDark});
-
-  final UserProfileModel profile;
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    final hasExperienceLevel = profile.experienceLevel != null;
-    final hasInjuryHistory =
-        profile.injuryHistory != null && profile.injuryHistory!.isNotEmpty;
-
-    if (!hasExperienceLevel && !hasInjuryHistory) {
-      return AppCard(
-        padding: const EdgeInsets.all(20),
-        child: _ProfileRow(
-          icon: Icons.info_outline,
-          label: 'Tip',
-          value: 'Tap the edit button to set your training preferences',
-          isDark: isDark,
-        ),
-      );
-    }
-
-    return AppCard(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (hasExperienceLevel)
-            _ProfileRow(
-              icon: Icons.trending_up_outlined,
-              label: 'Experience',
-              value:
-                  profile.experienceLevel!.name[0].toUpperCase() +
-                  profile.experienceLevel!.name.substring(1),
-              isDark: isDark,
-            ),
-          if (hasExperienceLevel && hasInjuryHistory)
-            const SizedBox(height: 16),
-          if (hasInjuryHistory)
-            _ProfileRow(
-              icon: Icons.healing_outlined,
-              label: 'Injuries',
-              value: profile.injuryHistory!,
-              isDark: isDark,
-            ),
+            _ProfileRow(icon: Icons.trending_up_outlined, label: 'Experience', value: _formatExperience(profile.experienceLevel!), isDark: isDark),
+          if (profile.heightCm == null && profile.weightKg == null && profile.sex == null && profile.dateOfBirth == null && profile.experienceLevel == null)
+            _ProfileRow(icon: Icons.info_outline, label: 'Tip', value: 'Tap the edit button to complete your fitness profile', isDark: isDark),
         ],
       ),
     );
@@ -728,10 +844,7 @@ class _EquipmentCard extends StatelessWidget {
         spacing: 8,
         runSpacing: 8,
         children: equipment.map((item) {
-          // Capitalise first letter for display
-          final label = item.isNotEmpty
-              ? '${item[0].toUpperCase()}${item.substring(1)}'
-              : item;
+          final label = item.isNotEmpty ? '${item[0].toUpperCase()}${item.substring(1)}' : item;
           return AppBadge(label: label, variant: AppBadgeVariant.secondary);
         }).toList(),
       ),
@@ -748,9 +861,7 @@ class _AchievementTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isLocked = !achievement.unlocked;
-    final iconColor = isDark
-        ? AppColors.textSecondaryDark
-        : AppColors.textSecondaryLight;
+    final iconColor = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
     final bgColor = isDark ? AppColors.cardDark : AppColors.cardLight;
 
     return Opacity(
@@ -760,9 +871,7 @@ class _AchievementTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isDark ? AppColors.borderDark : AppColors.borderLight,
-          ),
+          border: Border.all(color: isDark ? AppColors.borderDark : AppColors.borderLight),
         ),
         child: Stack(
           clipBehavior: Clip.none,
@@ -775,10 +884,7 @@ class _AchievementTile extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   achievement.title,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: iconColor,
-                    fontFamily: AppTextStyles.fontFamilySans,
-                  ),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: iconColor, fontFamily: AppTextStyles.fontFamilySans),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
@@ -786,11 +892,7 @@ class _AchievementTile extends StatelessWidget {
               ],
             ),
             if (isLocked)
-              Positioned(
-                top: 4,
-                right: 4,
-                child: Icon(Icons.lock_outline, size: 14, color: iconColor),
-              ),
+              Positioned(top: 4, right: 4, child: Icon(Icons.lock_outline, size: 14, color: iconColor)),
           ],
         ),
       ),
@@ -829,7 +931,7 @@ class _ProfileError extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppEmptyState.fullPage(
       icon: Icons.person_off_outlined,
-      title: 'Couldn’t load profile',
+      title: "Couldn't load profile",
       description: message,
       actionLabel: 'Retry',
       onAction: onRetry,
@@ -867,29 +969,15 @@ class _NavLinkTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            Icon(
-              icon,
-              size: 22,
-              color: isDark
-                  ? AppColors.textSecondaryDark
-                  : AppColors.textSecondaryLight,
-            ),
+            Icon(icon, size: 22, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
             const SizedBox(width: 14),
             Expanded(
               child: Text(
                 title,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
               ),
             ),
-            Icon(
-              Icons.chevron_right,
-              size: 20,
-              color: isDark
-                  ? AppColors.textSecondaryDark
-                  : AppColors.textSecondaryLight,
-            ),
+            Icon(Icons.chevron_right, size: 20, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
           ],
         ),
       ),

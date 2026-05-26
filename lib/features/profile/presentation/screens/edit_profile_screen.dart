@@ -14,6 +14,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../widgets/widgets.dart';
 import '../../data/models/user_profile_model.dart';
 import '../providers/edit_profile_provider.dart';
+import '../providers/profile_provider.dart';
 
 /// Screen for editing the user's fitness profile.
 ///
@@ -205,6 +206,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final form = ref.watch(editProfileProvider);
+    final profileAsync = ref.watch(profileProvider);
+    final userName = profileAsync.asData?.value.name;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -258,6 +261,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                           isRemoved: form.removeAvatar,
                           onTap: _showAvatarOptions,
                           isDark: isDark,
+                          name: userName,
                         ),
                         const SizedBox(height: 32),
 
@@ -385,6 +389,7 @@ class _AvatarPicker extends StatelessWidget {
     required this.isRemoved,
     required this.onTap,
     required this.isDark,
+    this.name,
   });
 
   final String? existingUrl;
@@ -392,6 +397,7 @@ class _AvatarPicker extends StatelessWidget {
   final bool isRemoved;
   final VoidCallback onTap;
   final bool isDark;
+  final String? name;
 
   @override
   Widget build(BuildContext context) {
@@ -440,7 +446,7 @@ class _AvatarPicker extends StatelessWidget {
 
     // Show existing server avatar (not removed)
     if (existingUrl != null && !isRemoved) {
-      return AppAvatar(imageUrl: existingUrl, size: AppAvatarSize.xxl);
+      return AppAvatar(imageUrl: existingUrl, name: name, size: AppAvatarSize.xxl);
     }
 
     // No avatar – show placeholder with camera icon

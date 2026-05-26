@@ -7,6 +7,7 @@ import 'package:purchases_flutter/purchases_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/auth_state_provider.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../profile/profile.dart';
 import '../providers/subscription_provider.dart';
 import 'plan_card.dart';
 import 'subscription_status_card.dart';
@@ -25,12 +26,15 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+    final fitnessProfileAsync = ref.watch(userProfileProvider);
     final subscriptionState = ref.watch(subscriptionProvider);
     final isSubscribed = ref.watch(isSubscribedProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final email = authState.email ?? '';
     final userName = email.isNotEmpty ? email.split('@').first : 'User';
+    final fitnessProfile = fitnessProfileAsync.asData?.value;
+    final avatarUrl = fitnessProfile?.avatarUrl;
 
     return SingleChildScrollView(
       child: Padding(
@@ -38,7 +42,7 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildUserInfo(context, userName, email, isDark),
+            _buildUserInfo(context, userName, email, avatarUrl, isDark),
             const SizedBox(height: 24),
 
             if (subscriptionState is SubscriptionLoaded) ...[
@@ -74,11 +78,12 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
     BuildContext context,
     String userName,
     String email,
+    String? avatarUrl,
     bool isDark,
   ) {
     return Row(
       children: [
-        AppAvatar(name: userName, size: AppAvatarSize.xl),
+        AppAvatar(name: userName, imageUrl: avatarUrl, size: AppAvatarSize.xl),
         const SizedBox(width: 16),
         Expanded(
           child: Column(

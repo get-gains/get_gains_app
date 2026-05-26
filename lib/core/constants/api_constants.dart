@@ -27,16 +27,19 @@ class ApiConstants {
   static const String googleLink = '/auth/google/link';
   static const String refreshToken = '/auth/refresh';
   static const String logout = '/auth/logout';
-  static const String sendRecoveryEmail = '/auth/send-recovery-email';
+  static const String sendOtp = '/auth/send-otp';
+  static const String verifyOtp = '/auth/verify-otp';
   static const String resetPassword = '/auth/reset-password';
   static const String checkEmailVerified = '/auth/check-email-verified';
 
   // User Endpoints
   static const String userProfile = '/users/profile';
   static const String updateProfile = '/users/profile';
+  static const String userPrograms = '/user/programs';
 
   // Profile Endpoints (fitness profile / onboarding)
   static const String profile = '/profile';
+  static const String profileStats = '/profile/stats';
 
   /// Coach → client profile: GET /profile/clients/:userId
   static String clientProfile(String userId) => '/profile/clients/$userId';
@@ -125,4 +128,16 @@ class ApiConstants {
 
   // Missions
   static const String missions = '/missions';
+
+  // Form Library & Exercise Ratings
+  static const String formLibrary = '/form-library';
+  static const String exerciseRatings = '/exercise-ratings';
+
+  // Notifications
+  static const String notifications = '/notifications';
+  static const String notificationUnreadCount = '/notifications/unread-count';
+
+  static String notificationMarkRead(String id) =>
+      '/notifications/$id/read';
+  static const String notificationReadAll = '/notifications/read-all';
 }

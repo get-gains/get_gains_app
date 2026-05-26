@@ -43,6 +43,7 @@ class EditExerciseNotifier extends _$EditExerciseNotifier {
     required MuscleGroup primaryMuscleGroup,
     List<String> targetMuscles = const [],
     List<String> equipmentNeeded = const [],
+    bool? isPublic,
   }) async {
     state = const EditExerciseLoading();
 
@@ -54,6 +55,7 @@ class EditExerciseNotifier extends _$EditExerciseNotifier {
       primaryMuscleGroup: primaryMuscleGroup.name.toUpperCase(),
       targetMuscles: targetMuscles,
       equipmentNeeded: equipmentNeeded,
+      isPublic: isPublic,
     );
 
     result.when(

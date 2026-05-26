@@ -1,6 +1,7 @@
 import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 /// Application Logger
 ///
@@ -68,6 +69,29 @@ class AppLogger {
 
     if (kDebugMode) {
       _logLocal(level, message, logTag, error, stackTrace);
+    }
+
+    // Forward warnings and errors to Sentry in production
+    if (!kDebugMode) {
+      if (level == LogLevel.error) {
+        Sentry.captureException(
+          error ?? Exception(message),
+          stackTrace: stackTrace,
+          withScope: (scope) {
+            scope.setTag('logger_tag', logTag);
+            scope.level = SentryLevel.error;
+          },
+        );
+      } else if (level == LogLevel.warning) {
+        Sentry.addBreadcrumb(
+          Breadcrumb(
+            message: '[$logTag] $message',
+            category: 'logger',
+            level: SentryLevel.warning,
+            data: error != null ? {'error': error.toString()} : null,
+          ),
+        );
+      }
     }
   }
 

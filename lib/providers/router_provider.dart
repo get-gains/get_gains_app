@@ -22,12 +22,18 @@ import '../features/gains_coins/presentation/screens/cosmetic_detail_screen.dart
 import '../features/gains_coins/presentation/screens/inventory_screen.dart';
 import '../features/gains_coins/presentation/screens/leaderboard_screen.dart';
 import '../features/gains_coins/presentation/screens/missions_screen.dart';
+import '../features/gains_coins/presentation/screens/mission_detail_screen.dart';
 import '../features/gains_coins/data/models/cosmetic_model.dart';
 import 'auth_state_provider.dart';
 import '../features/programs/screens/program_screen.dart';
 import '../features/programs/screens/program_details_screen.dart';
 import '../features/programs/screens/calendar_screen.dart';
 import '../features/programs/screens/create_program_screen.dart';
+import '../features/self_program/presentation/screens/self_program_builder_screen.dart';
+import '../features/self_program/presentation/screens/self_program_list_screen.dart';
+import '../features/exercises/presentation/screens/create_exercise_screen.dart' as shared_exercises;
+import '../features/form_library/presentation/screens/form_library_screen.dart';
+import '../features/notifications/notifications.dart';
 
 import 'deep_link_provider.dart';
 
@@ -45,6 +51,7 @@ class AppRoutes {
   static const String checkEmail = '/check-email';
   static const String completeProfile = '/complete-profile';
   static const String forgotPassword = '/forgot-password';
+  static const String enterOtp = '/enter-otp';
   static const String resetPassword = '/reset-password';
   static const String emailVerified = '/email-verified';
   static const String home = '/home';
@@ -65,6 +72,13 @@ class AppRoutes {
   // Client My Program routes (program-first navigation)
   static const String myProgram = '/my-program';
   static const String myProgramDetail = '/my-program/:programId';
+
+  // Self Program routes (free tier)
+  static const String selfPrograms = '/self-programs';
+  static const String selfProgramBuilder = '/self-programs/builder';
+
+  // Shared exercise creation (available to all authenticated users)
+  static const String exerciseCreate = '/exercises/create';
 
   // Coach Hub
   static const String coachHub = '/coach/hub';
@@ -137,6 +151,9 @@ class AppRoutes {
   static const String inventory = '/inventory';
   static const String leaderboard = '/leaderboard';
   static const String missions = '/missions';
+  static const String missionDetail = '/missions/:id';
+  static const String formLibrary = '/form-library';
+  static const String notifications = '/notifications';
 }
 
 /// Router Provider
@@ -145,8 +162,7 @@ class AppRoutes {
 /// Handles auth-based redirects automatically.
 ///
 /// Route Guard Logic:
-/// - Unauthenticated users can only access: login, register, forgot-password
-/// - reset-password is an authenticated route (user comes from email link with token)
+/// - Unauthenticated users can access: login, register, check-email, forgot-password, enter-otp, reset-password
 /// - complete-profile is for Google sign-up flow (has temp tokens)
 /// - All other routes require full authentication
 ///
@@ -186,16 +202,16 @@ GoRouter router(Ref ref) {
           location == AppRoutes.register ||
           location == AppRoutes.checkEmail ||
           location == AppRoutes.forgotPassword ||
+          location == AppRoutes.enterOtp ||
+          location == AppRoutes.resetPassword ||
           location == AppRoutes.emailVerified ||
           location ==
               AppRoutes
                   .unityTest; // Temporary: no auth required for dev/testing
 
       // Semi-authenticated routes (require temp tokens but not full profile)
-      // - reset-password: User has token from email link
       // - complete-profile: User has Google tokens but needs to complete profile
       final isSemiAuthRoute =
-          location == AppRoutes.resetPassword ||
           location == AppRoutes.completeProfile;
 
       // Still loading auth state
@@ -257,12 +273,25 @@ GoRouter router(Ref ref) {
         path: AppRoutes.forgotPassword,
         builder: (context, state) => const ForgotPasswordScreen(),
       ),
-
-      // Auth Routes (Semi-Authenticated)
+      GoRoute(
+        path: AppRoutes.enterOtp,
+        name: 'enter-otp',
+        builder: (context, state) {
+          final email = state.uri.queryParameters['email'] ?? '';
+          return EnterOtpScreen(email: email);
+        },
+      ),
       GoRoute(
         path: AppRoutes.resetPassword,
-        builder: (context, state) => const ResetPasswordScreen(),
+        name: 'reset-password',
+        builder: (context, state) {
+          final email = state.uri.queryParameters['email'] ?? '';
+          final token = state.uri.queryParameters['token'] ?? '';
+          return ResetPasswordScreen(email: email, resetToken: token);
+        },
       ),
+
+      // Auth Routes (Semi-Authenticated)
       GoRoute(
         path: AppRoutes.emailVerified,
         builder: (context, state) => const EmailVerifiedScreen(),
@@ -295,6 +324,10 @@ GoRouter router(Ref ref) {
         builder: (context, state) =>
             const _PlaceholderScreen(title: 'Settings'),
       ),
+      GoRoute(
+        path: AppRoutes.notifications,
+        builder: (context, state) => const NotificationsScreen(),
+      ),
 
       // Workout Routes
       GoRoute(
@@ -322,6 +355,22 @@ GoRouter router(Ref ref) {
           // If navigated without extra (e.g. deep-link), fallback gracefully.
           if (program == null) return const MyProgramListScreen();
           return MyProgramDetailScreen(program: program);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.selfPrograms,
+        builder: (context, state) => const SelfProgramListScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.exerciseCreate,
+        builder: (context, state) =>
+            const shared_exercises.CreateExerciseScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.selfProgramBuilder,
+        builder: (context, state) {
+          final programId = state.uri.queryParameters['programId'];
+          return SelfProgramBuilderScreen(programId: programId);
         },
       ),
       GoRoute(
@@ -437,7 +486,11 @@ GoRouter router(Ref ref) {
         path: AppRoutes.clientViewForm,
         builder: (context, state) {
           final id = state.pathParameters['id']!;
-          return ViewFormScreen(exerciseId: id);
+          final extra = state.extra as Map<String, dynamic>?;
+          return ViewFormScreen(
+            exerciseId: id,
+            isFromLibrary: extra?['fromLibrary'] == true,
+          );
         },
       ),
       GoRoute(
@@ -708,6 +761,17 @@ GoRouter router(Ref ref) {
         path: AppRoutes.missions,
         builder: (context, state) => const MissionsScreen(),
       ),
+      GoRoute(
+        path: AppRoutes.missionDetail,
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return MissionDetailScreen(missionId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.formLibrary,
+        builder: (context, state) => const FormLibraryScreen(),
+      ),
     ],
 
     errorBuilder: (context, state) => _ErrorScreen(error: state.error),
@@ -724,9 +788,6 @@ GoRouter router(Ref ref) {
       switch (next.path) {
         case '/auth/email-verified':
           routerInstance.go(AppRoutes.emailVerified);
-          break;
-        case '/auth/reset-password':
-          routerInstance.go(AppRoutes.resetPassword);
           break;
         default:
           AppLogger.warning(

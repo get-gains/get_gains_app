@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'core/core.dart';
 import 'features/auth/services/user_preferences_service.dart';
@@ -38,12 +39,33 @@ Future<void> main() async {
 
   AppLogger.info('Starting Get Gains App', tag: 'Main');
 
-  runApp(
-    ProviderScope(
-      overrides: [userPrefsBoxProvider.overrideWithValue(userPrefsBox)],
-      child: const GetGainsApp(),
-    ),
-  );
+  final sentryDsn = dotenv.env['SENTRY_DSN'];
+  if (sentryDsn != null && sentryDsn.isNotEmpty) {
+    await SentryFlutter.init(
+      (options) {
+        options.dsn = sentryDsn;
+        options.tracesSampleRate = 0.1;
+        options.profilesSampleRate = 0.1;
+        // Enable native crash reporting (captures SIGSEGV/SIGABRT from Unity)
+        options.enableNativeCrashHandling = true;
+        options.enableAutoNativeBreadcrumbs = true;
+        options.diagnosticLevel = SentryLevel.warning;
+      },
+      appRunner: () => runApp(
+        ProviderScope(
+          overrides: [userPrefsBoxProvider.overrideWithValue(userPrefsBox)],
+          child: const GetGainsApp(),
+        ),
+      ),
+    );
+  } else {
+    runApp(
+      ProviderScope(
+        overrides: [userPrefsBoxProvider.overrideWithValue(userPrefsBox)],
+        child: const GetGainsApp(),
+      ),
+    );
+  }
 }
 
 /// Root Application Widget

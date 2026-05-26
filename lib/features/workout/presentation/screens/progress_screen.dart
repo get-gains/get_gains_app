@@ -67,6 +67,7 @@ class ProgressScreen extends ConsumerWidget {
                         workoutsGoal: 4, // TODO: make configurable
                         totalMinutes: stats.totalMinutes,
                         streakDays: stats.streakDays,
+                        completedWeekdays: stats.completedWeekdays,
                       ),
                       loading: () => const _StatsLoadingSkeleton(),
                       error: (error, _) => AppCard(

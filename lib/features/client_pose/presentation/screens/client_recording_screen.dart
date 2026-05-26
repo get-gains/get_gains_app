@@ -118,6 +118,12 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
     );
     notifier.stopRecording();
 
+    // Unmount CameraPreview BEFORE stopVideoRecording. The camera plugin
+    // fires an internal value-notifier during recording stop that triggers
+    // CameraPreview.buildPreview() — but the controller is in a transitional
+    // state where buildPreview() throws on some Android devices.
+    if (mounted) setState(() => _isCameraInitialized = false);
+
     try {
       final file = await _cameraController!.stopVideoRecording();
       notifier.setRecordedVideo(file.path);
@@ -214,7 +220,9 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
           (prev is! ClientRecordingActive || !prev.autoStopRequested);
 
       if (autoStopTriggered) {
-        unawaited(_onStopRecording());
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          unawaited(_onStopRecording());
+        });
       }
     });
 
@@ -950,7 +958,7 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
                 child: AppButton.primary(
                   label: 'Done',
                   icon: Icons.check,
-                  onPressed: () => context.pop(),
+                  onPressed: () => context.pop(true),
                 ),
               ),
             ],
