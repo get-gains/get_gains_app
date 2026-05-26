@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/errors/api_error_codes.dart';
 import '../../../../core/errors/error_messages.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/app_error.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../../core/access/access_guard.dart';
@@ -191,18 +192,22 @@ class _CoachProfileScreenState extends ConsumerState<CoachProfileScreen> {
           Row(
             children: [
               Expanded(
-                child: AppStatsCard(
+                child: _CoachStatBlock(
+                  icon: Icons.workspace_premium_outlined,
                   label: 'Experience',
                   value: '${coach.yearsExperience}y',
-                  icon: Icons.workspace_premium_outlined,
+                  isDark: isDark,
+                  accentColor: AppColors.warning,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: AppStatsCard(
+                child: _CoachStatBlock(
+                  icon: Icons.school_outlined,
                   label: 'Certifications',
                   value: '${coach.certifications.length}',
-                  icon: Icons.school_outlined,
+                  isDark: isDark,
+                  accentColor: AppColors.primaryDark,
                 ),
               ),
             ],
@@ -487,6 +492,74 @@ class _SectionHeader extends StatelessWidget {
       style: Theme.of(
         context,
       ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+    );
+  }
+}
+
+class _CoachStatBlock extends StatelessWidget {
+  const _CoachStatBlock({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.isDark,
+    required this.accentColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool isDark;
+  final Color accentColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.cardDark : AppColors.cardLight,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : AppColors.borderLight,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            alignment: Alignment.center,
+            child: Icon(icon, color: accentColor, size: 22),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            value,
+            style: TextStyle(
+              fontFamily: AppTextStyles.fontFamilyMono,
+              fontSize: 32,
+              fontWeight: FontWeight.w700,
+              color: accentColor,
+              height: 1.0,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: AppTextStyles.fontFamilySans,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: isDark
+                  ? AppColors.textSecondaryDark
+                  : AppColors.textSecondaryLight,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
