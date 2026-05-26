@@ -42,10 +42,9 @@ enum HomeStatus {
   /// User has a coach but no active subscription → show upgrade CTA.
   noSubscription,
 
-  /// User had a coach + active subscription that has since expired,
-  /// AND the coach had already assigned a routine for today.
-  /// Show the routine card (read-only) + a "Renew" banner.
-  lapsedSubscription,
+  /// User has a coach but no active subscription, or no coach at all,
+  /// and no self-built program → show "Build My Program" CTA.
+  buildProgram,
 
   /// User has a coach but no active program → show "Waiting for program".
   waitingForProgram,
@@ -61,37 +60,30 @@ enum HomeStatus {
 ///
 /// No 403 catching. All status information comes from the unified today response.
 ///
-/// Priority for non-subscribed users:
-///   1. Lapsed subscriber with coach today → [HomeStatus.lapsedSubscription]
-///   2. Any standalone program today → [HomeStatus.restDay] / [HomeStatus.hasRoutine]
-///   3. Everything else → existing CTAs
+/// Priority:
+///   1. Subscribed user with coach → coach program flow
+///   2. Any user with a self-built standalone program → standalone flow
+///   3. Everything else → "Build My Program" or "Find a Coach" CTA
 @riverpod
 Future<HomeStatus> homeStatus(Ref ref) async {
   final s = await ref.watch(todayStatusProvider.future);
 
-  // Non-subscribed path
-  if (!s.isSubscribed) {
-    // Lapsed subscriber: has a coach but subscription expired.
-    // The server may not populate coachToday for lapsed users (subscription-gated),
-    // so we check hasCoach alone — a user with a coach who isn't subscribed is
-    // always lapsed, never "noSubscription" (AccessGated paywall).
-    if (s.hasCoach) {
-      return HomeStatus.lapsedSubscription;
-    }
-    // Pure free user with no coach — fall back to standalone program.
-    if (s.standaloneToday == null) {
-      return HomeStatus.noCoach;
-    }
+  // Coach path: only when subscribed AND has an active coach
+  if (s.hasCoach && s.isSubscribed) {
+    if (s.coachToday == null) return HomeStatus.waitingForProgram;
+    if (s.coachToday!.isRestDay) return HomeStatus.restDay;
+    return HomeStatus.hasRoutine;
+  }
+
+  // Standalone path: any user with a self-built program
+  if (s.standaloneToday != null) {
     return s.standaloneToday!.isRestDay
         ? HomeStatus.restDay
         : HomeStatus.hasRoutine;
   }
 
-  // Subscribed path unchanged — coach program wins.
-  if (!s.hasCoach) return HomeStatus.noCoach;
-  if (s.coachToday == null) return HomeStatus.waitingForProgram;
-  if (s.coachToday!.isRestDay) return HomeStatus.restDay;
-  return HomeStatus.hasRoutine;
+  // No standalone program available
+  return HomeStatus.buildProgram;
 }
 
 // ──────────────────────────────────────────────────────────
@@ -110,7 +102,9 @@ Future<TodayRoutineModel> activeToday(Ref ref) async {
   if (s.standaloneToday != null) {
     return s.standaloneToday!.toRoutineModel();
   }
-  return const TodayRoutineModel(isRestDay: true);
+  // No program at all — return a non-rest-day model so the card
+  // falls through to the "Build My Program" CTA in TodayHeroBlock.
+  return const TodayRoutineModel(isRestDay: false);
 }
 
 // ──────────────────────────────────────────────────────────
