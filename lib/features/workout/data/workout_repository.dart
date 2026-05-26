@@ -1507,18 +1507,15 @@ class WorkoutRepository {
       }
 
       // NOTE:
-      // Do not call legacy `/standalone/today` here. Some deployed backend
-      // versions return 500 for that endpoint, which creates noisy retry/error
-      // logs on every Home refresh. Keep this fallback resilient by returning
-      // coach/subscription state only when unified `/today` is unavailable.
-      final TodayWorkoutDetails? standaloneToday = null;
+      // Use unified `/today` endpoint only. Standalone status is resolved
+      // from the new `standalone` field in the response.
 
       return TodayStatusModel(
         isSubscribed: isSubscribed,
         hasCoach: hasCoach,
         subscription: subscription,
         coachToday: coachToday,
-        standaloneToday: standaloneToday,
+        standalone: const StandaloneStatus(),
       );
     } catch (e) {
       AppLogger.error(

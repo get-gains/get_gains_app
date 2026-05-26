@@ -29,8 +29,7 @@ import '../features/programs/screens/program_screen.dart';
 import '../features/programs/screens/program_details_screen.dart';
 import '../features/programs/screens/calendar_screen.dart';
 import '../features/programs/screens/create_program_screen.dart';
-import '../features/self_program/presentation/screens/self_program_builder_screen.dart';
-import '../features/self_program/presentation/screens/self_program_list_screen.dart';
+
 import '../features/exercises/presentation/screens/create_exercise_screen.dart' as shared_exercises;
 import '../features/form_library/presentation/screens/form_library_screen.dart';
 import '../features/notifications/notifications.dart';
@@ -72,10 +71,6 @@ class AppRoutes {
   // Client My Program routes (program-first navigation)
   static const String myProgram = '/my-program';
   static const String myProgramDetail = '/my-program/:programId';
-
-  // Self Program routes (free tier)
-  static const String selfPrograms = '/self-programs';
-  static const String selfProgramBuilder = '/self-programs/builder';
 
   // Shared exercise creation (available to all authenticated users)
   static const String exerciseCreate = '/exercises/create';
@@ -140,8 +135,10 @@ class AppRoutes {
   static const String standaloneCreateProgram = '/standalone/programs/create';
   static const String standaloneProgramDetail = '/standalone/programs/:id';
   static const String standaloneEditProgram = '/standalone/programs/:id/edit';
-  static const String standaloneToday = '/standalone/today';
+  static const String standaloneSession = '/standalone/session/:id';
   static const String standaloneSessionHistory = '/standalone/sessions';
+  static const String standaloneStats = '/standalone/stats';
+  static const String standaloneProgramBuilder = '/standalone/programs/builder';
 
   // Gains Coins routes
   static const String coinReward = '/coins/reward';
@@ -358,20 +355,9 @@ GoRouter router(Ref ref) {
         },
       ),
       GoRoute(
-        path: AppRoutes.selfPrograms,
-        builder: (context, state) => const SelfProgramListScreen(),
-      ),
-      GoRoute(
         path: AppRoutes.exerciseCreate,
         builder: (context, state) =>
             const shared_exercises.CreateExerciseScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.selfProgramBuilder,
-        builder: (context, state) {
-          final programId = state.uri.queryParameters['programId'];
-          return SelfProgramBuilderScreen(programId: programId);
-        },
       ),
       GoRoute(
         path: AppRoutes.workoutSession,
@@ -651,49 +637,12 @@ GoRouter router(Ref ref) {
 
       // Standalone Workout Routes
       GoRoute(
-        path: AppRoutes.standaloneExercises,
-        builder: (context, state) => const StandaloneExercisesScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.standaloneCreateExercise,
-        builder: (context, state) => const StandaloneExerciseFormScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.standaloneExerciseEdit,
-        builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          return StandaloneExerciseFormScreen(exerciseId: id);
-        },
-      ),
-      GoRoute(
-        path: AppRoutes.standaloneRoutines,
-        builder: (context, state) => const StandaloneRoutinesScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.standaloneCreateRoutine,
-        builder: (context, state) => const StandaloneRoutineFormScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.standaloneRoutineDetail,
-        builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          return StandaloneRoutineDetailScreen(routineId: id);
-        },
-      ),
-      GoRoute(
-        path: AppRoutes.standaloneEditRoutine,
-        builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          return StandaloneRoutineFormScreen(routineId: id);
-        },
-      ),
-      GoRoute(
         path: AppRoutes.standalonePrograms,
         builder: (context, state) => const StandaloneProgramsScreen(),
       ),
       GoRoute(
         path: AppRoutes.standaloneCreateProgram,
-        builder: (context, state) => const StandaloneProgramFormScreen(),
+        builder: (context, state) => const StandaloneProgramsScreen(),
       ),
       GoRoute(
         path: AppRoutes.standaloneProgramDetail,
@@ -703,19 +652,19 @@ GoRouter router(Ref ref) {
         },
       ),
       GoRoute(
-        path: AppRoutes.standaloneEditProgram,
+        path: AppRoutes.standaloneSession,
         builder: (context, state) {
           final id = state.pathParameters['id']!;
-          return StandaloneProgramFormScreen(programId: id);
+          return StandaloneSessionScreen(sessionId: id);
         },
       ),
       GoRoute(
-        path: AppRoutes.standaloneToday,
-        builder: (context, state) => const StandaloneTodayScreen(),
+        path: AppRoutes.standaloneSessionHistory,
+        builder: (context, state) => const StandaloneStatsScreen(),
       ),
       GoRoute(
-        path: AppRoutes.standaloneSessionHistory,
-        builder: (context, state) => const StandaloneSessionHistoryScreen(),
+        path: AppRoutes.standaloneStats,
+        builder: (context, state) => const StandaloneStatsScreen(),
       ),
 
       // ── Gains Coins ──

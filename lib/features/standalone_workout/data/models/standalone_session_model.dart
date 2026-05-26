@@ -1,78 +1,79 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
-import '../../../workout/data/models/workout_session_model.dart';
-
-export '../../../workout/data/models/workout_session_model.dart';
-export '../../../workout/data/models/weekly_stats_model.dart';
-
 part 'standalone_session_model.freezed.dart';
 part 'standalone_session_model.g.dart';
 
-/// Standalone session list response (paginated).
-///
-/// Returned by `GET /api/standalone/sessions`.
-/// Server wraps pagination in a nested `pagination` object.
 @freezed
-abstract class StandaloneSessionListResponse
-    with _$StandaloneSessionListResponse {
-  const factory StandaloneSessionListResponse({
-    required List<StandaloneSessionSummary> sessions,
-    required StandaloneSessionPagination pagination,
-  }) = _StandaloneSessionListResponse;
+abstract class StandaloneSession with _$StandaloneSession {
+  const factory StandaloneSession({
+    required String id,
+    required String userId,
+    required String programRoutineId,
+    required DateTime startedAt,
+    DateTime? completedAt,
+    String? feedback,
+    String? routineName,
+    @Default([]) List<StandalonePerformedSet> performedSets,
+    @Default([]) List<StandaloneSessionExercise> exercises,
+    @Default(0) int setCount,
+    DateTime? createdAt,
+  }) = _StandaloneSession;
 
-  factory StandaloneSessionListResponse.fromJson(Map<String, dynamic> json) =>
-      _$StandaloneSessionListResponseFromJson(json);
+  factory StandaloneSession.fromJson(Map<String, dynamic> json) =>
+      _$StandaloneSessionFromJson(json);
 }
 
-/// Pagination metadata for standalone session history.
 @freezed
-abstract class StandaloneSessionPagination with _$StandaloneSessionPagination {
-  const factory StandaloneSessionPagination({
-    @Default(0) int total,
-    @Default(20) int limit,
-    @Default(0) int offset,
-    @Default(false) bool hasMore,
-  }) = _StandaloneSessionPagination;
+abstract class StandalonePerformedSet with _$StandalonePerformedSet {
+  const factory StandalonePerformedSet({
+    required String id,
+    required String routineExerciseId,
+    required int setNumber,
+    required int reps,
+    required double weight,
+    DateTime? createdAt,
+  }) = _StandalonePerformedSet;
 
-  factory StandaloneSessionPagination.fromJson(Map<String, dynamic> json) =>
-      _$StandaloneSessionPaginationFromJson(json);
+  factory StandalonePerformedSet.fromJson(Map<String, dynamic> json) =>
+      _$StandalonePerformedSetFromJson(json);
 }
 
-/// Lightweight session summary for history list views.
-///
-/// Returned inside [StandaloneSessionListResponse].
+@freezed
+abstract class StandaloneSessionExercise with _$StandaloneSessionExercise {
+  const factory StandaloneSessionExercise({
+    required String id,
+    required String exerciseId,
+    required String exerciseName,
+    required int sets,
+    required int repsMin,
+    required int repsMax,
+    required int restSeconds,
+    required int orderInRoutine,
+  }) = _StandaloneSessionExercise;
+
+  factory StandaloneSessionExercise.fromJson(Map<String, dynamic> json) =>
+      _$StandaloneSessionExerciseFromJson(json);
+}
+
 @freezed
 abstract class StandaloneSessionSummary with _$StandaloneSessionSummary {
   const factory StandaloneSessionSummary({
     required String id,
-    required String userId,
-    String? assignedProgramId,
-    String? routineId,
+    required String routineName,
     required DateTime startedAt,
     DateTime? completedAt,
-    String? notes,
-
-    /// Total sets logged (server-computed).
-    @Default(0) int totalSets,
-
-    /// Routine name resolved by the server.
-    String? routineName,
+    String? feedback,
+    @Default(0) int setCount,
   }) = _StandaloneSessionSummary;
 
   factory StandaloneSessionSummary.fromJson(Map<String, dynamic> json) =>
       _$StandaloneSessionSummaryFromJson(json);
 }
 
-/// Extension helpers for [StandaloneSessionSummary].
 extension StandaloneSessionSummaryX on StandaloneSessionSummary {
-  /// Whether the session has been completed.
-  bool get isCompleted => completedAt != null;
-
-  /// Duration of the workout session.
   Duration? get duration =>
       completedAt != null ? completedAt!.difference(startedAt) : null;
 
-  /// Formatted duration string (e.g., "45m" or "1h 12m").
   String get durationDisplay {
     final d = duration;
     if (d == null) return '—';
@@ -82,18 +83,19 @@ extension StandaloneSessionSummaryX on StandaloneSessionSummary {
     if (mins == 0) return '${hours}h';
     return '${hours}h ${mins}m';
   }
+}
 
-  /// Display name for the session (routine name or fallback).
-  String get displayName => routineName ?? 'Workout';
+@freezed
+abstract class StandaloneSessionListResponse
+    with _$StandaloneSessionListResponse {
+  const factory StandaloneSessionListResponse({
+    required List<StandaloneSessionSummary> sessions,
+    required int total,
+    required int limit,
+    required int offset,
+    @Default(false) bool hasMore,
+  }) = _StandaloneSessionListResponse;
 
-  /// Convert to [WorkoutSessionModel] for reuse in shared session UI.
-  WorkoutSessionModel toWorkoutSessionModel() => WorkoutSessionModel(
-    id: id,
-    userId: userId,
-    assignedProgramRoutineId: assignedProgramId,
-    routineId: routineId,
-    startedAt: startedAt,
-    completedAt: completedAt,
-    notes: notes,
-  );
+  factory StandaloneSessionListResponse.fromJson(Map<String, dynamic> json) =>
+      _$StandaloneSessionListResponseFromJson(json);
 }

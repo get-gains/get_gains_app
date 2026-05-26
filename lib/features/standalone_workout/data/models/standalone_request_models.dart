@@ -1,127 +1,10 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
-import '../../../coach_programs/data/models/program_model.dart' show DayOfWeek;
-import '../../../workout/data/models/exercise_model.dart';
-
 part 'standalone_request_models.freezed.dart';
 part 'standalone_request_models.g.dart';
 
-// ──────────────────────────────────────────────────────────
-// Exercise Requests
-// ──────────────────────────────────────────────────────────
+// ──────────── Program CRUD ────────────
 
-/// Body for `POST /api/standalone/exercises`.
-@freezed
-abstract class CreateStandaloneExerciseRequest
-    with _$CreateStandaloneExerciseRequest {
-  const factory CreateStandaloneExerciseRequest({
-    required String name,
-    required String description,
-    required MuscleGroup primaryMuscleGroup,
-    @Default([]) List<String> equipmentNeeded,
-    @Default(false) bool isPublic,
-  }) = _CreateStandaloneExerciseRequest;
-
-  factory CreateStandaloneExerciseRequest.fromJson(Map<String, dynamic> json) =>
-      _$CreateStandaloneExerciseRequestFromJson(json);
-}
-
-/// Body for `PATCH /api/standalone/exercises/:exerciseId`.
-@freezed
-abstract class UpdateStandaloneExerciseRequest
-    with _$UpdateStandaloneExerciseRequest {
-  const factory UpdateStandaloneExerciseRequest({
-    String? name,
-    String? description,
-    MuscleGroup? primaryMuscleGroup,
-    List<String>? equipmentNeeded,
-    bool? isPublic,
-  }) = _UpdateStandaloneExerciseRequest;
-
-  factory UpdateStandaloneExerciseRequest.fromJson(Map<String, dynamic> json) =>
-      _$UpdateStandaloneExerciseRequestFromJson(json);
-}
-
-// ──────────────────────────────────────────────────────────
-// Routine Requests
-// ──────────────────────────────────────────────────────────
-
-/// Body for `POST /api/standalone/routines`.
-@freezed
-abstract class CreateStandaloneRoutineRequest
-    with _$CreateStandaloneRoutineRequest {
-  const factory CreateStandaloneRoutineRequest({
-    required String name,
-    required String description,
-    required int estimatedDurationMinutes,
-    @Default([]) List<MuscleGroup> muscleGroupsTargeted,
-  }) = _CreateStandaloneRoutineRequest;
-
-  factory CreateStandaloneRoutineRequest.fromJson(Map<String, dynamic> json) =>
-      _$CreateStandaloneRoutineRequestFromJson(json);
-}
-
-/// Body for `PATCH /api/standalone/routines/:routineId`.
-@freezed
-abstract class UpdateStandaloneRoutineRequest
-    with _$UpdateStandaloneRoutineRequest {
-  const factory UpdateStandaloneRoutineRequest({
-    String? name,
-    String? description,
-    int? estimatedDurationMinutes,
-    List<MuscleGroup>? muscleGroupsTargeted,
-  }) = _UpdateStandaloneRoutineRequest;
-
-  factory UpdateStandaloneRoutineRequest.fromJson(Map<String, dynamic> json) =>
-      _$UpdateStandaloneRoutineRequestFromJson(json);
-}
-
-// ──────────────────────────────────────────────────────────
-// Routine Exercise Junction Requests
-// ──────────────────────────────────────────────────────────
-
-/// Body for `POST /api/standalone/routines/:routineId/exercises`.
-@freezed
-abstract class AddStandaloneRoutineExerciseRequest
-    with _$AddStandaloneRoutineExerciseRequest {
-  const factory AddStandaloneRoutineExerciseRequest({
-    required String exerciseId,
-    required int sets,
-    required int repsMin,
-    required int repsMax,
-    required int restSeconds,
-    required int orderInRoutine,
-    String? notes,
-  }) = _AddStandaloneRoutineExerciseRequest;
-
-  factory AddStandaloneRoutineExerciseRequest.fromJson(
-    Map<String, dynamic> json,
-  ) => _$AddStandaloneRoutineExerciseRequestFromJson(json);
-}
-
-/// Body for `PATCH /api/standalone/routines/:routineId/exercises/:routineExerciseId`.
-@freezed
-abstract class UpdateStandaloneRoutineExerciseRequest
-    with _$UpdateStandaloneRoutineExerciseRequest {
-  const factory UpdateStandaloneRoutineExerciseRequest({
-    int? sets,
-    int? repsMin,
-    int? repsMax,
-    int? restSeconds,
-    int? orderInRoutine,
-    String? notes,
-  }) = _UpdateStandaloneRoutineExerciseRequest;
-
-  factory UpdateStandaloneRoutineExerciseRequest.fromJson(
-    Map<String, dynamic> json,
-  ) => _$UpdateStandaloneRoutineExerciseRequestFromJson(json);
-}
-
-// ──────────────────────────────────────────────────────────
-// Program Requests
-// ──────────────────────────────────────────────────────────
-
-/// Body for `POST /api/standalone/programs`.
 @freezed
 abstract class CreateStandaloneProgramRequest
     with _$CreateStandaloneProgramRequest {
@@ -134,7 +17,6 @@ abstract class CreateStandaloneProgramRequest
       _$CreateStandaloneProgramRequestFromJson(json);
 }
 
-/// Body for `PATCH /api/standalone/programs/:programId`.
 @freezed
 abstract class UpdateStandaloneProgramRequest
     with _$UpdateStandaloneProgramRequest {
@@ -147,67 +29,151 @@ abstract class UpdateStandaloneProgramRequest
       _$UpdateStandaloneProgramRequestFromJson(json);
 }
 
-// ──────────────────────────────────────────────────────────
-// ProgramRoutine Junction Requests
-// ──────────────────────────────────────────────────────────
+// ──────────── Program Builder (bulk) ────────────
 
-/// Body for `POST /api/standalone/programs/:programId/routines`.
 @freezed
-abstract class AssignStandaloneRoutineRequest
-    with _$AssignStandaloneRoutineRequest {
-  const factory AssignStandaloneRoutineRequest({
+abstract class BuilderRoutineExerciseRequest
+    with _$BuilderRoutineExerciseRequest {
+  const factory BuilderRoutineExerciseRequest({
+    required String exerciseId,
+    required int sets,
+    required int repsMin,
+    required int repsMax,
+    required int restSeconds,
+    required int orderInRoutine,
+  }) = _BuilderRoutineExerciseRequest;
+
+  factory BuilderRoutineExerciseRequest.fromJson(Map<String, dynamic> json) =>
+      _$BuilderRoutineExerciseRequestFromJson(json);
+}
+
+@freezed
+abstract class BuilderRoutineRequest with _$BuilderRoutineRequest {
+  const factory BuilderRoutineRequest({
     required String routineId,
-    required DayOfWeek dayOfWeek,
-  }) = _AssignStandaloneRoutineRequest;
+    required int orderInProgram,
+    @Default([]) List<BuilderRoutineExerciseRequest> exercises,
+  }) = _BuilderRoutineRequest;
 
-  factory AssignStandaloneRoutineRequest.fromJson(Map<String, dynamic> json) =>
-      _$AssignStandaloneRoutineRequestFromJson(json);
+  factory BuilderRoutineRequest.fromJson(Map<String, dynamic> json) =>
+      _$BuilderRoutineRequestFromJson(json);
 }
 
-/// Body for `PATCH /api/standalone/programs/:programId/routines/:programRoutineId`.
 @freezed
-abstract class UpdateStandaloneProgramRoutineRequest
-    with _$UpdateStandaloneProgramRoutineRequest {
-  const factory UpdateStandaloneProgramRoutineRequest({
-    required DayOfWeek dayOfWeek,
-  }) = _UpdateStandaloneProgramRoutineRequest;
+abstract class BuildStandaloneProgramRequest
+    with _$BuildStandaloneProgramRequest {
+  const factory BuildStandaloneProgramRequest({
+    required String name,
+    required String description,
+    required List<BuilderRoutineRequest> routines,
+  }) = _BuildStandaloneProgramRequest;
 
-  factory UpdateStandaloneProgramRoutineRequest.fromJson(
-    Map<String, dynamic> json,
-  ) => _$UpdateStandaloneProgramRoutineRequestFromJson(json);
+  factory BuildStandaloneProgramRequest.fromJson(Map<String, dynamic> json) =>
+      _$BuildStandaloneProgramRequestFromJson(json);
 }
 
-// ──────────────────────────────────────────────────────────
-// Activation Request
-// ──────────────────────────────────────────────────────────
+// ──────────── Program Routine ────────────
 
-/// Body for `POST /api/standalone/programs/:programId/activate`.
 @freezed
-abstract class ActivateStandaloneProgramRequest
-    with _$ActivateStandaloneProgramRequest {
-  const factory ActivateStandaloneProgramRequest({
-    /// Start date in ISO 8601 format. Defaults to current date on server.
-    String? startDate,
-  }) = _ActivateStandaloneProgramRequest;
+abstract class AddProgramRoutineRequest with _$AddProgramRoutineRequest {
+  const factory AddProgramRoutineRequest({
+    required String routineId,
+    required int orderInProgram,
+  }) = _AddProgramRoutineRequest;
 
-  factory ActivateStandaloneProgramRequest.fromJson(
-    Map<String, dynamic> json,
-  ) => _$ActivateStandaloneProgramRequestFromJson(json);
+  factory AddProgramRoutineRequest.fromJson(Map<String, dynamic> json) =>
+      _$AddProgramRoutineRequestFromJson(json);
 }
 
-// ──────────────────────────────────────────────────────────
-// Session Request
-// ──────────────────────────────────────────────────────────
+@freezed
+abstract class UpdateProgramRoutineRequest with _$UpdateProgramRoutineRequest {
+  const factory UpdateProgramRoutineRequest({
+    required int orderInProgram,
+  }) = _UpdateProgramRoutineRequest;
 
-/// Body for `POST /api/standalone/sessions`.
+  factory UpdateProgramRoutineRequest.fromJson(Map<String, dynamic> json) =>
+      _$UpdateProgramRoutineRequestFromJson(json);
+}
+
+// ──────────── Routine Exercise ────────────
+
+@freezed
+abstract class AddRoutineExerciseRequest with _$AddRoutineExerciseRequest {
+  const factory AddRoutineExerciseRequest({
+    required String exerciseId,
+    required int sets,
+    required int repsMin,
+    required int repsMax,
+    required int restSeconds,
+    required int orderInRoutine,
+  }) = _AddRoutineExerciseRequest;
+
+  factory AddRoutineExerciseRequest.fromJson(Map<String, dynamic> json) =>
+      _$AddRoutineExerciseRequestFromJson(json);
+}
+
+@freezed
+abstract class UpdateRoutineExerciseRequest
+    with _$UpdateRoutineExerciseRequest {
+  const factory UpdateRoutineExerciseRequest({
+    int? sets,
+    int? repsMin,
+    int? repsMax,
+    int? restSeconds,
+    int? orderInRoutine,
+  }) = _UpdateRoutineExerciseRequest;
+
+  factory UpdateRoutineExerciseRequest.fromJson(Map<String, dynamic> json) =>
+      _$UpdateRoutineExerciseRequestFromJson(json);
+}
+
+// ──────────── Session ────────────
+
 @freezed
 abstract class StartStandaloneSessionRequest
     with _$StartStandaloneSessionRequest {
   const factory StartStandaloneSessionRequest({
-    /// Optional: link session to an active standalone program assignment.
-    String? assignedProgramId,
+    required String programRoutineId,
   }) = _StartStandaloneSessionRequest;
 
   factory StartStandaloneSessionRequest.fromJson(Map<String, dynamic> json) =>
       _$StartStandaloneSessionRequestFromJson(json);
+}
+
+@freezed
+abstract class CompleteStandaloneSessionRequest
+    with _$CompleteStandaloneSessionRequest {
+  const factory CompleteStandaloneSessionRequest({
+    String? feedback,
+  }) = _CompleteStandaloneSessionRequest;
+
+  factory CompleteStandaloneSessionRequest.fromJson(
+    Map<String, dynamic> json,
+  ) => _$CompleteStandaloneSessionRequestFromJson(json);
+}
+
+// ──────────── Performed Set ────────────
+
+@freezed
+abstract class LogStandaloneSetRequest with _$LogStandaloneSetRequest {
+  const factory LogStandaloneSetRequest({
+    required String routineExerciseId,
+    required int setNumber,
+    required int reps,
+    required double weight,
+  }) = _LogStandaloneSetRequest;
+
+  factory LogStandaloneSetRequest.fromJson(Map<String, dynamic> json) =>
+      _$LogStandaloneSetRequestFromJson(json);
+}
+
+@freezed
+abstract class UpdateStandaloneSetRequest with _$UpdateStandaloneSetRequest {
+  const factory UpdateStandaloneSetRequest({
+    int? reps,
+    double? weight,
+  }) = _UpdateStandaloneSetRequest;
+
+  factory UpdateStandaloneSetRequest.fromJson(Map<String, dynamic> json) =>
+      _$UpdateStandaloneSetRequestFromJson(json);
 }

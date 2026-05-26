@@ -13,6 +13,7 @@ import '../../../gains_coins/presentation/widgets/coin_balance_widget.dart';
 import '../../../guidance/guidance.dart';
 import '../../../home/presentation/screens/home_screen.dart'
     show isCoachProvider;
+import '../../../subscription/subscription.dart';
 import '../../data/models/user_profile_model.dart';
 import '../../data/models/profile_stats_model.dart';
 import '../providers/profile_provider.dart';
@@ -295,12 +296,23 @@ class _ProfileContent extends ConsumerWidget {
                 ],
               ],
 
-              _SectionHeader(title: 'Gains Coins', isDark: isDark),
-              const SizedBox(height: 12),
-              CoinBalanceWidget(
-                onTap: () => context.push(AppRoutes.coinHistory),
+              Consumer(
+                builder: (context, ref, _) {
+                  final isSubscribed = ref.watch(isSubscribedProvider);
+                  if (!isSubscribed) return const SizedBox.shrink();
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _SectionHeader(title: 'Gains Coins', isDark: isDark),
+                      const SizedBox(height: 12),
+                      CoinBalanceWidget(
+                        onTap: () => context.push(AppRoutes.coinHistory),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  );
+                },
               ),
-              const SizedBox(height: 24),
 
               _SectionHeader(title: 'Achievements', isDark: isDark),
               const SizedBox(height: 12),
