@@ -72,7 +72,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
     if (!mounted) return;
 
     final state = ref.read(otpProvider);
-    if (state is OtpSent) {
+    if (state is OtpSent || state is OtpResendCooldown) {
       context.goNamed(
         'enter-otp',
         queryParameters: {'email': _emailController.text.trim()},

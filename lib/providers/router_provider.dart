@@ -33,6 +33,7 @@ import '../features/self_program/presentation/screens/self_program_builder_scree
 import '../features/self_program/presentation/screens/self_program_list_screen.dart';
 import '../features/exercises/presentation/screens/create_exercise_screen.dart' as shared_exercises;
 import '../features/form_library/presentation/screens/form_library_screen.dart';
+import '../features/notifications/notifications.dart';
 
 import 'deep_link_provider.dart';
 
@@ -152,6 +153,7 @@ class AppRoutes {
   static const String missions = '/missions';
   static const String missionDetail = '/missions/:id';
   static const String formLibrary = '/form-library';
+  static const String notifications = '/notifications';
 }
 
 /// Router Provider
@@ -321,6 +323,10 @@ GoRouter router(Ref ref) {
         path: AppRoutes.settings,
         builder: (context, state) =>
             const _PlaceholderScreen(title: 'Settings'),
+      ),
+      GoRoute(
+        path: AppRoutes.notifications,
+        builder: (context, state) => const NotificationsScreen(),
       ),
 
       // Workout Routes
