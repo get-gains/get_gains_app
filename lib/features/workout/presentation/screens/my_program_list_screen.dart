@@ -6,7 +6,6 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../coach_programs/data/models/program_model.dart';
-import '../../../self_program/presentation/providers/self_programs_list_provider.dart';
 import '../../../subscription/subscription.dart';
 import '../../data/models/models.dart';
 import '../../data/workout_repository.dart';
@@ -133,8 +132,6 @@ class _MyProgramListScreenState extends ConsumerState<MyProgramListScreen> {
   // ─── Lapsed: disabled coach programs + accessible self-programs ───────────
 
   Widget _buildLapsedBody(bool isDark, SubscriptionTier tier) {
-    final selfProgramsAsync = ref.watch(selfProgramsListProvider);
-
     return FutureBuilder<List<AssignedProgramModel>>(
       future: _programsFuture,
       builder: (context, coachSnapshot) {
@@ -145,14 +142,11 @@ class _MyProgramListScreenState extends ConsumerState<MyProgramListScreen> {
         return RefreshIndicator(
           onRefresh: () async {
             setState(_loadPrograms);
-            ref.read(selfProgramsListProvider.notifier).refresh();
           },
           child: CustomScrollView(
             slivers: [
-              // Renewal notice banner
               SliverToBoxAdapter(child: _RenewalBanner(isDark: isDark)),
 
-              // ── Coach Programs (locked) ──────────────────────────────────
               if (isLoadingCoach)
                 const SliverToBoxAdapter(
                   child: Padding(
@@ -187,85 +181,6 @@ class _MyProgramListScreenState extends ConsumerState<MyProgramListScreen> {
                   ),
                 ),
               ],
-
-              // ── Self Programs (active) ───────────────────────────────────
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 24, 16, 4),
-                sliver: SliverToBoxAdapter(
-                  child: Text(
-                    'My Programs',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-              selfProgramsAsync.when(
-                loading: () => const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                ),
-                error: (_, __) => SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: AppEmptyState(
-                      icon: Icons.error_outline,
-                      title: 'Could Not Load',
-                      description: 'Failed to load your programs.',
-                      actionLabel: 'Retry',
-                      onAction: () =>
-                          ref.read(selfProgramsListProvider.notifier).refresh(),
-                    ),
-                  ),
-                ),
-                data: (selfPrograms) {
-                  if (selfPrograms.isEmpty) {
-                    return SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      sliver: SliverToBoxAdapter(
-                        child: AppEmptyState(
-                          icon: Icons.fitness_center,
-                          title: 'No Self Programs',
-                          description:
-                              'Build your own training program while your subscription is inactive.',
-                          actionLabel: 'Build My Program',
-                          onAction: () =>
-                              context.push(AppRoutes.selfPrograms),
-                        ),
-                      ),
-                    );
-                  }
-                  return SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                    sliver: SliverList.separated(
-                      itemCount: selfPrograms.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemBuilder: (context, i) {
-                        final p = selfPrograms[i];
-                        return _SelfProgramCard(
-                          program: p,
-                          isDark: isDark,
-                          onTap: () async {
-                            final uri = Uri(
-                              path: AppRoutes.selfProgramBuilder,
-                              queryParameters: {'programId': p.id},
-                            );
-                            await context.push(uri.toString());
-                            if (mounted) {
-                              ref
-                                  .read(selfProgramsListProvider.notifier)
-                                  .refresh();
-                            }
-                          },
-                        );
-                      },
-                    ),
-                  );
-                },
-              ),
             ],
           ),
         );
@@ -510,82 +425,6 @@ class _ProgramCard extends StatelessWidget {
     return order.indexOf(a.toUpperCase()).compareTo(
           order.indexOf(b.toUpperCase()),
         );
-  }
-}
-
-// ─── Self Program Card ────────────────────────────────────────────────────────
-
-class _SelfProgramCard extends StatelessWidget {
-  const _SelfProgramCard({
-    required this.program,
-    required this.isDark,
-    required this.onTap,
-  });
-
-  final ClientProgramModel program;
-  final bool isDark;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final primaryColor = isDark ? AppColors.primaryDark : AppColors.primaryLight;
-
-    return AppCard.elevated(
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: primaryColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(Icons.person, color: primaryColor, size: 18),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(program.name, style: theme.textTheme.titleMedium),
-              ),
-              Icon(
-                Icons.chevron_right,
-                color: isDark
-                    ? AppColors.mutedForegroundDark
-                    : AppColors.mutedForegroundLight,
-              ),
-            ],
-          ),
-          if (program.description.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              program.description,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: isDark
-                    ? AppColors.mutedForegroundDark
-                    : AppColors.mutedForegroundLight,
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              AppBadge(
-                label: '${program.routineCount} routines',
-                variant: AppBadgeVariant.info,
-              ),
-              const SizedBox(width: 8),
-              AppBadge(
-                label: '${program.totalExerciseCount} exercises',
-                variant: AppBadgeVariant.primary,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
   }
 }
 

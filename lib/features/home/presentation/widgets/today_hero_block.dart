@@ -64,6 +64,12 @@ class TodayHeroBlock extends ConsumerWidget {
 
           case HomeStatus.hasRoutine:
             return _buildTodayCard(context, ref, isDark);
+
+          case HomeStatus.noStandaloneProgram:
+            return _BuildFirstProgramCta(isDark: isDark);
+
+          case HomeStatus.hasStandaloneProgram:
+            return _StandaloneActiveCard(isDark: isDark);
         }
       },
       loading: () => _buildSkeleton(isDark),
@@ -218,7 +224,7 @@ class _StartProgramCta extends StatelessWidget {
                 child: AppButton.primary(
                   label: 'Build My Program',
                   icon: Icons.build,
-                  onPressed: () => context.push(AppRoutes.selfPrograms),
+                  onPressed: () => context.push(AppRoutes.standalonePrograms),
                 ),
               ),
             ],
@@ -461,6 +467,174 @@ class _LapsedSubscriptionCard extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Free-tier CTA: no standalone program built yet.
+class _BuildFirstProgramCta extends StatelessWidget {
+  const _BuildFirstProgramCta({required this.isDark});
+
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryDark.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.fitness_center,
+                    color: AppColors.primaryDark,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Start Training',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Build your first workout program and start tracking your progress.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: isDark
+                    ? AppColors.textSecondaryDark
+                    : AppColors.textSecondaryLight,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: AppButton.primary(
+                label: 'Build My First Program',
+                icon: Icons.build,
+                onPressed: () => context.push(AppRoutes.standalonePrograms),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Free-tier card: active standalone program exists.
+class _StandaloneActiveCard extends ConsumerWidget {
+  const _StandaloneActiveCard({required this.isDark});
+
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final todayAsync = ref.watch(todayStatusProvider);
+
+    return todayAsync.when(
+      loading: () => const SizedBox(
+        height: 120,
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (status) {
+        final program = status.standalone.program;
+        if (program == null) {
+          return _BuildFirstProgramCta(isDark: isDark);
+        }
+
+        return AppCard(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryDark.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.play_circle,
+                        color: AppColors.primaryDark,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            program.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          Text(
+                            'Active Program',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'Active',
+                        style: TextStyle(
+                          color: AppColors.success,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: AppButton.primary(
+                    label: 'Perform Workout',
+                    icon: Icons.play_arrow,
+                    onPressed: () => context.push(
+                      AppRoutes.standalonePrograms,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

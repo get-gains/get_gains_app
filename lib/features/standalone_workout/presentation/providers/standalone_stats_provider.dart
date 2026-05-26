@@ -1,42 +1,29 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../../core/utils/logger.dart';
-import '../../../workout/data/models/weekly_stats_model.dart';
+import '../../data/models/models.dart';
 import '../../data/standalone_workout_repository.dart';
 
 part 'standalone_stats_provider.g.dart';
 
-// ──────────────────────────────────────────────────────────
-// Weekly Stats Provider (Server-Only)
-// ──────────────────────────────────────────────────────────
-
-/// Fetches aggregated weekly workout stats from the server.
 @riverpod
-Future<WeeklyStatsModel> standaloneWeeklyStats(Ref ref) async {
+Future<StandaloneStats> standaloneStats(Ref ref) async {
   final repo = ref.watch(standaloneWorkoutRepositoryProvider);
-  final result = await repo.getWeeklyStats();
+  final result = await repo.getStats();
   return result.when(
-    success: (stats) => stats,
-    failure: (error) {
-      AppLogger.warning('Failed to fetch weekly stats', error: error);
-      throw error;
-    },
+    success: (data) => data,
+    failure: (error) => throw error,
   );
 }
 
-/// Fetches weekly stats for a specific week.
 @riverpod
-Future<WeeklyStatsModel> standaloneWeeklyStatsForWeek(
+Future<StandaloneExerciseStat> standaloneExerciseStat(
   Ref ref,
-  DateTime weekOf,
+  String exerciseId,
 ) async {
   final repo = ref.watch(standaloneWorkoutRepositoryProvider);
-  final result = await repo.getWeeklyStats(weekOf: weekOf);
+  final result = await repo.getExerciseStat(exerciseId);
   return result.when(
-    success: (stats) => stats,
-    failure: (error) {
-      AppLogger.warning('Failed to fetch weekly stats for week', error: error);
-      throw error;
-    },
+    success: (data) => data,
+    failure: (error) => throw error,
   );
 }

@@ -11,6 +11,7 @@ import '../../../../services/api/api_client.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../guidance/guidance.dart';
 import '../../../profile/profile.dart';
+import '../../../subscription/subscription.dart';
 import '../../../form_library/presentation/widgets/featured_forms_strip.dart';
 import '../providers/home_providers.dart';
 import '../widgets/widgets.dart';
@@ -217,22 +218,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ],
         ),
-        bottomNavigationBar: _BottomNavBar(
-          currentIndex: 0,
-          onTap: (index) {
-            switch (index) {
-              case 0:
-                break;
-              case 1:
-                context.push(AppRoutes.myProgram);
-                break;
-              case 2:
-                context.push(AppRoutes.progress);
-                break;
-              case 3:
-                context.push(AppRoutes.profile);
-                break;
-            }
+        bottomNavigationBar: Consumer(
+          builder: (context, ref, _) {
+            final isSubscribed =
+                ref.watch(isSubscribedProvider);
+            return _BottomNavBar(
+              currentIndex: 0,
+              onTap: (index) {
+                switch (index) {
+                  case 0:
+                    break;
+                  case 1:
+                    if (isSubscribed) {
+                      context.push(AppRoutes.myProgram);
+                    } else {
+                      context.push(AppRoutes.standalonePrograms);
+                    }
+                    break;
+                  case 2:
+                    if (isSubscribed) {
+                      context.push(AppRoutes.progress);
+                    } else {
+                      context.push(AppRoutes.standaloneStats);
+                    }
+                    break;
+                  case 3:
+                    context.push(AppRoutes.profile);
+                    break;
+                }
+              },
+            );
           },
         ),
       ),

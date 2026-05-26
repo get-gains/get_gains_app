@@ -1,7 +1,3 @@
-import 'dart:convert';
-
-import 'package:drift/drift.dart';
-import 'package:get_gains_app/features/standalone_workout/data/models/standalone_request_models.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/constants/api_constants.dart';
@@ -9,1607 +5,367 @@ import '../../../core/utils/app_error.dart';
 import '../../../core/utils/logger.dart';
 import '../../../core/utils/result.dart';
 import '../../../services/api/api_client.dart';
-import '../../../services/database/app_database.dart';
-import '../../workout/data/models/exercise_model.dart';
-import '../../workout/data/models/routine_model.dart';
-import '../../workout/data/models/weekly_stats_model.dart';
-import '../../workout/data/models/workout_session_model.dart';
 import 'models/models.dart';
 
 part 'standalone_workout_repository.g.dart';
 
-/// Standalone Workout Repository
-///
-/// Handles all standalone (user-owned) workout data operations.
-/// Implements **offline-first** patterns:
-/// - Local database (Drift) for exercises, routines, programs, sessions
-/// - API client for server sync and server-only operations
-/// - Sync queue for pending local changes
-///
-/// Server-only operations (no local cache):
-/// - Today's workout resolution
-/// - Weekly stats aggregation
-///
-/// Offline-first operations (local DB + sync):
-/// - Exercise CRUD
-/// - Routine CRUD (with exercises)
-/// - Program CRUD (with routine assignments)
-/// - Program activation/deactivation
-/// - Session lifecycle (start, complete)
+@Riverpod(keepAlive: true)
+StandaloneWorkoutRepository standaloneWorkoutRepository(
+  Ref ref,
+) {
+  final apiClient = ref.watch(apiClientProvider);
+  return StandaloneWorkoutRepository(apiClient: apiClient);
+}
+
 class StandaloneWorkoutRepository {
-  StandaloneWorkoutRepository({
-    required AppDatabase database,
-    required ApiClient apiClient,
-  }) : _db = database,
-       _apiClient = apiClient;
+  StandaloneWorkoutRepository({required ApiClient apiClient})
+    : _apiClient = apiClient;
 
-  final AppDatabase _db;
   final ApiClient _apiClient;
-
-  // ════════════════════════════════════════════════════════
-  //  EXERCISE OPERATIONS
-  // ════════════════════════════════════════════════════════
-
-  /// Get exercises from local database (user-owned + public).
-  Future<Result<List<StandaloneExerciseModel>, AppError>>
-  getExercisesLocal() async {
-    try {
-      AppLogger.debug(
-        'Fetching standalone exercises from local DB',
-        tag: 'StandaloneRepo',
-      );
-      final exercises = await _db.getAllExercises();
-      return Success(
-        exercises
-            .map(
-              (e) => StandaloneExerciseModel(
-                id: e.remoteId ?? e.id.toString(),
-                name: e.name,
-                description: e.description,
-                primaryMuscleGroup: _parseMuscleGroup(e.primaryMuscleGroup),
-                equipmentNeeded: _parseJsonList(e.equipmentNeeded),
-                isPublic: true, // local cache doesn't track ownership
-                createdAt: e.createdAt,
-                updatedAt: e.updatedAt,
-              ),
-            )
-            .toList(),
-      );
-    } catch (e) {
-      AppLogger.error(
-        'Failed to fetch exercises from local DB',
-        tag: 'StandaloneRepo',
-        error: e,
-      );
-      return Failure(DatabaseError(message: 'Failed to load exercises: $e'));
-    }
-  }
-
-  /// Sync exercises from server (user-owned + public).
-  ///
-  /// Calls `GET /api/standalone/exercises` with optional filters.
-  Future<Result<StandaloneExerciseListResponse, AppError>> syncExercises({
-    MuscleGroup? muscleGroup,
-    String? search,
-    int limit = 50,
-    int offset = 0,
-  }) async {
-    AppLogger.debug(
-      'Syncing standalone exercises from server',
-      tag: 'StandaloneRepo',
-    );
-
-    final queryParams = <String, dynamic>{
-      'limit': limit,
-      'offset': offset,
-      if (muscleGroup != null) 'muscleGroup': muscleGroup.name.toUpperCase(),
-      if (search != null && search.isNotEmpty) 'search': search,
-    };
-
-    final result = await _apiClient.get<Map<String, dynamic>>(
-      ApiConstants.standaloneExercises,
-      queryParameters: queryParams,
-    );
-
-    return result.when(
-      success: (data) {
-        try {
-          final response = StandaloneExerciseListResponse.fromJson(data);
-
-          // Cache exercises locally
-          _cacheExercises(response.exercises);
-
-          AppLogger.info(
-            'Synced ${response.exercises.length} standalone exercises',
-            tag: 'StandaloneRepo',
-          );
-          return Success(response);
-        } catch (e) {
-          AppLogger.error(
-            'Failed to parse exercises',
-            tag: 'StandaloneRepo',
-            error: e,
-          );
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse exercises: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
-      failure: (error) => Failure(error),
-    );
-  }
-
-  /// Create a personal exercise.
-  ///
-  /// Saves locally first, then syncs to server.
-  /// On server success, updates the local record with the remote ID.
-  Future<Result<StandaloneExerciseModel, AppError>> createExercise(
-    CreateStandaloneExerciseRequest request,
-  ) async {
-    AppLogger.debug('Creating standalone exercise', tag: 'StandaloneRepo');
-
-    // 1. Save locally
-    final localId = await _db.upsertExercise(
-      ExercisesCompanion.insert(
-        name: request.name,
-        description: request.description,
-        primaryMuscleGroup: request.primaryMuscleGroup.name.toUpperCase(),
-        equipmentNeeded: Value(jsonEncode(request.equipmentNeeded)),
-        isSynced: const Value(false),
-      ),
-    );
-
-    // 2. Try server sync
-    final result = await _apiClient.post<Map<String, dynamic>>(
-      ApiConstants.standaloneExercises,
-      data: request.toJson(),
-    );
-
-    return result.when(
-      success: (data) async {
-        try {
-          final exercise = StandaloneExerciseModel.fromJson(
-            data['exercise'] as Map<String, dynamic>,
-          );
-          // Update local record with remote ID
-          await _db.upsertExercise(
-            ExercisesCompanion(
-              id: Value(localId),
-              remoteId: Value(exercise.id),
-              isSynced: const Value(true),
-            ),
-          );
-          AppLogger.info(
-            'Created standalone exercise: ${exercise.name}',
-            tag: 'StandaloneRepo',
-          );
-          return Success(exercise);
-        } catch (e) {
-          AppLogger.error(
-            'Failed to parse created exercise',
-            tag: 'StandaloneRepo',
-            error: e,
-          );
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse exercise: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
-      failure: (error) async {
-        // Queue for later sync
-        await _db.addToSyncQueue(
-          SyncQueueCompanion.insert(
-            entityTable: 'standalone_exercises',
-            recordId: localId.toString(),
-            operation: 'create',
-            payload: jsonEncode(request.toJson()),
-          ),
-        );
-        AppLogger.warning(
-          'Exercise saved locally, queued for sync',
-          tag: 'StandaloneRepo',
-        );
-        // Return local model
-        return Success(
-          StandaloneExerciseModel(
-            id: localId.toString(),
-            name: request.name,
-            description: request.description,
-            primaryMuscleGroup: request.primaryMuscleGroup,
-            equipmentNeeded: request.equipmentNeeded,
-            isPublic: request.isPublic,
-            createdAt: DateTime.now(),
-          ),
-        );
-      },
-    );
-  }
-
-  /// Update a personal exercise.
-  Future<Result<StandaloneExerciseModel, AppError>> updateExercise({
-    required String exerciseId,
-    required UpdateStandaloneExerciseRequest request,
-  }) async {
-    AppLogger.debug(
-      'Updating standalone exercise: $exerciseId',
-      tag: 'StandaloneRepo',
-    );
-
-    final result = await _apiClient.patch<Map<String, dynamic>>(
-      '${ApiConstants.standaloneExercises}/$exerciseId',
-      data: request.toJson()..removeWhere((_, v) => v == null),
-    );
-
-    return result.when(
-      success: (data) {
-        try {
-          final exercise = StandaloneExerciseModel.fromJson(
-            data['exercise'] as Map<String, dynamic>,
-          );
-          AppLogger.info(
-            'Updated standalone exercise: ${exercise.name}',
-            tag: 'StandaloneRepo',
-          );
-          return Success(exercise);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse exercise: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
-      failure: (error) => Failure(error),
-    );
-  }
-
-  /// Delete a personal exercise.
-  Future<Result<void, AppError>> deleteExercise(String exerciseId) async {
-    AppLogger.debug(
-      'Deleting standalone exercise: $exerciseId',
-      tag: 'StandaloneRepo',
-    );
-
-    final result = await _apiClient.delete<Map<String, dynamic>>(
-      '${ApiConstants.standaloneExercises}/$exerciseId',
-    );
-
-    return result.when(
-      success: (_) {
-        AppLogger.info(
-          'Deleted standalone exercise: $exerciseId',
-          tag: 'StandaloneRepo',
-        );
-        return const Success(null);
-      },
-      failure: (error) => Failure(error),
-    );
-  }
-
-  // ════════════════════════════════════════════════════════
-  //  ROUTINE OPERATIONS
-  // ════════════════════════════════════════════════════════
-
-  /// Get routines from local database.
-  Future<Result<List<RoutineModel>, AppError>> getRoutinesLocal() async {
-    try {
-      AppLogger.debug(
-        'Fetching standalone routines from local DB',
-        tag: 'StandaloneRepo',
-      );
-      final routines = await _db.getAllRoutines();
-      final routineModels = <RoutineModel>[];
-
-      for (final routine in routines) {
-        final exercises = await _db.getRoutineExercises(routine.id);
-        routineModels.add(
-          RoutineModel(
-            id: routine.remoteId ?? routine.id.toString(),
-            name: routine.name,
-            description: routine.description,
-            estimatedDurationMinutes: routine.estimatedDurationMinutes,
-            muscleGroupsTargeted: _parseMuscleGroups(
-              routine.muscleGroupsTargeted,
-            ),
-            exercises: await _mapRoutineExercises(exercises),
-            createdAt: routine.createdAt,
-            updatedAt: routine.updatedAt,
-          ),
-        );
-      }
-
-      return Success(routineModels);
-    } catch (e) {
-      AppLogger.error(
-        'Failed to fetch routines from local DB',
-        tag: 'StandaloneRepo',
-        error: e,
-      );
-      return Failure(DatabaseError(message: 'Failed to load routines: $e'));
-    }
-  }
-
-  /// Sync user's routines from server (paginated).
-  Future<Result<StandaloneRoutineListResponse, AppError>> syncRoutines({
-    int limit = 50,
-    int offset = 0,
-  }) async {
-    AppLogger.debug(
-      'Syncing standalone routines from server',
-      tag: 'StandaloneRepo',
-    );
-
-    final result = await _apiClient.get<Map<String, dynamic>>(
-      ApiConstants.standaloneRoutines,
-      queryParameters: {'limit': limit, 'offset': offset},
-    );
-
-    return result.when(
-      success: (data) {
-        try {
-          final response = StandaloneRoutineListResponse.fromJson(data);
-          AppLogger.info(
-            'Synced ${response.routines.length} standalone routines',
-            tag: 'StandaloneRepo',
-          );
-          return Success(response);
-        } catch (e) {
-          AppLogger.error(
-            'Failed to parse routines',
-            tag: 'StandaloneRepo',
-            error: e,
-          );
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse routines: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
-      failure: (error) => Failure(error),
-    );
-  }
-
-  /// Get a single routine detail with exercises.
-  Future<Result<RoutineModel, AppError>> getRoutineDetail(
-    String routineId,
-  ) async {
-    AppLogger.debug(
-      'Fetching routine detail: $routineId',
-      tag: 'StandaloneRepo',
-    );
-
-    final result = await _apiClient.get<Map<String, dynamic>>(
-      '${ApiConstants.standaloneRoutines}/$routineId',
-    );
-
-    return result.when(
-      success: (data) {
-        try {
-          final routine = RoutineModel.fromJson(
-            data['routine'] as Map<String, dynamic>,
-          );
-
-          // Cache locally
-          _cacheRoutine(routine);
-
-          return Success(routine);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse routine: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
-      failure: (error) => Failure(error),
-    );
-  }
-
-  /// Create a personal routine.
-  Future<Result<RoutineModel, AppError>> createRoutine(
-    CreateStandaloneRoutineRequest request,
-  ) async {
-    AppLogger.debug('Creating standalone routine', tag: 'StandaloneRepo');
-
-    // 1. Save locally first
-    final localId = await _db.upsertRoutine(
-      RoutinesCompanion.insert(
-        name: request.name,
-        description: request.description,
-        estimatedDurationMinutes: request.estimatedDurationMinutes,
-        muscleGroupsTargeted: Value(
-          jsonEncode(request.muscleGroupsTargeted.map((m) => m.name).toList()),
-        ),
-        isSynced: const Value(false),
-      ),
-    );
-
-    // 2. Try server sync
-    final result = await _apiClient.post<Map<String, dynamic>>(
-      ApiConstants.standaloneRoutines,
-      data: request.toJson(),
-    );
-
-    return result.when(
-      success: (data) async {
-        try {
-          final routine = RoutineModel.fromJson(
-            data['routine'] as Map<String, dynamic>,
-          );
-          await _db.upsertRoutine(
-            RoutinesCompanion(
-              id: Value(localId),
-              remoteId: Value(routine.id),
-              isSynced: const Value(true),
-            ),
-          );
-          AppLogger.info(
-            'Created standalone routine: ${routine.name}',
-            tag: 'StandaloneRepo',
-          );
-          return Success(routine);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse routine: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
-      failure: (error) async {
-        await _db.addToSyncQueue(
-          SyncQueueCompanion.insert(
-            entityTable: 'standalone_routines',
-            recordId: localId.toString(),
-            operation: 'create',
-            payload: jsonEncode(request.toJson()),
-          ),
-        );
-        return Success(
-          RoutineModel(
-            id: localId.toString(),
-            name: request.name,
-            description: request.description,
-            estimatedDurationMinutes: request.estimatedDurationMinutes,
-            muscleGroupsTargeted: request.muscleGroupsTargeted,
-            createdAt: DateTime.now(),
-          ),
-        );
-      },
-    );
-  }
-
-  /// Update a personal routine.
-  Future<Result<RoutineModel, AppError>> updateRoutine({
-    required String routineId,
-    required UpdateStandaloneRoutineRequest request,
-  }) async {
-    AppLogger.debug(
-      'Updating standalone routine: $routineId',
-      tag: 'StandaloneRepo',
-    );
-
-    final result = await _apiClient.patch<Map<String, dynamic>>(
-      '${ApiConstants.standaloneRoutines}/$routineId',
-      data: request.toJson()..removeWhere((_, v) => v == null),
-    );
-
-    return result.when(
-      success: (data) {
-        try {
-          final routine = RoutineModel.fromJson(
-            data['routine'] as Map<String, dynamic>,
-          );
-          AppLogger.info(
-            'Updated standalone routine: ${routine.name}',
-            tag: 'StandaloneRepo',
-          );
-          return Success(routine);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse routine: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
-      failure: (error) => Failure(error),
-    );
-  }
-
-  /// Delete a personal routine.
-  Future<Result<void, AppError>> deleteRoutine(String routineId) async {
-    AppLogger.debug(
-      'Deleting standalone routine: $routineId',
-      tag: 'StandaloneRepo',
-    );
-
-    final result = await _apiClient.delete<Map<String, dynamic>>(
-      '${ApiConstants.standaloneRoutines}/$routineId',
-    );
-
-    return result.when(
-      success: (_) {
-        AppLogger.info(
-          'Deleted standalone routine: $routineId',
-          tag: 'StandaloneRepo',
-        );
-        return const Success(null);
-      },
-      failure: (error) => Failure(error),
-    );
-  }
-
-  // ── Routine Exercise Junction ──────────────────────────
-
-  /// Add an exercise to a routine.
-  Future<Result<RoutineExerciseModel, AppError>> addRoutineExercise({
-    required String routineId,
-    required AddStandaloneRoutineExerciseRequest request,
-  }) async {
-    AppLogger.debug(
-      'Adding exercise to routine: $routineId',
-      tag: 'StandaloneRepo',
-    );
-
-    final result = await _apiClient.post<Map<String, dynamic>>(
-      '${ApiConstants.standaloneRoutines}/$routineId/exercises',
-      data: request.toJson(),
-    );
-
-    return result.when(
-      success: (data) {
-        try {
-          final re = RoutineExerciseModel.fromJson(
-            data['routineExercise'] as Map<String, dynamic>,
-          );
-          return Success(re);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse routine exercise: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
-      failure: (error) => Failure(error),
-    );
-  }
-
-  /// Update an exercise prescription in a routine.
-  Future<Result<RoutineExerciseModel, AppError>> updateRoutineExercise({
-    required String routineId,
-    required String routineExerciseId,
-    required UpdateStandaloneRoutineExerciseRequest request,
-  }) async {
-    AppLogger.debug(
-      'Updating routine exercise: $routineExerciseId in $routineId',
-      tag: 'StandaloneRepo',
-    );
-
-    final result = await _apiClient.patch<Map<String, dynamic>>(
-      '${ApiConstants.standaloneRoutines}/$routineId/exercises/$routineExerciseId',
-      data: request.toJson()..removeWhere((_, v) => v == null),
-    );
-
-    return result.when(
-      success: (data) {
-        try {
-          final re = RoutineExerciseModel.fromJson(
-            data['routineExercise'] as Map<String, dynamic>,
-          );
-          return Success(re);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse routine exercise: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
-      failure: (error) => Failure(error),
-    );
-  }
-
-  /// Remove an exercise from a routine.
-  Future<Result<void, AppError>> removeRoutineExercise({
-    required String routineId,
-    required String routineExerciseId,
-  }) async {
-    AppLogger.debug(
-      'Removing exercise $routineExerciseId from routine $routineId',
-      tag: 'StandaloneRepo',
-    );
-
-    final result = await _apiClient.delete<Map<String, dynamic>>(
-      '${ApiConstants.standaloneRoutines}/$routineId/exercises/$routineExerciseId',
-    );
-
-    return result.when(
-      success: (_) => const Success(null),
-      failure: (error) => Failure(error),
-    );
-  }
 
   // ════════════════════════════════════════════════════════
   //  PROGRAM OPERATIONS
   // ════════════════════════════════════════════════════════
 
-  /// Get programs from local database.
-  Future<Result<List<StandaloneProgramSummaryModel>, AppError>>
-  getProgramsLocal(String userId) async {
-    try {
-      AppLogger.debug(
-        'Fetching standalone programs from local DB',
-        tag: 'StandaloneRepo',
-      );
-      final programs = await _db.getStandalonePrograms(userId);
-      return Success(
-        programs
-            .map(
-              (p) => StandaloneProgramSummaryModel(
-                id: p.remoteId ?? p.id.toString(),
-                name: p.name,
-                description: p.description,
-                userId: p.userId,
-                createdAt: p.createdAt,
-                updatedAt: p.updatedAt,
-              ),
-            )
-            .toList(),
-      );
-    } catch (e) {
-      AppLogger.error(
-        'Failed to fetch programs from local DB',
-        tag: 'StandaloneRepo',
-        error: e,
-      );
-      return Failure(DatabaseError(message: 'Failed to load programs: $e'));
-    }
-  }
-
-  /// Sync programs from server (paginated).
-  Future<Result<StandaloneProgramListResponse, AppError>> syncPrograms({
-    int limit = 50,
+  Future<Result<StandaloneProgramListResponse, AppError>> getPrograms({
+    int limit = 20,
     int offset = 0,
   }) async {
-    AppLogger.debug(
-      'Syncing standalone programs from server',
-      tag: 'StandaloneRepo',
-    );
-
     final result = await _apiClient.get<Map<String, dynamic>>(
       ApiConstants.standalonePrograms,
       queryParameters: {'limit': limit, 'offset': offset},
     );
-
     return result.when(
-      success: (data) {
-        try {
-          final response = StandaloneProgramListResponse.fromJson(data);
-
-          // Cache programs locally
-          _cachePrograms(response.programs);
-
-          AppLogger.info(
-            'Synced ${response.programs.length} standalone programs',
-            tag: 'StandaloneRepo',
-          );
-          return Success(response);
-        } catch (e) {
-          AppLogger.error(
-            'Failed to parse programs',
-            tag: 'StandaloneRepo',
-            error: e,
-          );
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse programs: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
+      success: (data) =>
+          Success(StandaloneProgramListResponse.fromJson(data!)),
       failure: (error) => Failure(error),
     );
   }
 
-  /// Get full program detail with routine tree.
-  Future<Result<StandaloneProgramDetailModel, AppError>> getProgramDetail(
+  Future<Result<StandaloneProgramDetail, AppError>> getProgram(
     String programId,
   ) async {
-    AppLogger.debug(
-      'Fetching program detail: $programId',
-      tag: 'StandaloneRepo',
-    );
-
     final result = await _apiClient.get<Map<String, dynamic>>(
       '${ApiConstants.standalonePrograms}/$programId',
     );
-
     return result.when(
       success: (data) {
-        try {
-          final program = StandaloneProgramDetailModel.fromJson(
-            data['program'] as Map<String, dynamic>,
-          );
-          return Success(program);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse program: $e',
-              originalError: e,
-            ),
-          );
-        }
+        final program = data!['program'] as Map<String, dynamic>? ?? data;
+        return Success(StandaloneProgramDetail.fromJson(program));
       },
       failure: (error) => Failure(error),
     );
   }
 
-  /// Create a personal program.
-  Future<Result<StandaloneProgramSummaryModel, AppError>> createProgram(
-    CreateStandaloneProgramRequest request, {
-    required String userId,
-  }) async {
-    AppLogger.debug('Creating standalone program', tag: 'StandaloneRepo');
-
-    // 1. Save locally
-    final localId = await _db.upsertStandaloneProgram(
-      StandaloneProgramsCompanion.insert(
-        userId: userId,
-        name: request.name,
-        description: request.description,
-        isSynced: const Value(false),
-      ),
+  Future<Result<StandaloneProgramDetail, AppError>> getActiveProgram() async {
+    final result = await _apiClient.get<Map<String, dynamic>>(
+      ApiConstants.standaloneActiveProgram,
     );
+    return result.when(
+      success: (data) {
+        final program = data!['program'] as Map<String, dynamic>? ?? data;
+        return Success(StandaloneProgramDetail.fromJson(program));
+      },
+      failure: (error) => Failure(error),
+    );
+  }
 
-    // 2. Try server sync
+  Future<Result<StandaloneProgram, AppError>> createProgram(
+    CreateStandaloneProgramRequest request,
+  ) async {
     final result = await _apiClient.post<Map<String, dynamic>>(
       ApiConstants.standalonePrograms,
       data: request.toJson(),
     );
-
     return result.when(
-      success: (data) async {
-        try {
-          final program = StandaloneProgramSummaryModel.fromJson(
-            data['program'] as Map<String, dynamic>,
-          );
-          await _db.upsertStandaloneProgram(
-            StandaloneProgramsCompanion(
-              id: Value(localId),
-              remoteId: Value(program.id),
-              isSynced: const Value(true),
-            ),
-          );
-          AppLogger.info(
-            'Created standalone program: ${program.name}',
-            tag: 'StandaloneRepo',
-          );
-          return Success(program);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse program: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
-      failure: (error) async {
-        await _db.addToSyncQueue(
-          SyncQueueCompanion.insert(
-            entityTable: 'standalone_programs',
-            recordId: localId.toString(),
-            operation: 'create',
-            payload: jsonEncode(request.toJson()),
-          ),
-        );
-        return Success(
-          StandaloneProgramSummaryModel(
-            id: localId.toString(),
-            name: request.name,
-            description: request.description,
-            userId: userId,
-            createdAt: DateTime.now(),
-          ),
-        );
-      },
-    );
-  }
-
-  /// Update a personal program.
-  Future<Result<StandaloneProgramSummaryModel, AppError>> updateProgram({
-    required String programId,
-    required UpdateStandaloneProgramRequest request,
-  }) async {
-    AppLogger.debug(
-      'Updating standalone program: $programId',
-      tag: 'StandaloneRepo',
-    );
-
-    final result = await _apiClient.patch<Map<String, dynamic>>(
-      '${ApiConstants.standalonePrograms}/$programId',
-      data: request.toJson()..removeWhere((_, v) => v == null),
-    );
-
-    return result.when(
-      success: (data) {
-        try {
-          final program = StandaloneProgramSummaryModel.fromJson(
-            data['program'] as Map<String, dynamic>,
-          );
-          AppLogger.info(
-            'Updated standalone program: ${program.name}',
-            tag: 'StandaloneRepo',
-          );
-          return Success(program);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse program: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
+      success: (data) =>
+          Success(StandaloneProgram.fromJson(data!['program'])),
       failure: (error) => Failure(error),
     );
   }
 
-  /// Delete a personal program.
-  Future<Result<void, AppError>> deleteProgram(String programId) async {
-    AppLogger.debug(
-      'Deleting standalone program: $programId',
-      tag: 'StandaloneRepo',
+  Future<Result<StandaloneProgram, AppError>> updateProgram(
+    String programId,
+    UpdateStandaloneProgramRequest request,
+  ) async {
+    final result = await _apiClient.patch<Map<String, dynamic>>(
+      '${ApiConstants.standalonePrograms}/$programId',
+      data: request.toJson(),
     );
+    return result.when(
+      success: (data) =>
+          Success(StandaloneProgram.fromJson(data!['program'])),
+      failure: (error) => Failure(error),
+    );
+  }
 
+  Future<Result<void, AppError>> deleteProgram(String programId) async {
     final result = await _apiClient.delete<Map<String, dynamic>>(
       '${ApiConstants.standalonePrograms}/$programId',
     );
+    return result.when(success: (_) => const Success(null), failure: Failure.new);
+  }
 
+  Future<Result<void, AppError>> activateProgram(String programId) async {
+    final result = await _apiClient.post<Map<String, dynamic>>(
+      '${ApiConstants.standalonePrograms}/$programId/activate',
+    );
+    return result.when(success: (_) => const Success(null), failure: Failure.new);
+  }
+
+  Future<Result<void, AppError>> deactivateProgram(String programId) async {
+    final result = await _apiClient.post<Map<String, dynamic>>(
+      '${ApiConstants.standalonePrograms}/$programId/deactivate',
+    );
+    return result.when(success: (_) => const Success(null), failure: Failure.new);
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  BUILDER (BULK)
+  // ════════════════════════════════════════════════════════
+
+  Future<Result<StandaloneProgramDetail, AppError>> buildProgram(
+    BuildStandaloneProgramRequest request,
+  ) async {
+    final result = await _apiClient.post<Map<String, dynamic>>(
+      ApiConstants.standaloneProgramsBuild,
+      data: request.toJson(),
+    );
     return result.when(
-      success: (_) {
-        AppLogger.info(
-          'Deleted standalone program: $programId',
-          tag: 'StandaloneRepo',
-        );
-        return const Success(null);
+      success: (data) {
+        final program = data!['program'] as Map<String, dynamic>? ?? data;
+        return Success(StandaloneProgramDetail.fromJson(program));
       },
       failure: (error) => Failure(error),
     );
   }
 
-  // ── ProgramRoutine Junction ────────────────────────────
+  // ════════════════════════════════════════════════════════
+  //  PROGRAM ROUTINE OPERATIONS
+  // ════════════════════════════════════════════════════════
 
-  /// Assign a routine to a program day.
-  Future<Result<StandaloneProgramRoutineModel, AppError>> assignRoutine({
-    required String programId,
-    required AssignStandaloneRoutineRequest request,
-  }) async {
-    AppLogger.debug(
-      'Assigning routine to program: $programId',
-      tag: 'StandaloneRepo',
-    );
-
+  Future<Result<StandaloneProgramDetail, AppError>> addProgramRoutine(
+    String programId,
+    AddProgramRoutineRequest request,
+  ) async {
     final result = await _apiClient.post<Map<String, dynamic>>(
       '${ApiConstants.standalonePrograms}/$programId/routines',
       data: request.toJson(),
     );
-
     return result.when(
       success: (data) {
-        try {
-          final pr = StandaloneProgramRoutineModel.fromJson(
-            data['programRoutine'] as Map<String, dynamic>,
-          );
-          return Success(pr);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse program routine: $e',
-              originalError: e,
-            ),
-          );
-        }
+        final program = data!['program'] as Map<String, dynamic>? ??
+            data['program_routine'];
+        return Success(StandaloneProgramDetail.fromJson(program ?? data));
       },
       failure: (error) => Failure(error),
     );
   }
 
-  /// Update a program-routine day number.
-  Future<Result<StandaloneProgramRoutineModel, AppError>> updateProgramRoutine({
-    required String programId,
-    required String programRoutineId,
-    required UpdateStandaloneProgramRoutineRequest request,
-  }) async {
-    AppLogger.debug(
-      'Updating program routine: $programRoutineId in $programId',
-      tag: 'StandaloneRepo',
-    );
-
+  Future<Result<void, AppError>> updateProgramRoutine(
+    String programId,
+    String programRoutineId,
+    UpdateProgramRoutineRequest request,
+  ) async {
     final result = await _apiClient.patch<Map<String, dynamic>>(
       '${ApiConstants.standalonePrograms}/$programId/routines/$programRoutineId',
       data: request.toJson(),
     );
-
-    return result.when(
-      success: (data) {
-        try {
-          final pr = StandaloneProgramRoutineModel.fromJson(
-            data['programRoutine'] as Map<String, dynamic>,
-          );
-          return Success(pr);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse program routine: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
-      failure: (error) => Failure(error),
-    );
+    return result.when(success: (_) => const Success(null), failure: Failure.new);
   }
 
-  /// Remove a routine from a program.
-  Future<Result<void, AppError>> removeProgramRoutine({
-    required String programId,
-    required String programRoutineId,
-  }) async {
-    AppLogger.debug(
-      'Removing routine $programRoutineId from program $programId',
-      tag: 'StandaloneRepo',
-    );
-
+  Future<Result<void, AppError>> deleteProgramRoutine(
+    String programId,
+    String programRoutineId,
+  ) async {
     final result = await _apiClient.delete<Map<String, dynamic>>(
       '${ApiConstants.standalonePrograms}/$programId/routines/$programRoutineId',
     );
-
-    return result.when(
-      success: (_) => const Success(null),
-      failure: (error) => Failure(error),
-    );
+    return result.when(success: (_) => const Success(null), failure: Failure.new);
   }
 
   // ════════════════════════════════════════════════════════
-  //  SELF-ASSIGNMENT (ACTIVATE / DEACTIVATE)
+  //  ROUTINE EXERCISE OPERATIONS
   // ════════════════════════════════════════════════════════
 
-  /// Activate a personal program (self-assign).
-  ///
-  /// Deactivates any currently active standalone assignment first.
-  Future<Result<StandaloneAssignedProgramModel, AppError>> activateProgram({
-    required String programId,
-    ActivateStandaloneProgramRequest? request,
-  }) async {
-    AppLogger.debug(
-      'Activating standalone program: $programId',
-      tag: 'StandaloneRepo',
-    );
-
-    final result = await _apiClient.post<Map<String, dynamic>>(
-      '${ApiConstants.standalonePrograms}/$programId/activate',
-      data: request?.toJson() ?? {},
-    );
-
-    return result.when(
-      success: (data) {
-        try {
-          final assignment = StandaloneAssignedProgramModel.fromJson(
-            data['assignment'] as Map<String, dynamic>,
-          );
-          AppLogger.info(
-            'Activated standalone program: $programId',
-            tag: 'StandaloneRepo',
-          );
-          return Success(assignment);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse assignment: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
-      failure: (error) => Failure(error),
-    );
-  }
-
-  /// Deactivate a personal program.
-  Future<Result<StandaloneAssignedProgramModel, AppError>> deactivateProgram(
-    String programId,
+  Future<Result<void, AppError>> addRoutineExercise(
+    String routineId,
+    AddRoutineExerciseRequest request,
   ) async {
-    AppLogger.debug(
-      'Deactivating standalone program: $programId',
-      tag: 'StandaloneRepo',
-    );
-
     final result = await _apiClient.post<Map<String, dynamic>>(
-      '${ApiConstants.standalonePrograms}/$programId/deactivate',
+      '${ApiConstants.standaloneRoutines}/$routineId/exercises',
+      data: request.toJson(),
     );
-
-    return result.when(
-      success: (data) {
-        try {
-          final assignment = StandaloneAssignedProgramModel.fromJson(
-            data['assignment'] as Map<String, dynamic>,
-          );
-          AppLogger.info(
-            'Deactivated standalone program: $programId',
-            tag: 'StandaloneRepo',
-          );
-          return Success(assignment);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse assignment: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
-      failure: (error) => Failure(error),
-    );
+    return result.when(success: (_) => const Success(null), failure: Failure.new);
   }
 
-  /// Get the currently active standalone program assignment.
-  Future<Result<StandaloneAssignedProgramModel?, AppError>>
-  getActiveProgram() async {
-    AppLogger.debug(
-      'Fetching active standalone program',
-      tag: 'StandaloneRepo',
+  Future<Result<void, AppError>> updateRoutineExercise(
+    String routineId,
+    String routineExerciseId,
+    UpdateRoutineExerciseRequest request,
+  ) async {
+    final result = await _apiClient.patch<Map<String, dynamic>>(
+      '${ApiConstants.standaloneRoutines}/$routineId/exercises/$routineExerciseId',
+      data: request.toJson(),
     );
-
-    final result = await _apiClient.get<Map<String, dynamic>>(
-      ApiConstants.standaloneActiveProgram,
-    );
-
-    return result.when(
-      success: (data) {
-        try {
-          final assignmentJson = data['assignment'];
-          if (assignmentJson == null) return const Success(null);
-          final assignment = StandaloneAssignedProgramModel.fromJson(
-            assignmentJson as Map<String, dynamic>,
-          );
-          return Success(assignment);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse active program: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
-      failure: (error) {
-        // 404 means no active program — not an error
-        if (error is NetworkError && error.statusCode == 404) {
-          return const Success(null);
-        }
-        return Failure(error);
-      },
-    );
+    return result.when(success: (_) => const Success(null), failure: Failure.new);
   }
 
-  // ════════════════════════════════════════════════════════
-  //  TODAY'S WORKOUT (Server-Only)
-  // ════════════════════════════════════════════════════════
-
-  /// Resolve today's routine from the active standalone program.
-  ///
-  /// Server-only operation — no local caching (depends on server-side
-  /// day-cycling logic).
-  Future<Result<StandaloneTodayModel, AppError>> getTodayRoutine({
-    String? assignedProgramId,
-  }) async {
-    AppLogger.debug('Fetching standalone today routine', tag: 'StandaloneRepo');
-
-    final queryParams = <String, dynamic>{
-      if (assignedProgramId != null) 'assignedProgramId': assignedProgramId,
-    };
-
-    final result = await _apiClient.get<Map<String, dynamic>>(
-      ApiConstants.standaloneToday,
-      queryParameters: queryParams.isNotEmpty ? queryParams : null,
+  Future<Result<void, AppError>> deleteRoutineExercise(
+    String routineId,
+    String routineExerciseId,
+  ) async {
+    final result = await _apiClient.delete<Map<String, dynamic>>(
+      '${ApiConstants.standaloneRoutines}/$routineId/exercises/$routineExerciseId',
     );
-
-    return result.when(
-      success: (data) {
-        try {
-          final model = StandaloneTodayModel.fromJson(data);
-          AppLogger.info(
-            'Standalone today: ${model.isRestDay ? "Rest Day" : model.today?.routine.name}',
-            tag: 'StandaloneRepo',
-          );
-          return Success(model);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse today routine: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
-      failure: (error) {
-        // 404 means no active program — wrap as a valid "no program" state
-        if (error is NetworkError && error.statusCode == 404) {
-          return const Success(
-            StandaloneTodayModel(
-              message: 'No active standalone program assigned',
-            ),
-          );
-        }
-        return Failure(error);
-      },
-    );
+    return result.when(success: (_) => const Success(null), failure: Failure.new);
   }
 
   // ════════════════════════════════════════════════════════
   //  SESSION OPERATIONS
   // ════════════════════════════════════════════════════════
 
-  /// Start a standalone workout session.
-  ///
-  /// Creates the session on the server. Returns 409 if a session
-  /// is already in progress.
-  Future<Result<WorkoutSessionModel, AppError>> startSession({
-    String? assignedProgramId,
-  }) async {
-    AppLogger.debug('Starting standalone session', tag: 'StandaloneRepo');
-
+  Future<Result<StandaloneSession, AppError>> startSession(
+    StartStandaloneSessionRequest request,
+  ) async {
     final result = await _apiClient.post<Map<String, dynamic>>(
       ApiConstants.standaloneSessions,
-      data: {
-        if (assignedProgramId != null) 'assignedProgramId': assignedProgramId,
-      },
+      data: request.toJson(),
     );
-
     return result.when(
-      success: (data) {
-        try {
-          final session = WorkoutSessionModel.fromJson(
-            data['session'] as Map<String, dynamic>,
-          );
-          AppLogger.info(
-            'Standalone session started: ${session.id}',
-            tag: 'StandaloneRepo',
-          );
-          return Success(session);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse session: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
+      success: (data) =>
+          Success(StandaloneSession.fromJson(data!['session'])),
       failure: (error) => Failure(error),
     );
   }
 
-  /// Get the currently active standalone session.
-  Future<Result<WorkoutSessionModel?, AppError>> getActiveSession() async {
-    AppLogger.debug(
-      'Fetching active standalone session',
-      tag: 'StandaloneRepo',
-    );
-
+  Future<Result<StandaloneSession?, AppError>> getActiveSession() async {
     final result = await _apiClient.get<Map<String, dynamic>>(
       ApiConstants.standaloneActiveSession,
     );
-
     return result.when(
       success: (data) {
-        try {
-          final sessionJson = data['session'];
-          if (sessionJson == null) return const Success(null);
-          final session = WorkoutSessionModel.fromJson(
-            sessionJson as Map<String, dynamic>,
-          );
-          return Success(session);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse session: $e',
-              originalError: e,
-            ),
-          );
-        }
+        final session = data!['session'];
+        if (session == null) return const Success(null);
+        return Success(StandaloneSession.fromJson(session));
       },
-      failure: (error) {
-        if (error is NetworkError && error.statusCode == 404) {
-          return const Success(null);
-        }
-        return Failure(error);
-      },
+      failure: (error) => Failure(error),
     );
   }
 
-  /// Get standalone session detail with performed sets.
-  Future<Result<WorkoutSessionModel, AppError>> getSessionDetail(
+  Future<Result<StandaloneSession, AppError>> getSession(
     String sessionId,
   ) async {
-    AppLogger.debug(
-      'Fetching session detail: $sessionId',
-      tag: 'StandaloneRepo',
-    );
-
     final result = await _apiClient.get<Map<String, dynamic>>(
       '${ApiConstants.standaloneSessions}/$sessionId',
     );
-
     return result.when(
-      success: (data) {
-        try {
-          final session = WorkoutSessionModel.fromJson(
-            data['session'] as Map<String, dynamic>,
-          );
-          return Success(session);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse session: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
+      success: (data) =>
+          Success(StandaloneSession.fromJson(data!['session'])),
       failure: (error) => Failure(error),
     );
   }
 
-  /// List past standalone sessions (paginated).
   Future<Result<StandaloneSessionListResponse, AppError>> getSessionHistory({
     int limit = 20,
     int offset = 0,
-    DateTime? startDate,
-    DateTime? endDate,
   }) async {
-    AppLogger.debug(
-      'Fetching standalone session history: limit=$limit, offset=$offset',
-      tag: 'StandaloneRepo',
-    );
-
-    final queryParams = <String, dynamic>{
-      'limit': limit,
-      'offset': offset,
-      if (startDate != null) 'startDate': startDate.toIso8601String(),
-      if (endDate != null) 'endDate': endDate.toIso8601String(),
-    };
-
     final result = await _apiClient.get<Map<String, dynamic>>(
       ApiConstants.standaloneSessions,
-      queryParameters: queryParams,
+      queryParameters: {'limit': limit, 'offset': offset},
     );
-
     return result.when(
-      success: (data) {
-        try {
-          final response = StandaloneSessionListResponse.fromJson(data);
-          AppLogger.info(
-            'Fetched ${response.sessions.length} standalone sessions',
-            tag: 'StandaloneRepo',
-          );
-          return Success(response);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse session history: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
+      success: (data) =>
+          Success(StandaloneSessionListResponse.fromJson(data!)),
       failure: (error) => Failure(error),
     );
   }
 
-  /// Complete a standalone session.
-  Future<Result<WorkoutSessionModel, AppError>> completeSession({
-    required String sessionId,
-    String? notes,
+  Future<Result<StandaloneSession, AppError>> completeSession(
+    String sessionId, {
+    String? feedback,
   }) async {
-    AppLogger.debug(
-      'Completing standalone session: $sessionId',
-      tag: 'StandaloneRepo',
-    );
-
     final result = await _apiClient.post<Map<String, dynamic>>(
       '${ApiConstants.standaloneSessions}/$sessionId/complete',
-      data: {if (notes != null) 'notes': notes},
+      data: {'feedback': feedback},
     );
-
     return result.when(
-      success: (data) {
-        try {
-          final session = WorkoutSessionModel.fromJson(
-            data['session'] as Map<String, dynamic>,
-          );
-          AppLogger.info(
-            'Standalone session completed: ${session.id}',
-            tag: 'StandaloneRepo',
-          );
-          return Success(session);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse session: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
+      success: (data) =>
+          Success(StandaloneSession.fromJson(data!['session'])),
       failure: (error) => Failure(error),
     );
   }
 
   // ════════════════════════════════════════════════════════
-  //  WEEKLY STATS (Server-Only)
+  //  PERFORMED SET OPERATIONS
   // ════════════════════════════════════════════════════════
 
-  /// Fetch aggregated weekly workout statistics.
-  ///
-  /// Server-only — always fresh from the server.
-  Future<Result<WeeklyStatsModel, AppError>> getWeeklyStats({
-    DateTime? weekOf,
-  }) async {
-    AppLogger.debug('Fetching standalone weekly stats', tag: 'StandaloneRepo');
+  Future<Result<StandalonePerformedSet, AppError>> logSet(
+    String sessionId,
+    LogStandaloneSetRequest request,
+  ) async {
+    final result = await _apiClient.post<Map<String, dynamic>>(
+      '${ApiConstants.standaloneSessions}/$sessionId/sets',
+      data: request.toJson(),
+    );
+    return result.when(
+      success: (data) => Success(
+        StandalonePerformedSet.fromJson(data!['performed_set']),
+      ),
+      failure: (error) => Failure(error),
+    );
+  }
 
-    final queryParams = <String, dynamic>{
-      if (weekOf != null) 'weekOf': weekOf.toIso8601String(),
-    };
+  Future<Result<StandalonePerformedSet, AppError>> updateSet(
+    String sessionId,
+    String setId,
+    UpdateStandaloneSetRequest request,
+  ) async {
+    final result = await _apiClient.patch<Map<String, dynamic>>(
+      '${ApiConstants.standaloneSessions}/$sessionId/sets/$setId',
+      data: request.toJson(),
+    );
+    return result.when(
+      success: (data) => Success(
+        StandalonePerformedSet.fromJson(data!['performed_set']),
+      ),
+      failure: (error) => Failure(error),
+    );
+  }
 
+  Future<Result<void, AppError>> deleteSet(
+    String sessionId,
+    String setId,
+  ) async {
+    final result = await _apiClient.delete<Map<String, dynamic>>(
+      '${ApiConstants.standaloneSessions}/$sessionId/sets/$setId',
+    );
+    return result.when(success: (_) => const Success(null), failure: Failure.new);
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  STATS OPERATIONS
+  // ════════════════════════════════════════════════════════
+
+  Future<Result<StandaloneStats, AppError>> getStats() async {
     final result = await _apiClient.get<Map<String, dynamic>>(
-      ApiConstants.standaloneWeeklyStats,
-      queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      ApiConstants.standaloneStats,
     );
-
     return result.when(
-      success: (data) {
-        try {
-          final statsJson = data['stats'] as Map<String, dynamic>;
-          final model = WeeklyStatsModel.fromJson(statsJson);
-          AppLogger.info(
-            'Standalone weekly stats: ${model.workoutsCompleted} workouts, '
-            '${model.totalMinutes}min, ${model.streakDays} streak',
-            tag: 'StandaloneRepo',
-          );
-          return Success(model);
-        } catch (e) {
-          return Failure(
-            UnknownError(
-              message: 'Failed to parse weekly stats: $e',
-              originalError: e,
-            ),
-          );
-        }
-      },
+      success: (data) => Success(StandaloneStats.fromJson(data!)),
       failure: (error) => Failure(error),
     );
   }
 
-  // ════════════════════════════════════════════════════════
-  //  PRIVATE HELPERS — Local Caching & Mapping
-  // ════════════════════════════════════════════════════════
-
-  /// Cache exercises in the local Drift database.
-  Future<void> _cacheExercises(List<StandaloneExerciseModel> exercises) async {
-    try {
-      await _db.insertExercises(
-        exercises
-            .map(
-              (e) => ExercisesCompanion.insert(
-                remoteId: Value(e.id),
-                name: e.name,
-                description: e.description,
-                primaryMuscleGroup: e.primaryMuscleGroup.name.toUpperCase(),
-                equipmentNeeded: Value(jsonEncode(e.equipmentNeeded)),
-                isSynced: const Value(true),
-              ),
-            )
-            .toList(),
-      );
-    } catch (e) {
-      AppLogger.warning(
-        'Failed to cache exercises locally: $e',
-        tag: 'StandaloneRepo',
-      );
-    }
-  }
-
-  /// Cache a single routine (with exercises) in the local Drift database.
-  Future<void> _cacheRoutine(RoutineModel routine) async {
-    try {
-      final routineId = await _db.upsertRoutine(
-        RoutinesCompanion.insert(
-          remoteId: Value(routine.id),
-          name: routine.name,
-          description: routine.description,
-          estimatedDurationMinutes: routine.estimatedDurationMinutes,
-          muscleGroupsTargeted: Value(
-            jsonEncode(
-              routine.muscleGroupsTargeted.map((m) => m.name).toList(),
-            ),
-          ),
-          isSynced: const Value(true),
-        ),
-      );
-
-      for (final exercise in routine.exercises) {
-        // Ensure exercise exists locally
-        if (exercise.exercise != null) {
-          await _db.upsertExercise(
-            ExercisesCompanion.insert(
-              remoteId: Value(exercise.exercise!.id),
-              name: exercise.exercise!.name,
-              description: exercise.exercise!.description,
-              primaryMuscleGroup: exercise.exercise!.primaryMuscleGroup.name
-                  .toUpperCase(),
-              equipmentNeeded: Value(
-                jsonEncode(exercise.exercise!.equipmentNeeded),
-              ),
-              isSynced: const Value(true),
-            ),
-          );
-        }
-
-        // Find local exercise ID
-        final localExercise = exercise.exercise != null
-            ? await _findExerciseByRemoteId(exercise.exercise!.id)
-            : null;
-
-        if (localExercise != null) {
-          await _db.upsertRoutineExercise(
-            RoutineExercisesCompanion.insert(
-              remoteId: Value(exercise.id),
-              routineId: routineId,
-              exerciseId: localExercise.id,
-              sets: exercise.sets,
-              repsMin: exercise.repsMin,
-              repsMax: exercise.repsMax,
-              restSeconds: exercise.restSeconds,
-              orderInRoutine: exercise.orderInRoutine,
-              notes: Value(exercise.notes),
-              isSynced: const Value(true),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      AppLogger.warning(
-        'Failed to cache routine locally: $e',
-        tag: 'StandaloneRepo',
-      );
-    }
-  }
-
-  /// Cache programs in the local Drift database.
-  Future<void> _cachePrograms(
-    List<StandaloneProgramSummaryModel> programs,
+  Future<Result<StandaloneExerciseStat, AppError>> getExerciseStat(
+    String exerciseId,
   ) async {
-    try {
-      for (final program in programs) {
-        await _db.upsertStandaloneProgram(
-          StandaloneProgramsCompanion.insert(
-            remoteId: Value(program.id),
-            userId: program.userId ?? '',
-            name: program.name,
-            description: program.description,
-            isSynced: const Value(true),
-          ),
-        );
-      }
-    } catch (e) {
-      AppLogger.warning(
-        'Failed to cache programs locally: $e',
-        tag: 'StandaloneRepo',
-      );
-    }
+    final result = await _apiClient.get<Map<String, dynamic>>(
+      '${ApiConstants.standaloneStats}/exercise/$exerciseId',
+    );
+    return result.when(
+      success: (data) => Success(StandaloneExerciseStat.fromJson(data!)),
+      failure: (error) => Failure(error),
+    );
   }
-
-  /// Find exercise by remote ID.
-  Future<Exercise?> _findExerciseByRemoteId(String remoteId) async {
-    final exercises = await _db.getAllExercises();
-    try {
-      return exercises.firstWhere((e) => e.remoteId == remoteId);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Map Drift RoutineExercise rows to RoutineExerciseModel list.
-  Future<List<RoutineExerciseModel>> _mapRoutineExercises(
-    List<RoutineExercise> exercises,
-  ) async {
-    final models = <RoutineExerciseModel>[];
-    for (final re in exercises) {
-      final exercise = await _db.getExerciseById(re.exerciseId);
-      models.add(
-        RoutineExerciseModel(
-          id: re.remoteId ?? re.id.toString(),
-          routineId: re.routineId.toString(),
-          exerciseId: exercise?.remoteId ?? re.exerciseId.toString(),
-          sets: re.sets,
-          repsMin: re.repsMin,
-          repsMax: re.repsMax,
-          restSeconds: re.restSeconds,
-          orderInRoutine: re.orderInRoutine,
-          notes: re.notes,
-          exercise: exercise != null
-              ? ExerciseModel(
-                  id: exercise.remoteId ?? exercise.id.toString(),
-                  name: exercise.name,
-                  description: exercise.description,
-                  primaryMuscleGroup: _parseMuscleGroup(
-                    exercise.primaryMuscleGroup,
-                  ),
-                  equipmentNeeded: _parseJsonList(exercise.equipmentNeeded),
-                )
-              : null,
-          createdAt: re.createdAt,
-          updatedAt: re.updatedAt,
-        ),
-      );
-    }
-    return models;
-  }
-
-  MuscleGroup _parseMuscleGroup(String value) {
-    try {
-      return MuscleGroup.values.firstWhere(
-        (mg) => mg.name.toUpperCase() == value.toUpperCase(),
-        orElse: () => MuscleGroup.chest,
-      );
-    } catch (_) {
-      return MuscleGroup.chest;
-    }
-  }
-
-  List<MuscleGroup> _parseMuscleGroups(String json) {
-    try {
-      final list = jsonDecode(json) as List;
-      return list.map((e) => _parseMuscleGroup(e.toString())).toList();
-    } catch (_) {
-      return [];
-    }
-  }
-
-  List<String> _parseJsonList(String json) {
-    try {
-      final list = jsonDecode(json) as List;
-      return list.map((e) => e.toString()).toList();
-    } catch (_) {
-      return [];
-    }
-  }
-}
-
-/// Provider for StandaloneWorkoutRepository
-@Riverpod(keepAlive: true)
-StandaloneWorkoutRepository standaloneWorkoutRepository(Ref ref) {
-  return StandaloneWorkoutRepository(
-    database: ref.watch(appDatabaseProvider),
-    apiClient: ref.watch(apiClientProvider),
-  );
 }

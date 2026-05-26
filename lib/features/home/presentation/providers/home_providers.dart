@@ -55,39 +55,35 @@ enum HomeStatus {
 
   /// There is a routine scheduled for today → show routine card.
   hasRoutine,
+
+  /// Free user with no standalone program → "Build Your First Program" CTA.
+  noStandaloneProgram,
+
+  /// Free user with active standalone program → show program routine list.
+  hasStandaloneProgram,
 }
 
 /// Derives [HomeStatus] from [todayStatusProvider].
 ///
-/// No 403 catching. All status information comes from the unified today response.
-///
-/// Priority for non-subscribed users:
-///   1. Lapsed subscriber with coach today → [HomeStatus.lapsedSubscription]
-///   2. Any standalone program today → [HomeStatus.restDay] / [HomeStatus.hasRoutine]
-///   3. Everything else → existing CTAs
+/// Forks on `isSubscribed`:
+/// - Free users: standalone program status drives the home screen.
+/// - Paid users: coach program status drives the home screen.
 @riverpod
 Future<HomeStatus> homeStatus(Ref ref) async {
   final s = await ref.watch(todayStatusProvider.future);
 
-  // Non-subscribed path
+  // ── Free tier path ──
   if (!s.isSubscribed) {
-    // Lapsed subscriber: has a coach but subscription expired.
-    // The server may not populate coachToday for lapsed users (subscription-gated),
-    // so we check hasCoach alone — a user with a coach who isn't subscribed is
-    // always lapsed, never "noSubscription" (AccessGated paywall).
     if (s.hasCoach) {
       return HomeStatus.lapsedSubscription;
     }
-    // Pure free user with no coach — fall back to standalone program.
-    if (s.standaloneToday == null) {
-      return HomeStatus.noCoach;
+    if (s.standalone.hasActiveProgram) {
+      return HomeStatus.hasStandaloneProgram;
     }
-    return s.standaloneToday!.isRestDay
-        ? HomeStatus.restDay
-        : HomeStatus.hasRoutine;
+    return HomeStatus.noStandaloneProgram;
   }
 
-  // Subscribed path unchanged — coach program wins.
+  // ── Paid tier path ──
   if (!s.hasCoach) return HomeStatus.noCoach;
   if (s.coachToday == null) return HomeStatus.waitingForProgram;
   if (s.coachToday!.isRestDay) return HomeStatus.restDay;
@@ -100,15 +96,13 @@ Future<HomeStatus> homeStatus(Ref ref) async {
 
 /// Resolves today's routine as [TodayRoutineModel].
 ///
-/// Prefers coach today when subscribed; falls back to standalone.
+/// Prefers coach today when subscribed; returns rest day for standalone (free
+/// users see standalone program info elsewhere).
 @riverpod
 Future<TodayRoutineModel> activeToday(Ref ref) async {
   final s = await ref.watch(todayStatusProvider.future);
   if (s.isSubscribed && s.coachToday != null) {
     return s.coachToday!.toRoutineModel();
-  }
-  if (s.standaloneToday != null) {
-    return s.standaloneToday!.toRoutineModel();
   }
   return const TodayRoutineModel(isRestDay: true);
 }

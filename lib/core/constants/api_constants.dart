@@ -35,7 +35,6 @@ class ApiConstants {
   // User Endpoints
   static const String userProfile = '/users/profile';
   static const String updateProfile = '/users/profile';
-  static const String userPrograms = '/user/programs';
 
   // Profile Endpoints (fitness profile / onboarding)
   static const String profile = '/profile';
@@ -78,11 +77,11 @@ class ApiConstants {
   static const String standaloneExercises = '/standalone/exercises';
   static const String standaloneRoutines = '/standalone/routines';
   static const String standalonePrograms = '/standalone/programs';
+  static const String standaloneProgramsBuild = '/standalone/programs/build';
   static const String standaloneActiveProgram = '/standalone/programs/active';
-  static const String standaloneToday = '/standalone/today';
   static const String standaloneSessions = '/standalone/sessions';
   static const String standaloneActiveSession = '/standalone/sessions/active';
-  static const String standaloneWeeklyStats = '/standalone/stats/weekly';
+  static const String standaloneStats = '/standalone/stats/summary';
 
   // Unified Stats Endpoints
   static const String unifiedWeeklyStats = '/stats/weekly';
