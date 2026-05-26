@@ -4,7 +4,6 @@ import 'package:app_links/app_links.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../core/utils/logger.dart';
-import '../services/storage/secure_storage_service.dart';
 
 part 'deep_link_provider.g.dart';
 
@@ -31,7 +30,6 @@ class DeepLinkEvent {
 ///
 /// Supported deep links:
 /// - getgains://auth/email-verified → Navigate to /email-verified
-/// - getgains://auth/reset-password?access_token=xxx&refresh_token=xxx → Store tokens, navigate to /reset-password
 @Riverpod(keepAlive: true)
 class DeepLinkNotifier extends _$DeepLinkNotifier {
   late AppLinks _appLinks;
@@ -85,30 +83,8 @@ class DeepLinkNotifier extends _$DeepLinkNotifier {
   Future<void> _handleDeepLink(Uri uri) async {
     AppLogger.info('Deep link received: $uri', tag: 'DeepLink');
 
-    // Parse the deep link
-    // URI format: getgains://auth/email-verified
-    // URI format: getgains://auth/reset-password?access_token=xxx&refresh_token=xxx
-    final path = '/${uri.host}${uri.path}'; // e.g., /auth/email-verified
+    final path = '/${uri.host}${uri.path}';
     final queryParams = uri.queryParameters;
-
-    // If this is a reset password deep link, store the recovery tokens
-    if (path == '/auth/reset-password') {
-      final accessToken = queryParams['access_token'];
-      final refreshToken = queryParams['refresh_token'];
-
-      if (accessToken != null) {
-        final secureStorage = ref.read(secureStorageServiceProvider);
-        // Store as recovery tokens (separate from regular auth tokens)
-        await secureStorage.saveRecoveryToken(accessToken);
-        if (refreshToken != null) {
-          await secureStorage.saveRecoveryRefreshToken(refreshToken);
-        }
-        AppLogger.info(
-          'Recovery tokens stored from deep link',
-          tag: 'DeepLink',
-        );
-      }
-    }
 
     state = DeepLinkEvent(path: path, queryParameters: queryParams);
   }

@@ -49,6 +49,7 @@ class AppRoutes {
   static const String checkEmail = '/check-email';
   static const String completeProfile = '/complete-profile';
   static const String forgotPassword = '/forgot-password';
+  static const String enterOtp = '/enter-otp';
   static const String resetPassword = '/reset-password';
   static const String emailVerified = '/email-verified';
   static const String home = '/home';
@@ -157,8 +158,7 @@ class AppRoutes {
 /// Handles auth-based redirects automatically.
 ///
 /// Route Guard Logic:
-/// - Unauthenticated users can only access: login, register, forgot-password
-/// - reset-password is an authenticated route (user comes from email link with token)
+/// - Unauthenticated users can access: login, register, check-email, forgot-password, enter-otp, reset-password
 /// - complete-profile is for Google sign-up flow (has temp tokens)
 /// - All other routes require full authentication
 ///
@@ -198,16 +198,16 @@ GoRouter router(Ref ref) {
           location == AppRoutes.register ||
           location == AppRoutes.checkEmail ||
           location == AppRoutes.forgotPassword ||
+          location == AppRoutes.enterOtp ||
+          location == AppRoutes.resetPassword ||
           location == AppRoutes.emailVerified ||
           location ==
               AppRoutes
                   .unityTest; // Temporary: no auth required for dev/testing
 
       // Semi-authenticated routes (require temp tokens but not full profile)
-      // - reset-password: User has token from email link
       // - complete-profile: User has Google tokens but needs to complete profile
       final isSemiAuthRoute =
-          location == AppRoutes.resetPassword ||
           location == AppRoutes.completeProfile;
 
       // Still loading auth state
@@ -269,12 +269,25 @@ GoRouter router(Ref ref) {
         path: AppRoutes.forgotPassword,
         builder: (context, state) => const ForgotPasswordScreen(),
       ),
-
-      // Auth Routes (Semi-Authenticated)
+      GoRoute(
+        path: AppRoutes.enterOtp,
+        name: 'enter-otp',
+        builder: (context, state) {
+          final email = state.uri.queryParameters['email'] ?? '';
+          return EnterOtpScreen(email: email);
+        },
+      ),
       GoRoute(
         path: AppRoutes.resetPassword,
-        builder: (context, state) => const ResetPasswordScreen(),
+        name: 'reset-password',
+        builder: (context, state) {
+          final email = state.uri.queryParameters['email'] ?? '';
+          final token = state.uri.queryParameters['token'] ?? '';
+          return ResetPasswordScreen(email: email, resetToken: token);
+        },
       ),
+
+      // Auth Routes (Semi-Authenticated)
       GoRoute(
         path: AppRoutes.emailVerified,
         builder: (context, state) => const EmailVerifiedScreen(),
@@ -759,9 +772,6 @@ GoRouter router(Ref ref) {
       switch (next.path) {
         case '/auth/email-verified':
           routerInstance.go(AppRoutes.emailVerified);
-          break;
-        case '/auth/reset-password':
-          routerInstance.go(AppRoutes.resetPassword);
           break;
         default:
           AppLogger.warning(

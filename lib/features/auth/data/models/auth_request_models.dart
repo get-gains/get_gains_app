@@ -77,14 +77,41 @@ abstract class SendRecoveryEmailRequest with _$SendRecoveryEmailRequest {
       _$SendRecoveryEmailRequestFromJson(json);
 }
 
-/// Reset Password Request Model
+/// Send OTP Request Model
 ///
-/// Used to reset password with recovery token.
-/// The recovery access token is sent in the Authorization header, not the body.
+/// Used to request a password reset verification code via email.
+@freezed
+abstract class SendOtpRequest with _$SendOtpRequest {
+  const factory SendOtpRequest({required String email}) = _SendOtpRequest;
+
+  factory SendOtpRequest.fromJson(Map<String, dynamic> json) =>
+      _$SendOtpRequestFromJson(json);
+}
+
+/// Verify OTP Request Model
+///
+/// Used to verify a password reset OTP code.
+@freezed
+abstract class VerifyOtpRequest with _$VerifyOtpRequest {
+  const factory VerifyOtpRequest({
+    required String email,
+    required String code,
+  }) = _VerifyOtpRequest;
+
+  factory VerifyOtpRequest.fromJson(Map<String, dynamic> json) =>
+      _$VerifyOtpRequestFromJson(json);
+}
+
+/// Reset Password Request Model (OTP flow)
+///
+/// Used to reset password with email + OTP-derived reset token.
 @freezed
 abstract class ResetPasswordRequest with _$ResetPasswordRequest {
-  const factory ResetPasswordRequest({required String newPassword}) =
-      _ResetPasswordRequest;
+  const factory ResetPasswordRequest({
+    required String email,
+    required String resetToken,
+    @JsonKey(name: 'newPassword') required String newPassword,
+  }) = _ResetPasswordRequest;
 
   factory ResetPasswordRequest.fromJson(Map<String, dynamic> json) =>
       _$ResetPasswordRequestFromJson(json);

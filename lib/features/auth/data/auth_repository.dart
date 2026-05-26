@@ -1,4 +1,3 @@
-import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/constants/api_constants.dart';
@@ -675,37 +674,67 @@ class AuthRepository {
     );
   }
 
-  // ============== Password Recovery ==============
+  // ============== Password Reset OTP ==============
 
-  /// Send password recovery email
+  /// Send password reset verification code
   ///
-  /// Sends an email with a recovery link to reset password.
-  /// The link contains a token that authenticates the user for password reset.
+  /// Sends a 6-character OTP code to the user's email via Brevo.
   ///
-  /// Server endpoint: POST /auth/send-recovery-email
-  Future<Result<void, AppError>> sendRecoveryEmail({
+  /// Server endpoint: POST /auth/send-otp
+  Future<Result<void, AppError>> sendOtp({
     required String email,
   }) async {
-    AppLogger.debug('Sending recovery email to: $email', tag: 'AuthRepo');
+    AppLogger.debug('Sending OTP to: $email', tag: 'AuthRepo');
 
-    final request = SendRecoveryEmailRequest(email: email);
+    final request = SendOtpRequest(email: email);
 
     final result = await _apiClient.post<Map<String, dynamic>>(
-      ApiConstants.sendRecoveryEmail,
+      ApiConstants.sendOtp,
       data: request.toJson(),
     );
 
     return result.when(
       success: (_) {
-        AppLogger.info('Recovery email sent successfully', tag: 'AuthRepo');
+        AppLogger.info('OTP sent successfully', tag: 'AuthRepo');
         return const Success(null);
       },
       failure: (error) {
-        AppLogger.error(
-          'Failed to send recovery email',
-          tag: 'AuthRepo',
-          error: error,
+        AppLogger.error('Failed to send OTP', tag: 'AuthRepo', error: error);
+        return Failure(_mapToAuthError(error));
+      },
+    );
+  }
+
+  /// Verify password reset OTP code
+  ///
+  /// Returns a one-time reset token on success.
+  ///
+  /// Server endpoint: POST /auth/verify-otp
+  Future<Result<String, AppError>> verifyOtp({
+    required String email,
+    required String code,
+  }) async {
+    AppLogger.debug('Verifying OTP for: $email', tag: 'AuthRepo');
+
+    final request = VerifyOtpRequest(email: email, code: code);
+
+    final result = await _apiClient.post<Map<String, dynamic>>(
+      ApiConstants.verifyOtp,
+      data: request.toJson(),
+    );
+
+    return result.when(
+      success: (data) {
+        final resetToken = _requiredStringField(
+          data,
+          const ['resetToken', 'reset_token'],
+          fieldName: 'resetToken',
         );
+        AppLogger.info('OTP verified successfully', tag: 'AuthRepo');
+        return Success(resetToken);
+      },
+      failure: (error) {
+        AppLogger.error('OTP verification failed', tag: 'AuthRepo', error: error);
         return Failure(_mapToAuthError(error));
       },
     );
@@ -713,24 +742,27 @@ class AuthRepository {
 
   // ============== Password Reset ==============
 
-  /// Reset password using recovery access token
+  /// Reset password using OTP-derived reset token
   ///
-  /// Called after user receives deep link from password reset email.
-  /// The recovery access token is sent as Bearer token in the Authorization header.
+  /// Called after user verifies OTP code and receives a reset token.
   ///
   /// Server endpoint: POST /auth/reset-password
-  Future<Result<void, AppError>> resetPassword({
+  Future<Result<void, AppError>> resetPasswordWithOtp({
+    required String email,
+    required String resetToken,
     required String newPassword,
-    required String recoveryAccessToken,
   }) async {
-    AppLogger.debug('Resetting password', tag: 'AuthRepo');
+    AppLogger.debug('Resetting password via OTP', tag: 'AuthRepo');
+
+    final request = ResetPasswordRequest(
+      email: email,
+      resetToken: resetToken,
+      newPassword: newPassword,
+    );
 
     final result = await _apiClient.post<Map<String, dynamic>>(
       ApiConstants.resetPassword,
-      data: {'newPassword': newPassword},
-      options: Options(
-        headers: {'Authorization': 'Bearer $recoveryAccessToken'},
-      ),
+      data: request.toJson(),
     );
 
     return result.when(

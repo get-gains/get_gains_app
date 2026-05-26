@@ -5,16 +5,15 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/app_error.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
-import '../providers/register_provider.dart';
+import '../providers/otp_provider.dart';
 
 /// Forgot Password Screen
 ///
 /// Simple screen with email input.
-/// Calls POST /auth/send-recovery-email via PasswordRecoveryNotifier.
-/// On success, shows confirmation message with option to go back to login.
+/// Calls POST /auth/send-otp via OtpNotifier.
+/// On success, navigates to the Enter OTP screen.
 class ForgotPasswordScreen extends ConsumerStatefulWidget {
   const ForgotPasswordScreen({super.key});
 
@@ -31,7 +30,6 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
 
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
-  bool _emailSent = false;
 
   @override
   void initState() {
@@ -67,27 +65,20 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
   Future<void> _onSubmit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final success = await ref
-        .read(passwordRecoveryProvider.notifier)
-        .sendRecoveryEmail(email: _emailController.text.trim());
+    await ref
+        .read(otpProvider.notifier)
+        .sendOtp(email: _emailController.text.trim());
 
     if (!mounted) return;
 
-    if (success) {
-      setState(() => _emailSent = true);
-      // Re-trigger animation for the success state
-      _animationController.reset();
-      _animationController.forward();
-    } else {
-      // Display the error from the provider state
-      final state = ref.read(passwordRecoveryProvider);
-      if (state is AsyncError) {
-        final error = state.error;
-        final message = error is AppError
-            ? error.message
-            : 'Failed to send recovery email. Please try again.';
-        AppToast.error(context, message);
-      }
+    final state = ref.read(otpProvider);
+    if (state is OtpSent) {
+      context.goNamed(
+        'enter-otp',
+        queryParameters: {'email': _emailController.text.trim()},
+      );
+    } else if (state is OtpError) {
+      AppToast.error(context, state.error.message);
     }
   }
 
@@ -95,8 +86,8 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final size = MediaQuery.of(context).size;
-    final recoveryState = ref.watch(passwordRecoveryProvider);
-    final isLoading = recoveryState is AsyncLoading;
+    final otpState = ref.watch(otpProvider);
+    final isLoading = otpState is OtpSending;
 
     return Scaffold(
       backgroundColor: isDark
@@ -116,9 +107,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
               padding: const EdgeInsets.symmetric(
                 horizontal: AppTheme.spacing6,
               ),
-              child: _emailSent
-                  ? _buildSuccessState(isDark)
-                  : _buildEmailForm(isDark, isLoading),
+              child: _buildEmailForm(isDark, isLoading),
             ),
           ),
         ),
@@ -191,7 +180,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
           child: FadeTransition(
             opacity: _fadeAnimation,
             child: Text(
-              'Enter your email address and we\'ll send you a link to reset your password.',
+                        'Enter your email address and we\'ll send you a 6-character verification code.',
               style: AppTextStyles.bodyMedium.copyWith(
                 color: isDark
                     ? AppColors.mutedForegroundDark
@@ -238,7 +227,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
                   const SizedBox(height: AppTheme.spacing6),
 
                   AppButton.primary(
-                    label: 'Send Reset Link',
+                      label: 'Send Code',
                     onPressed: isLoading ? null : _onSubmit,
                     isFullWidth: true,
                     size: AppButtonSize.lg,
@@ -259,191 +248,6 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
             ),
           ),
         ),
-      ],
-    );
-  }
-
-  Widget _buildSuccessState(bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const SizedBox(height: AppTheme.spacing12),
-
-        // Icon
-        FadeTransition(
-          opacity: _fadeAnimation,
-          child: Container(
-            width: 120,
-            height: 120,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppColors.success.withOpacity(0.2),
-                  AppColors.success.withOpacity(0.1),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: AppColors.success.withOpacity(0.3),
-                width: 2,
-              ),
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Icon(
-                  Icons.mark_email_read_rounded,
-                  size: 56,
-                  color: AppColors.success,
-                ),
-                Positioned(
-                  bottom: 24,
-                  right: 24,
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: AppColors.success,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.success.withOpacity(0.4),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.check_rounded,
-                      size: 20,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        const SizedBox(height: AppTheme.spacing8),
-
-        // Title
-        SlideTransition(
-          position: _slideAnimation,
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: Text(
-              'Check your email',
-              style: AppTextStyles.headlineLarge.copyWith(
-                color: isDark
-                    ? AppColors.foregroundDark
-                    : AppColors.foregroundLight,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
-
-        const SizedBox(height: AppTheme.spacing3),
-
-        // Description
-        SlideTransition(
-          position: _slideAnimation,
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: Text(
-              'We sent a password reset link to\n${_emailController.text.trim()}',
-              style: AppTextStyles.bodyLarge.copyWith(
-                color: isDark
-                    ? AppColors.mutedForegroundDark
-                    : AppColors.mutedForegroundLight,
-                height: 1.5,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
-
-        const SizedBox(height: AppTheme.spacing3),
-
-        // Info hint
-        SlideTransition(
-          position: _slideAnimation,
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: Container(
-              padding: const EdgeInsets.all(AppTheme.spacing4),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? AppColors.surface1Dark.withOpacity(0.5)
-                    : AppColors.surface1Light,
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                border: Border.all(
-                  color: isDark
-                      ? AppColors.borderDark.withOpacity(0.5)
-                      : AppColors.borderLight,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.info_outline_rounded,
-                    size: 20,
-                    color: isDark
-                        ? AppColors.mutedForegroundDark
-                        : AppColors.mutedForegroundLight,
-                  ),
-                  const SizedBox(width: AppTheme.spacing3),
-                  Expanded(
-                    child: Text(
-                      'Don\'t forget to check your spam folder.',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: isDark
-                            ? AppColors.mutedForegroundDark
-                            : AppColors.mutedForegroundLight,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: AppTheme.spacing8),
-
-        // Actions
-        SlideTransition(
-          position: _slideAnimation,
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                AppButton.primary(
-                  label: 'Back to Login',
-                  onPressed: () => context.go(AppRoutes.login),
-                  isFullWidth: true,
-                  size: AppButtonSize.lg,
-                  icon: Icons.arrow_back_rounded,
-                ),
-
-                const SizedBox(height: AppTheme.spacing3),
-
-                AppButton.ghost(
-                  label: 'Didn\'t receive the email? Try again',
-                  onPressed: () => setState(() => _emailSent = false),
-                  isFullWidth: true,
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        const SizedBox(height: AppTheme.spacing12),
       ],
     );
   }
