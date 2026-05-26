@@ -4,18 +4,44 @@ import 'package:get_gains_app/features/home/presentation/providers/home_provider
 
 void main() {
   group('homeStatus derivation logic', () {
-    test('noCoach when hasCoach is false', () {
+    test('buildProgram when no coach and no standalone program', () {
       final status = _deriveHomeStatus(
         TodayStatusModel(isSubscribed: false, hasCoach: false),
       );
-      expect(status, HomeStatus.noCoach);
+      expect(status, HomeStatus.buildProgram);
     });
 
-    test('noSubscription when has coach but not subscribed', () {
+    test('buildProgram when has coach but not subscribed and no standalone', () {
       final status = _deriveHomeStatus(
         TodayStatusModel(isSubscribed: false, hasCoach: true),
       );
-      expect(status, HomeStatus.noSubscription);
+      expect(status, HomeStatus.buildProgram);
+    });
+
+    test('hasRoutine when non-subscribed user has standalone program', () {
+      final status = _deriveHomeStatus(
+        TodayStatusModel(
+          isSubscribed: false,
+          hasCoach: true,
+          standaloneToday: TodayWorkoutDetails(
+            isRestDay: false,
+            programRoutineId: 'sr_1',
+            routineName: 'Leg Day',
+          ),
+        ),
+      );
+      expect(status, HomeStatus.hasRoutine);
+    });
+
+    test('restDay when non-subscribed user has standalone rest day', () {
+      final status = _deriveHomeStatus(
+        TodayStatusModel(
+          isSubscribed: false,
+          hasCoach: true,
+          standaloneToday: TodayWorkoutDetails(isRestDay: true),
+        ),
+      );
+      expect(status, HomeStatus.restDay);
     });
 
     test('waitingForProgram when subscribed and coach but no coachToday', () {
@@ -50,14 +76,37 @@ void main() {
       );
       expect(status, HomeStatus.hasRoutine);
     });
+
+    test('hasRoutine when subscribed user without coach has standalone program', () {
+      final status = _deriveHomeStatus(
+        TodayStatusModel(
+          isSubscribed: true,
+          hasCoach: false,
+          standaloneToday: TodayWorkoutDetails(
+            isRestDay: false,
+            programRoutineId: 'sr_1',
+            routineName: 'Pull Day',
+          ),
+        ),
+      );
+      expect(status, HomeStatus.hasRoutine);
+    });
   });
 }
 
 // Extracted logic for testability — mirrors homeStatusProvider derivation.
 HomeStatus _deriveHomeStatus(TodayStatusModel s) {
-  if (!s.hasCoach) return HomeStatus.noCoach;
-  if (!s.isSubscribed) return HomeStatus.noSubscription;
-  if (s.coachToday == null) return HomeStatus.waitingForProgram;
-  if (s.coachToday!.isRestDay) return HomeStatus.restDay;
-  return HomeStatus.hasRoutine;
+  if (s.hasCoach && s.isSubscribed) {
+    if (s.coachToday == null) return HomeStatus.waitingForProgram;
+    if (s.coachToday!.isRestDay) return HomeStatus.restDay;
+    return HomeStatus.hasRoutine;
+  }
+
+  if (s.standaloneToday != null) {
+    return s.standaloneToday!.isRestDay
+        ? HomeStatus.restDay
+        : HomeStatus.hasRoutine;
+  }
+
+  return HomeStatus.buildProgram;
 }
