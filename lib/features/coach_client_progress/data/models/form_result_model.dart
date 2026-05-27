@@ -12,6 +12,8 @@ abstract class ClientFormResult with _$ClientFormResult {
     @Default({}) Map<String, dynamic> segmentScores,
     @Default([]) List<FormCorrection> corrections,
     String? cameraAngle,
+    String? recordedFramesKey,
+    String? exerciseName,
     int? durationMs,
     int? totalFrames,
     required DateTime createdAt,

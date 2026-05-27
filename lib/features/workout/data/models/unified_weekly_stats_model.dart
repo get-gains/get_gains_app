@@ -49,13 +49,13 @@ abstract class SourceStats with _$SourceStats {
     required String type,
 
     /// Number of completed sessions from this source this week.
-    required int workoutsCompleted,
+    @Default(0) int workoutsCompleted,
 
     /// Total workout time from this source in minutes.
-    required int totalMinutes,
+    @Default(0) int totalMinutes,
 
     /// Consecutive-day streak for this specific source.
-    required int streakDays,
+    @Default(0) int streakDays,
 
     /// Program name (only present for coach source).
     String? programName,

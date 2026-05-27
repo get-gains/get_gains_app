@@ -36,16 +36,11 @@ Future<TodayStatusModel> todayStatus(Ref ref) async {
 
 /// Enum describing the client's current home-screen status.
 enum HomeStatus {
-  /// User has no subscribed coach → show "Find a Coach" CTA.
+  /// User has no subscribed coach (paid tier) → show "Find a Coach" CTA.
   noCoach,
 
-  /// User has a coach but no active subscription → show upgrade CTA.
-  noSubscription,
-
-  /// User had a coach + active subscription that has since expired,
-  /// AND the coach had already assigned a routine for today.
-  /// Show the routine card (read-only) + a "Renew" banner.
-  lapsedSubscription,
+  /// User has no coach + no standalone program → show "Build My Program" CTA.
+  buildProgram,
 
   /// User has a coach but no active program → show "Waiting for program".
   waitingForProgram,
@@ -55,39 +50,37 @@ enum HomeStatus {
 
   /// There is a routine scheduled for today → show routine card.
   hasRoutine,
-
-  /// Free user with no standalone program → "Build Your First Program" CTA.
-  noStandaloneProgram,
-
-  /// Free user with active standalone program → show program routine list.
-  hasStandaloneProgram,
 }
 
 /// Derives [HomeStatus] from [todayStatusProvider].
 ///
-/// Forks on `isSubscribed`:
-/// - Free users: standalone program status drives the home screen.
-/// - Paid users: coach program status drives the home screen.
+/// Priority:
+///   1. Subscribed user with coach → coach program flow
+///   2. Any user with a self-built standalone program → standalone flow
+///   3. Everything else → "Build My Program" CTA
 @riverpod
 Future<HomeStatus> homeStatus(Ref ref) async {
   final s = await ref.watch(todayStatusProvider.future);
 
-  // ── Free tier path ──
-  if (!s.isSubscribed) {
-    if (s.hasCoach) {
-      return HomeStatus.lapsedSubscription;
-    }
-    if (s.standalone.hasActiveProgram) {
-      return HomeStatus.hasStandaloneProgram;
-    }
-    return HomeStatus.noStandaloneProgram;
+  // Coach path: only when subscribed AND has an active coach
+  if (s.hasCoach && s.isSubscribed) {
+    if (s.coachToday == null) return HomeStatus.waitingForProgram;
+    if (s.coachToday!.isRestDay) return HomeStatus.restDay;
+    return HomeStatus.hasRoutine;
   }
 
-  // ── Paid tier path ──
-  if (!s.hasCoach) return HomeStatus.noCoach;
-  if (s.coachToday == null) return HomeStatus.waitingForProgram;
-  if (s.coachToday!.isRestDay) return HomeStatus.restDay;
-  return HomeStatus.hasRoutine;
+  // Standalone path: any user with an active self-built program
+  if (s.standalone.hasActiveProgram) {
+    return HomeStatus.hasRoutine;
+  }
+
+  // Paid user with no coach → show coach discovery
+  if (s.isSubscribed && !s.hasCoach) {
+    return HomeStatus.noCoach;
+  }
+
+  // No standalone program available
+  return HomeStatus.buildProgram;
 }
 
 // ──────────────────────────────────────────────────────────
@@ -96,15 +89,41 @@ Future<HomeStatus> homeStatus(Ref ref) async {
 
 /// Resolves today's routine as [TodayRoutineModel].
 ///
-/// Prefers coach today when subscribed; returns rest day for standalone (free
-/// users see standalone program info elsewhere).
+/// Prefers coach today when subscribed; falls back to standalone for free-tier
+/// users. Returns a non-rest-day model when no program exists so the card
+/// falls through to the "Build My Program" CTA in [TodayHeroBlock].
 @riverpod
 Future<TodayRoutineModel> activeToday(Ref ref) async {
   final s = await ref.watch(todayStatusProvider.future);
-  if (s.isSubscribed && s.coachToday != null) {
+
+  // Coach flow (subscribed + has coach)
+  if (s.hasCoach && s.isSubscribed && s.coachToday != null) {
     return s.coachToday!.toRoutineModel();
   }
-  return const TodayRoutineModel(isRestDay: true);
+
+  // Standalone flow — show the active program info
+  if (s.standalone.hasActiveProgram && s.standalone.program != null) {
+    return TodayRoutineModel(
+      isRestDay: false,
+      today: TodayRoutineDetails(
+        programRoutineId: '',
+        dayOfWeek: '',
+        assignedProgramId: s.standalone.program!.id,
+        programName: s.standalone.program!.name,
+        routine: RoutineModel(
+          id: s.standalone.program!.id,
+          name: s.standalone.program!.name,
+          description: '',
+          estimatedDurationMinutes: 0,
+          exercises: const [],
+        ),
+      ),
+    );
+  }
+
+  // No program at all — return a non-rest-day model so the card
+  // falls through to the "Build My Program" CTA in TodayHeroBlock.
+  return const TodayRoutineModel(isRestDay: false);
 }
 
 // ──────────────────────────────────────────────────────────
@@ -141,18 +160,38 @@ Future<WeeklyStatsModel> weeklyStats(Ref ref) async {
 // Recent Activity
 // ──────────────────────────────────────────────────────────
 
-/// Fetches recent completed workout sessions (limit 5).
+/// Fetches recent completed workout sessions (limit 5) from the unified
+/// session history endpoint (`GET /api/sessions/history`). Falls back to
+/// the local database when the server is unreachable.
 @riverpod
 Future<List<WorkoutSessionSummary>> recentActivity(Ref ref) async {
   final repo = ref.watch(workoutRepositoryProvider);
-  final result = await repo.getSessionHistory(limit: 5, offset: 0);
+  final result = await repo.getUnifiedSessionHistory(
+    source: 'all',
+    limit: 5,
+    offset: 0,
+  );
 
-  if (result is Success<WorkoutHistoryResponse, AppError>) {
-    return result.value.sessions;
+  if (result is Success<UnifiedSessionHistoryResponse, AppError>) {
+    return result.value.sessions
+        .map(
+          (s) => WorkoutSessionSummary(
+            id: s.id,
+            userId: s.userId,
+            assignedProgramId: s.assignedProgramId,
+            routineId: s.routineId,
+            startedAt: s.startedAt,
+            completedAt: s.completedAt,
+            notes: s.notes,
+            totalSets: s.totalSets,
+            routineName: s.routineName,
+          ),
+        )
+        .toList();
   }
 
   AppLogger.warning(
-    'Session history unavailable — loading from local DB',
+    'Unified session history unavailable — loading from local DB',
     tag: 'HomeProviders',
   );
   final userId = ref.read(authStateProvider).userId;

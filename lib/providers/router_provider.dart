@@ -139,6 +139,8 @@ class AppRoutes {
   static const String standaloneSessionHistory = '/standalone/sessions';
   static const String standaloneStats = '/standalone/stats';
   static const String standaloneProgramBuilder = '/standalone/programs/builder';
+  static const String standaloneToday = '/standalone/today';
+  static const String standaloneWorkout = '/standalone/workout';
 
   // Gains Coins routes
   static const String coinReward = '/coins/reward';
@@ -642,7 +644,30 @@ GoRouter router(Ref ref) {
       ),
       GoRoute(
         path: AppRoutes.standaloneCreateProgram,
-        builder: (context, state) => const StandaloneProgramsScreen(),
+        builder: (context, state) => const StandaloneCreateProgramScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.standaloneProgramBuilder,
+        builder: (context, state) {
+          final programId = state.uri.queryParameters['programId'];
+          return StandaloneProgramBuilderScreen(programId: programId);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.standaloneToday,
+        builder: (context, state) => const StandaloneTodayScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.standaloneWorkout,
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>;
+          return StandaloneWorkoutScreen(
+            session: extra['session'] as WorkoutSessionModel,
+            exercises:
+                (extra['exercises'] as List).cast<RoutineExerciseModel>(),
+            routineName: extra['routineName'] as String,
+          );
+        },
       ),
       GoRoute(
         path: AppRoutes.standaloneProgramDetail,

@@ -88,7 +88,7 @@ class _StandaloneProgramsScreenState
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push(AppRoutes.standaloneCreateProgram),
+        onPressed: () => context.push(AppRoutes.standaloneProgramBuilder),
         icon: const Icon(Icons.add),
         label: const Text('New Program'),
       ),
@@ -110,7 +110,7 @@ class _StandaloneProgramsScreenState
               description:
                   'Build your first workout program using the workout builder.',
               actionLabel: 'Build My First Program',
-              onAction: () => context.push(AppRoutes.standaloneCreateProgram),
+              onAction: () => context.push(AppRoutes.standaloneProgramBuilder),
             );
           }
 
