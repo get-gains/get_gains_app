@@ -100,6 +100,9 @@ class ApiConstants {
   static String poseFormDownloadUrl(String formId) =>
       '/pose/forms/$formId/download-url';
 
+  /// GET /pose/frames/download-url?key=<recorded_frames_key>
+  static const String poseFramesDownloadUrl = '/pose/frames/download-url';
+
   // Sync Endpoints
   static const String sync = '/sync';
   static const String syncStatus = '/sync/status';

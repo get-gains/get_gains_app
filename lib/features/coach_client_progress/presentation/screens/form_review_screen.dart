@@ -1,12 +1,25 @@
 // lib/features/coach_client_progress/presentation/screens/form_review_screen.dart
 
+import 'dart:convert';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_embed_unity/flutter_embed_unity.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/constants/api_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/logger.dart';
+import '../../../../services/api/api_client.dart';
+import '../../../../services/database/app_database.dart';
+import '../../../../services/pose/frames_blob.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../client_pose/presentation/widgets/pose_view_widget.dart';
+import '../../../coach_pose/data/models/landmark_models.dart';
+import '../../../unity/data/unity_cosmetics_loader.dart';
+import '../../../unity/data/unity_message_contract.dart';
 import '../../data/models/models.dart';
 
 /// Form Review Screen
@@ -14,13 +27,14 @@ import '../../data/models/models.dart';
 /// Displays the full detail of a single form comparison result:
 /// - Overall score badge
 /// - Exercise info & coach info
+/// - Animated 2D/3D skeleton playback of the recorded form
 /// - Segment-level scores bar chart
 /// - Corrections list with segment labels
 /// - Technical metadata (camera angle, duration, frames)
 ///
 /// Receives the `ClientFormResult` via `GoRoute.extra` to avoid
 /// an extra network call. Falls back to a placeholder if data missing.
-class FormReviewScreen extends ConsumerWidget {
+class FormReviewScreen extends ConsumerStatefulWidget {
   const FormReviewScreen({
     super.key,
     required this.userId,
@@ -33,11 +47,60 @@ class FormReviewScreen extends ConsumerWidget {
   final ClientFormResult? result;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<FormReviewScreen> createState() => _FormReviewScreenState();
+}
+
+class _FormReviewScreenState extends ConsumerState<FormReviewScreen> {
+  Future<FramesBlob?>? _blobFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    final result = widget.result;
+    if (result != null && result.recordedFramesKey != null) {
+      _blobFuture = _fetchBlob(result.recordedFramesKey!);
+    }
+  }
+
+  Future<FramesBlob?> _fetchBlob(String key) async {
+    final apiClient = ref.read(apiClientProvider);
+    final urlResult = await apiClient.get<Map<String, dynamic>>(
+      ApiConstants.poseFramesDownloadUrl,
+      queryParameters: {'key': key},
+    );
+
+    return urlResult.when(
+      success: (data) async {
+        try {
+          final url = data['url'] as String;
+          final response = await Dio().get<Map<String, dynamic>>(url);
+          if (response.data == null) return null;
+          return FramesBlob.fromJson(response.data!);
+        } catch (e) {
+          AppLogger.error(
+            'Failed to fetch form frames blob from S3',
+            tag: 'FormReview',
+            error: e,
+          );
+          return null;
+        }
+      },
+      failure: (error) {
+        AppLogger.warning(
+          'Failed to get frames download URL: ${error.message}',
+          tag: 'FormReview',
+        );
+        return null;
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final theme = Theme.of(context);
 
-    if (result == null) {
+    if (widget.result == null) {
       return Scaffold(
         appBar: AppBar(
           leading: IconButton(
@@ -57,10 +120,10 @@ class FormReviewScreen extends ConsumerWidget {
       );
     }
 
-    final data = result!;
+    final data = widget.result!;
     final scorePercent = (data.overallScore * 100).toInt();
     final exerciseName =
-        data.exerciseForm?.exercise?.name ?? 'Unknown Exercise';
+        data.exerciseName ?? data.exerciseForm?.exercise?.name ?? 'Unknown Exercise';
     final coachName = data.exerciseForm?.coach?.name;
 
     return Scaffold(
@@ -92,6 +155,15 @@ class FormReviewScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 24),
+
+            // ── Form Playback (2D / 3D) ─────────────────
+            if (data.recordedFramesKey != null)
+              _FormPlaybackCard(
+                blobFuture: _blobFuture!,
+                isDark: isDark,
+              ),
+            if (data.recordedFramesKey != null)
+              const SizedBox(height: 24),
 
             // ── Segment Scores ──────────────────────────
             if (data.segmentScores.isNotEmpty) ...[
@@ -188,7 +260,6 @@ class FormReviewScreen extends ConsumerWidget {
   }
 
   String _formatSegmentName(String key) {
-    // Convert camelCase or snake_case to Title Case
     return key
         .replaceAllMapped(
           RegExp(r'([a-z])([A-Z])'),
@@ -202,6 +273,327 @@ class FormReviewScreen extends ConsumerWidget {
               : '',
         )
         .join(' ');
+  }
+}
+
+// ──────────────────────────────────────────────────────────
+// Form Playback Card — 2D skeleton / 3D Unity toggle
+// ──────────────────────────────────────────────────────────
+
+enum _PreviewMode { twoD, threeD }
+
+class _FormPlaybackCard extends StatefulWidget {
+  const _FormPlaybackCard({required this.blobFuture, required this.isDark});
+
+  final Future<FramesBlob?> blobFuture;
+  final bool isDark;
+
+  @override
+  State<_FormPlaybackCard> createState() => _FormPlaybackCardState();
+}
+
+class _FormPlaybackCardState extends State<_FormPlaybackCard> {
+  _PreviewMode _mode = _PreviewMode.twoD;
+  bool _unityReady = false;
+  bool _poseSent = false;
+
+  List<LandmarkFrame> _frames = [];
+  String _cameraAngle = 'FRONT';
+
+  void _toggle3D() {
+    setState(() {
+      if (_mode == _PreviewMode.twoD) {
+        _mode = _PreviewMode.threeD;
+        _unityReady = false;
+        _poseSent = false;
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted && _mode == _PreviewMode.threeD && !_unityReady) {
+            setState(() => _unityReady = true);
+            _sendPoseToUnity();
+          }
+        });
+      } else {
+        _mode = _PreviewMode.twoD;
+      }
+    });
+  }
+
+  void _onMessageFromUnity(String message) {
+    if (!mounted || _mode != _PreviewMode.threeD) return;
+    if (message == UnityMessageContract.unityEventSceneLoaded) {
+      setState(() => _unityReady = true);
+      final container = ProviderScope.containerOf(context);
+      UnityCosmeticsLoader.loadEquippedCosmetics(
+        container.read(appDatabaseProvider),
+      );
+      _sendPoseToUnity();
+    }
+  }
+
+  void _sendPoseToUnity() {
+    if (_poseSent || _frames.isEmpty) return;
+    _poseSent = true;
+
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodSetCameraViewMode,
+      'WORKOUT',
+    );
+
+    final payload = jsonEncode({
+      'frames': _frames.map((f) => f.toJson()).toList(),
+      'fps': 15,
+      'loop': true,
+    });
+
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodLoadPoseFrames,
+      payload,
+    );
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodSetCameraAngle,
+      _cameraAngle,
+    );
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodSetSkeletonColor,
+      '#00FFFF',
+    );
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodPlayPose,
+      '',
+    );
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodSetPoseDebugOptions,
+      UnityMessageContract.defaultPoseDebugOptionsPayload(),
+    );
+  }
+
+  String get _cameraAngleLabel {
+    final lower = _cameraAngle.toLowerCase();
+    if (lower == 'front') return 'Front';
+    if (lower == 'side_left') return 'Side (L)';
+    if (lower == 'side_right') return 'Side (R)';
+    if (lower == 'rear') return 'Rear';
+    return _cameraAngle;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<FramesBlob?>(
+      future: widget.blobFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            height: 200,
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final blob = snapshot.data;
+        if (blob == null) {
+          return const SizedBox.shrink();
+        }
+
+        _frames = blob is CoachFramesBlob
+            ? blob.landmarkFrames
+            : blob is ClientFramesBlob
+                ? blob.landmarkFrames
+                : [];
+        _cameraAngle = blob.cameraAngle;
+        final hasFrames = _frames.isNotEmpty;
+
+        if (!hasFrames) {
+          return AppCard.elevated(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.videocam_off, size: 24, color: Colors.grey),
+                  const SizedBox(width: 12),
+                  Text(
+                    'No pose data available for playback',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Form Playback',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            AppCard.elevated(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    height: 280,
+                    width: double.infinity,
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(12),
+                      ),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (_mode == _PreviewMode.twoD)
+                            PoseViewWidget(
+                              landmarkFrames: _frames,
+                              mode: PoseViewMode.raw2D,
+                              color: widget.isDark
+                                  ? Colors.cyanAccent
+                                  : Colors.cyan,
+                              backgroundColor: widget.isDark
+                                  ? const Color(0xFF1A1A2E)
+                                  : const Color(0xFF0F0F1A),
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(12),
+                              ),
+                            )
+                          else
+                            EmbedUnity(
+                              onMessageFromUnity: _onMessageFromUnity,
+                            ),
+
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: _ViewModeToggle(
+                              mode: _mode,
+                              onToggle: _toggle3D,
+                            ),
+                          ),
+
+                          if (_mode == _PreviewMode.threeD && !_unityReady)
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: 8,
+                              child: Center(
+                                child: Material(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          'Loading 3D...',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.videocam, size: 16, color: AppColors.primaryLight),
+                        const SizedBox(width: 6),
+                        AppBadge(
+                          label: _cameraAngleLabel,
+                          variant: AppBadgeVariant.primary,
+                        ),
+                        const Spacer(),
+                        Text(
+                          '${_frames.length} frames',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: widget.isDark
+                                    ? AppColors.mutedForegroundDark
+                                    : AppColors.mutedForegroundLight,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Compact toggle pill for switching between 2D and 3D preview.
+class _ViewModeToggle extends StatelessWidget {
+  const _ViewModeToggle({required this.mode, required this.onToggle});
+
+  final _PreviewMode mode;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final is3D = mode == _PreviewMode.threeD;
+    return Material(
+      color: Colors.black54,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onToggle,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                is3D ? Icons.view_in_ar : Icons.grid_on,
+                size: 16,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                is3D ? '3D' : '2D',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -244,7 +636,6 @@ class _ScoreHero extends StatelessWidget {
     return AppCard(
       child: Column(
         children: [
-          // Score ring
           Container(
             width: 96,
             height: 96,
@@ -311,18 +702,8 @@ class _ScoreHero extends StatelessWidget {
 
   String _formatDate(DateTime date) {
     const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
