@@ -4,18 +4,18 @@ import 'package:get_gains_app/features/home/presentation/providers/home_provider
 
 void main() {
   group('homeStatus derivation logic', () {
-    test('noCoach when hasCoach is false', () {
+    test('buildProgram when no coach and no standalone', () {
       final status = _deriveHomeStatus(
         TodayStatusModel(isSubscribed: false, hasCoach: false),
       );
-      expect(status, HomeStatus.noCoach);
+      expect(status, HomeStatus.buildProgram);
     });
 
-    test('noSubscription when has coach but not subscribed', () {
+    test('buildProgram when has coach but not subscribed and no standalone', () {
       final status = _deriveHomeStatus(
         TodayStatusModel(isSubscribed: false, hasCoach: true),
       );
-      expect(status, HomeStatus.noSubscription);
+      expect(status, HomeStatus.buildProgram);
     });
 
     test('waitingForProgram when subscribed and coach but no coachToday', () {
@@ -50,14 +50,32 @@ void main() {
       );
       expect(status, HomeStatus.hasRoutine);
     });
+
+    test('hasRoutine when standalone has active program', () {
+      final status = _deriveHomeStatus(
+        TodayStatusModel(
+          isSubscribed: false,
+          hasCoach: false,
+          standalone: StandaloneStatus(
+            hasActiveProgram: true,
+            program: StandaloneProgramInfo(id: 'p1', name: 'My Program'),
+          ),
+        ),
+      );
+      expect(status, HomeStatus.hasRoutine);
+    });
   });
 }
 
 // Extracted logic for testability — mirrors homeStatusProvider derivation.
 HomeStatus _deriveHomeStatus(TodayStatusModel s) {
-  if (!s.hasCoach) return HomeStatus.noCoach;
-  if (!s.isSubscribed) return HomeStatus.noSubscription;
-  if (s.coachToday == null) return HomeStatus.waitingForProgram;
-  if (s.coachToday!.isRestDay) return HomeStatus.restDay;
-  return HomeStatus.hasRoutine;
+  if (s.hasCoach && s.isSubscribed) {
+    if (s.coachToday == null) return HomeStatus.waitingForProgram;
+    if (s.coachToday!.isRestDay) return HomeStatus.restDay;
+    return HomeStatus.hasRoutine;
+  }
+  if (s.standalone.hasActiveProgram) {
+    return HomeStatus.hasRoutine;
+  }
+  return HomeStatus.buildProgram;
 }
