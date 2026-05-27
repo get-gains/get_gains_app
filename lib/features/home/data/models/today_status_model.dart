@@ -12,9 +12,9 @@ part 'today_status_model.g.dart';
 @freezed
 abstract class TodaySubscriptionInfo with _$TodaySubscriptionInfo {
   const factory TodaySubscriptionInfo({
-    required String id,
-    required SubscriptionStatus status,
-    required int tierLevel,
+    @Default('') String id,
+    @Default(SubscriptionStatus.expired) SubscriptionStatus status,
+    @Default(0) int tierLevel,
     required DateTime currentPeriodEnd,
   }) = _TodaySubscriptionInfo;
 

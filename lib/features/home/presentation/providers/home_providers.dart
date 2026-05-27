@@ -160,18 +160,38 @@ Future<WeeklyStatsModel> weeklyStats(Ref ref) async {
 // Recent Activity
 // ──────────────────────────────────────────────────────────
 
-/// Fetches recent completed workout sessions (limit 5).
+/// Fetches recent completed workout sessions (limit 5) from the unified
+/// session history endpoint (`GET /api/sessions/history`). Falls back to
+/// the local database when the server is unreachable.
 @riverpod
 Future<List<WorkoutSessionSummary>> recentActivity(Ref ref) async {
   final repo = ref.watch(workoutRepositoryProvider);
-  final result = await repo.getSessionHistory(limit: 5, offset: 0);
+  final result = await repo.getUnifiedSessionHistory(
+    source: 'all',
+    limit: 5,
+    offset: 0,
+  );
 
-  if (result is Success<WorkoutHistoryResponse, AppError>) {
-    return result.value.sessions;
+  if (result is Success<UnifiedSessionHistoryResponse, AppError>) {
+    return result.value.sessions
+        .map(
+          (s) => WorkoutSessionSummary(
+            id: s.id,
+            userId: s.userId,
+            assignedProgramId: s.assignedProgramId,
+            routineId: s.routineId,
+            startedAt: s.startedAt,
+            completedAt: s.completedAt,
+            notes: s.notes,
+            totalSets: s.totalSets,
+            routineName: s.routineName,
+          ),
+        )
+        .toList();
   }
 
   AppLogger.warning(
-    'Session history unavailable — loading from local DB',
+    'Unified session history unavailable — loading from local DB',
     tag: 'HomeProviders',
   );
   final userId = ref.read(authStateProvider).userId;

@@ -236,11 +236,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     }
                     break;
                   case 2:
-                    if (isSubscribed) {
-                      context.push(AppRoutes.progress);
-                    } else {
-                      context.push(AppRoutes.standaloneStats);
-                    }
+                    context.push(AppRoutes.progress);
                     break;
                   case 3:
                     context.push(AppRoutes.profile);
