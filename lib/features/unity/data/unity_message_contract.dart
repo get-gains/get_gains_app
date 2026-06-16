@@ -35,6 +35,7 @@ class UnityMessageContract {
   // ── Pose / Skeleton methods ──────────────────────────────────────
 
   /// Load a full set of landmark frames into Unity for playback.
+  /// The rig is automatically reset to bind pose before the new frames are applied.
   /// Message: JSON string with format:
   /// ```json
   /// {
@@ -47,6 +48,10 @@ class UnityMessageContract {
   /// }
   /// ```
   static const String methodLoadPoseFrames = 'LoadPoseFrames';
+
+  /// Snap the humanoid back to its initial bind pose (manual reset between recordings).
+  /// Message: "" (ignored by Unity).
+  static const String methodResetPose = 'ResetPose';
 
   /// Play/resume the loaded pose animation.
   static const String methodPlayPose = 'PlayPose';

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' show pi;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -150,14 +151,33 @@ class _FormPlaybackCard extends StatefulWidget {
   State<_FormPlaybackCard> createState() => _FormPlaybackCardState();
 }
 
+/// Debug: 3D rotation range limited so the figure stays readable (no stretched lines).
+const double _rotationMinRadians = -pi / 3; // -60°
+const double _rotationMaxRadians = pi / 3; // 60°
+
 class _FormPlaybackCardState extends State<_FormPlaybackCard> {
   _PreviewMode _mode = _PreviewMode.twoD;
   bool _unityReady = false;
   bool _poseSent = false;
+  double _rotationRadians = 0;
+  bool _rotatorSliderEnabled = true;
+  double _rotationRadiansBackup = 0;
 
   List<LandmarkFrame> get _frames => widget.blob.landmarkFrames;
 
   String get _cameraAngle => widget.blob.cameraAngle;
+
+  void _toggleRotatorSlider() {
+    setState(() {
+      _rotatorSliderEnabled = !_rotatorSliderEnabled;
+      if (!_rotatorSliderEnabled) {
+        _rotationRadiansBackup = _rotationRadians;
+        _rotationRadians = 0;
+      } else {
+        _rotationRadians = _rotationRadiansBackup;
+      }
+    });
+  }
 
   void _toggle3D() {
     setState(() {
@@ -276,6 +296,7 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
                         borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(12),
                         ),
+                        rotationY: _rotationRadians,
                       )
                     else
                       EmbedUnity(onMessageFromUnity: _onMessageFromUnity),
@@ -284,8 +305,73 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
                     Positioned(
                       top: 8,
                       right: 8,
-                      child: _ViewModeToggle(mode: _mode, onToggle: _toggle3D),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_mode == _PreviewMode.twoD)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: _RotatorTogglePill(
+                                enabled: _rotatorSliderEnabled,
+                                onToggle: _toggleRotatorSlider,
+                              ),
+                            ),
+                          _ViewModeToggle(mode: _mode, onToggle: _toggle3D),
+                        ],
+                      ),
                     ),
+
+                    // Debug: 3D rotate (limited range so figure stays readable)
+                    if (_mode == _PreviewMode.twoD && _rotatorSliderEnabled)
+                      Positioned(
+                        left: 8,
+                        right: 8,
+                        bottom: 8,
+                        child: Material(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.rotate_right,
+                                  color: Colors.white70,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  '3D Rotate:',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Slider(
+                                    value: _rotationRadians,
+                                    min: _rotationMinRadians,
+                                    max: _rotationMaxRadians,
+                                    activeColor: Colors.cyanAccent,
+                                    onChanged: (v) =>
+                                        setState(() => _rotationRadians = v),
+                                  ),
+                                ),
+                                Text(
+                                  '${(_rotationRadians * 180 / pi).round()}°',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
 
                     // Fullscreen button (only in 3D mode)
                     if (_mode == _PreviewMode.threeD)
@@ -427,6 +513,48 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Toggle pill for enabling/disabling the (2D) rotator slider overlay.
+class _RotatorTogglePill extends StatelessWidget {
+  const _RotatorTogglePill({required this.enabled, required this.onToggle});
+
+  final bool enabled;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black54,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onToggle,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.rotate_right,
+                size: 16,
+                color: enabled ? Colors.cyanAccent : Colors.white70,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Rotator',
+                style: TextStyle(
+                  color: enabled ? Colors.cyanAccent : Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
