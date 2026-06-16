@@ -213,7 +213,7 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
     sendToUnity(
       UnityMessageContract.gameObjectName,
       UnityMessageContract.methodSetCameraAngle,
-      _cameraAngle,
+      UnityMessageContract.cameraAngleDiagonal,
     );
     sendToUnity(
       UnityMessageContract.gameObjectName,

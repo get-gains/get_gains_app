@@ -118,7 +118,7 @@ class _Form3DPreviewScreenState extends ConsumerState<Form3DPreviewScreen> {
     sendToUnity(
       UnityMessageContract.gameObjectName,
       UnityMessageContract.methodSetCameraAngle,
-      widget.cameraAngle,
+      UnityMessageContract.cameraAngleDiagonal,
     );
     sendToUnity(
       UnityMessageContract.gameObjectName,

@@ -375,14 +375,11 @@ class _ClientUnityRecordingScreenState
       payload,
     );
 
-    // Set camera angle in Unity to match the coach's recording angle
-    final angle = state is ClientRecordingReady
-        ? state.cameraAngle
-        : (state as ClientRecordingActive).cameraAngle;
+    // Unity always starts from a 3/4 diagonal view regardless of the recorded angle.
     sendToUnity(
       UnityMessageContract.gameObjectName,
       UnityMessageContract.methodSetCameraAngle,
-      angle,
+      UnityMessageContract.cameraAngleDiagonal,
     );
 
     // Reference skeleton: cyan color

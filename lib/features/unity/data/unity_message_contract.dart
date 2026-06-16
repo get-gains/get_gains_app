@@ -62,8 +62,11 @@ class UnityMessageContract {
 
   /// Set camera angle in Unity scene.
   /// Message = one of: "FRONT", "SIDE_LEFT", "SIDE_RIGHT", "REAR",
-  ///                     "ANGLE_45_LEFT", "ANGLE_45_RIGHT"
+  ///                     "ANGLE_45_LEFT", "ANGLE_45_RIGHT", "DIAGONAL"
   static const String methodSetCameraAngle = 'SetCameraAngle';
+
+  /// Default 3/4 diagonal camera angle sent from every Unity-embedded screen.
+  static const String cameraAngleDiagonal = 'DIAGONAL';
 
   /// Debug / tuning for humanoid pose vs landmarks. Message: JSON, e.g.
   /// `{"swapArmLandmarks":false,"swapLegLandmarks":false,"forceShowStickFigure":false,"invertArmDepthZ":true,"invertHeadDepthZ":true,"invertLegDepthZ":true}`
