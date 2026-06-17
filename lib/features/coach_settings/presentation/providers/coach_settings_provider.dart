@@ -11,6 +11,13 @@ part 'coach_settings_provider.g.dart';
 // State Classes
 // ──────────────────────────────────────────────────────────
 
+/// Identifies which coach setting field is currently being saved.
+enum CoachSettingsUpdateField {
+  acceptingClients,
+  isDiscoverable,
+  maxClients,
+}
+
 /// Sealed state for coach settings.
 sealed class CoachSettingsState {
   const CoachSettingsState();
@@ -27,19 +34,22 @@ class CoachSettingsLoading extends CoachSettingsState {
 class CoachSettingsLoaded extends CoachSettingsState {
   const CoachSettingsLoaded({
     required this.settings,
-    this.isUpdating = false,
+    this.updatingField,
   });
 
   final CoachSettingsModel settings;
-  final bool isUpdating;
+  final CoachSettingsUpdateField? updatingField;
 
   CoachSettingsLoaded copyWith({
     CoachSettingsModel? settings,
-    bool? isUpdating,
+    CoachSettingsUpdateField? updatingField,
+    bool clearUpdatingField = false,
   }) {
     return CoachSettingsLoaded(
       settings: settings ?? this.settings,
-      isUpdating: isUpdating ?? this.isUpdating,
+      updatingField: clearUpdatingField
+          ? null
+          : (updatingField ?? this.updatingField),
     );
   }
 }
@@ -92,10 +102,13 @@ class CoachSettingsNotifier extends _$CoachSettingsNotifier {
   /// Only non-null fields in [request] are sent. On success the state
   /// is updated with the server's response (authoritative).
   /// Returns `null` on success, or the [AppError] on failure.
-  Future<AppError?> updateSettings(UpdateCoachSettingsRequest request) async {
+  Future<AppError?> updateSettings(
+    UpdateCoachSettingsRequest request, {
+    required CoachSettingsUpdateField field,
+  }) async {
     final current = state;
     if (current is CoachSettingsLoaded) {
-      state = current.copyWith(isUpdating: true);
+      state = current.copyWith(updatingField: field);
     }
 
     final result = await _repo.updateSettings(request);
@@ -111,7 +124,7 @@ class CoachSettingsNotifier extends _$CoachSettingsNotifier {
           tag: 'CoachSettingsNotifier',
         );
         if (current is CoachSettingsLoaded) {
-          state = current.copyWith(isUpdating: false);
+          state = current.copyWith(clearUpdatingField: true);
         }
         return error;
       },
@@ -129,6 +142,7 @@ class CoachSettingsNotifier extends _$CoachSettingsNotifier {
       UpdateCoachSettingsRequest(
         acceptingClients: !current.settings.acceptingClients,
       ),
+      field: CoachSettingsUpdateField.acceptingClients,
     );
   }
 
@@ -143,12 +157,16 @@ class CoachSettingsNotifier extends _$CoachSettingsNotifier {
       UpdateCoachSettingsRequest(
         isDiscoverable: !current.settings.isDiscoverable,
       ),
+      field: CoachSettingsUpdateField.isDiscoverable,
     );
   }
 
   /// Set the max client capacity.
   Future<AppError?> setMaxClients(int maxClients) async {
-    return updateSettings(UpdateCoachSettingsRequest(maxClients: maxClients));
+    return updateSettings(
+      UpdateCoachSettingsRequest(maxClients: maxClients),
+      field: CoachSettingsUpdateField.maxClients,
+    );
   }
 }
 
@@ -168,7 +186,7 @@ bool coachSettingsLoading(Ref ref) {
 bool coachSettingsUpdating(Ref ref) {
   final state = ref.watch(coachSettingsProvider);
   return switch (state) {
-    CoachSettingsLoaded(:final isUpdating) => isUpdating,
+    CoachSettingsLoaded(:final updatingField) => updatingField != null,
     _ => false,
   };
 }

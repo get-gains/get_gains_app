@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -29,12 +30,68 @@ class CoachSettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
+  static const int _minMaxClients = 1;
+  static const int _maxMaxClients = 200;
+
   int? _sliderValue;
+  late final TextEditingController _maxClientsController;
+  late final FocusNode _maxClientsFocusNode;
 
   @override
   void initState() {
     super.initState();
+    _maxClientsController = TextEditingController();
+    _maxClientsFocusNode = FocusNode();
+    _maxClientsFocusNode.addListener(_handleMaxClientsFocusChange);
     Future.microtask(() => ref.read(coachSettingsProvider.notifier).load());
+  }
+
+  @override
+  void dispose() {
+    _maxClientsFocusNode.removeListener(_handleMaxClientsFocusChange);
+    _maxClientsFocusNode.dispose();
+    _maxClientsController.dispose();
+    super.dispose();
+  }
+
+  void _handleMaxClientsFocusChange() {
+    if (!_maxClientsFocusNode.hasFocus) {
+      final current = ref.read(coachSettingsProvider);
+      if (current case CoachSettingsLoaded(:final settings)) {
+        _commitMaxClientsInput(settings.maxClients);
+      }
+    }
+  }
+
+  int _clampMaxClients(int value) =>
+      value.clamp(_minMaxClients, _maxMaxClients);
+
+  void _syncMaxClientsDisplay(int value) {
+    if (_maxClientsFocusNode.hasFocus) return;
+    final text = value.toString();
+    if (_maxClientsController.text != text) {
+      _maxClientsController.text = text;
+    }
+  }
+
+  void _commitMaxClientsInput(int fallback) {
+    final parsed = int.tryParse(_maxClientsController.text.trim());
+    if (parsed == null) {
+      _syncMaxClientsDisplay(fallback);
+      setState(() => _sliderValue = fallback);
+      return;
+    }
+
+    final clamped = _clampMaxClients(parsed);
+    _syncMaxClientsDisplay(clamped);
+    setState(() => _sliderValue = clamped);
+
+    final current = ref.read(coachSettingsProvider);
+    if (current case CoachSettingsLoaded(:final settings)) {
+      if (clamped != settings.maxClients) {
+        _setMaxClients(clamped);
+      }
+    }
   }
 
   @override
@@ -44,7 +101,10 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
 
     ref.listen(coachSettingsProvider, (previous, next) {
       if (next case CoachSettingsLoaded(:final settings)) {
-        setState(() => _sliderValue = settings.maxClients);
+        setState(() {
+          _sliderValue = settings.maxClients;
+          _syncMaxClientsDisplay(settings.maxClients);
+        });
       }
     });
 
@@ -90,8 +150,8 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
           ),
         ),
       ),
-      CoachSettingsLoaded(:final settings, :final isUpdating) =>
-        _buildSettings(settings, isDark, isUpdating),
+      CoachSettingsLoaded(:final settings, :final updatingField) =>
+        _buildSettings(settings, isDark, updatingField),
     };
   }
 
@@ -102,11 +162,17 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
   Widget _buildSettings(
     CoachSettingsModel settings,
     bool isDark,
-    bool isUpdating,
+    CoachSettingsUpdateField? updatingField,
   ) {
     final theme = Theme.of(context);
     final sliderValue = _sliderValue ?? settings.maxClients;
     final atCapacity = settings.activeClientCount >= settings.maxClients;
+    final isUpdatingAccepting =
+        updatingField == CoachSettingsUpdateField.acceptingClients;
+    final isUpdatingDiscoverable =
+        updatingField == CoachSettingsUpdateField.isDiscoverable;
+    final isUpdatingMaxClients =
+        updatingField == CoachSettingsUpdateField.maxClients;
 
     return RefreshIndicator(
       onRefresh: () => ref.read(coachSettingsProvider.notifier).load(),
@@ -171,17 +237,12 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
                     ],
                   ),
                 ),
-                if (isUpdating)
-                  const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else
-                  Switch(
-                    value: settings.acceptingClients,
-                    onChanged: (_) => _toggleAcceptingClients(),
-                  ),
+                _buildSettingsSwitch(
+                  value: settings.acceptingClients,
+                  isUpdating: isUpdatingAccepting,
+                  isDark: isDark,
+                  onChanged: (_) => _toggleAcceptingClients(),
+                ),
               ],
             ),
           ),
@@ -212,17 +273,12 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
                     ],
                   ),
                 ),
-                if (isUpdating)
-                  const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else
-                  Switch(
-                    value: settings.isDiscoverable,
-                    onChanged: (_) => _toggleDiscoverability(),
-                  ),
+                _buildSettingsSwitch(
+                  value: settings.isDiscoverable,
+                  isUpdating: isUpdatingDiscoverable,
+                  isDark: isDark,
+                  onChanged: (_) => _toggleDiscoverability(),
+                ),
               ],
             ),
           ),
@@ -245,7 +301,8 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
                           const SizedBox(height: 2),
                           Text(
                             'Hard cap on active client count. '
-                            'New subscriptions are blocked when full.',
+                            'New subscriptions are blocked when full. '
+                            'Drag the slider or tap the number to set a limit.',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: isDark
                                   ? AppColors.mutedForegroundDark
@@ -271,38 +328,74 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? AppColors.surface2Dark
-                            : AppColors.surface3Light,
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                      ),
-                      child: Text(
-                        '$sliderValue',
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: isDark
-                              ? AppColors.primaryDark
-                              : AppColors.primaryLight,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Tap to edit',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: isDark
+                                ? AppColors.primaryDark
+                                : AppColors.primaryLight,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 4),
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: isUpdatingMaxClients
+                                ? null
+                                : () => _maxClientsFocusNode.requestFocus(),
+                            borderRadius: BorderRadius.circular(
+                              AppTheme.radiusMd,
+                            ),
+                            child: SizedBox(
+                              width: 104,
+                              child: AppTextField(
+                                controller: _maxClientsController,
+                                focusNode: _maxClientsFocusNode,
+                                variant: AppTextFieldVariant.outlined,
+                                size: AppTextFieldSize.sm,
+                                keyboardType: TextInputType.number,
+                                textInputAction: TextInputAction.done,
+                                enabled: !isUpdatingMaxClients,
+                                suffixIcon: Icons.edit_outlined,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                                onChanged: (value) {
+                                  final parsed = int.tryParse(value);
+                                  if (parsed != null) {
+                                    setState(
+                                      () =>
+                                          _sliderValue = _clampMaxClients(parsed),
+                                    );
+                                  }
+                                },
+                                onSubmitted: (_) => _commitMaxClientsInput(
+                                  settings.maxClients,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
                 AppSlider(
                   value: sliderValue.toDouble(),
-                  min: 1,
-                  max: 200,
-                  divisions: 199,
-                  disabled: isUpdating,
+                  min: _minMaxClients.toDouble(),
+                  max: _maxMaxClients.toDouble(),
+                  divisions: _maxMaxClients - _minMaxClients,
+                  disabled: isUpdatingMaxClients,
                   onChanged: (value) {
-                    setState(() => _sliderValue = value.round());
+                    final rounded = value.round();
+                    setState(() => _sliderValue = rounded);
+                    _syncMaxClientsDisplay(rounded);
                   },
                   onChangeEnd: (value) => _setMaxClients(value.round()),
                 ),
@@ -312,7 +405,7 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '1',
+                        '$_minMaxClients',
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: isDark
                               ? AppColors.mutedForegroundDark
@@ -320,7 +413,7 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
                         ),
                       ),
                       Text(
-                        '200',
+                        '$_maxMaxClients',
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: isDark
                               ? AppColors.mutedForegroundDark
@@ -333,44 +426,36 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 24),
-
-          Text(
-            'Quick Actions',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: AppButton.outline(
-                  label: 'Set to 20',
-                  onPressed: isUpdating ? null : () => _setMaxClients(20),
-                  size: AppButtonSize.sm,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: AppButton.outline(
-                  label: 'Set to 40',
-                  onPressed: isUpdating ? null : () => _setMaxClients(40),
-                  size: AppButtonSize.sm,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: AppButton.outline(
-                  label: 'Set to 100',
-                  onPressed: isUpdating ? null : () => _setMaxClients(100),
-                  size: AppButtonSize.sm,
-                ),
-              ),
-            ],
-          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSettingsSwitch({
+    required bool value,
+    required bool isUpdating,
+    required bool isDark,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (isUpdating) ...[
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+            ),
+          ),
+          const SizedBox(width: 10),
+        ],
+        Switch(
+          value: value,
+          onChanged: isUpdating ? null : onChanged,
+        ),
+      ],
     );
   }
 
@@ -393,13 +478,17 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
   }
 
   Future<void> _setMaxClients(int value) async {
+    final clamped = _clampMaxClients(value);
+    setState(() => _sliderValue = clamped);
+    _syncMaxClientsDisplay(clamped);
+
     final error = await ref
         .read(coachSettingsProvider.notifier)
-        .setMaxClients(value);
+        .setMaxClients(clamped);
     if (!mounted) return;
 
     if (error == null) {
-      AppToast.success(context, 'Max clients set to $value');
+      AppToast.success(context, 'Max clients set to $clamped');
     } else {
       final message = errorMessageFor(error);
       AppToast.error(context, message);
@@ -407,6 +496,7 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
         final current = ref.read(coachSettingsProvider);
         if (current case CoachSettingsLoaded(:final settings)) {
           setState(() => _sliderValue = settings.maxClients);
+          _syncMaxClientsDisplay(settings.maxClients);
         }
       }
     }
