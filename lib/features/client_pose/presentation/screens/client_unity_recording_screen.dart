@@ -14,6 +14,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../services/database/app_database.dart';
+import '../../../../services/feedback/recording_feedback_service.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../coach_pose/data/models/landmark_models.dart';
 import '../../../coach_pose/services/pose_detection_service.dart';
@@ -299,6 +300,9 @@ class _ClientUnityRecordingScreenState
   void _startAutoStartCountdown() {
     if (_isAutoStarting) return;
     setState(() => _autoStartSecondsLeft = _autoStartSeconds);
+    ref
+        .read(recordingFeedbackServiceProvider)
+        .play(RecordingFeedbackEvent.setupReady);
     _autoStartTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) {
         t.cancel();
@@ -310,6 +314,9 @@ class _ClientUnityRecordingScreenState
         setState(() => _autoStartSecondsLeft = 0);
         return;
       }
+      ref
+          .read(recordingFeedbackServiceProvider)
+          .play(RecordingFeedbackEvent.countdownTick);
       setState(() => _autoStartSecondsLeft--);
       if (_autoStartSecondsLeft <= 0) {
         t.cancel();
@@ -319,9 +326,15 @@ class _ClientUnityRecordingScreenState
   }
 
   void _cancelAutoStartCountdown() {
+    final wasAutoStarting = _isAutoStarting;
     _autoStartTimer?.cancel();
     _autoStartTimer = null;
     if (mounted) setState(() => _autoStartSecondsLeft = 0);
+    if (wasAutoStarting) {
+      ref
+          .read(recordingFeedbackServiceProvider)
+          .play(RecordingFeedbackEvent.countdownCancel);
+    }
   }
 
   // ── Unity callbacks ──────────────────────────────────────────────────────
@@ -401,6 +414,9 @@ class _ClientUnityRecordingScreenState
 
   void _onStartRecording() {
     _isNavigatingAfterLog = false;
+    ref
+        .read(recordingFeedbackServiceProvider)
+        .play(RecordingFeedbackEvent.recordingStart);
     // Stop the setup validation stream before starting video recording
     _stopSetupStream();
     final notifier = ref.read(
@@ -445,6 +461,9 @@ class _ClientUnityRecordingScreenState
   Future<void> _onStopRecording() async {
     if (_isStoppingRecording) return;
     _isStoppingRecording = true;
+    ref
+        .read(recordingFeedbackServiceProvider)
+        .play(RecordingFeedbackEvent.recordingStop);
 
     // Capture the active state so we can keep EmbedUnity alive behind the
     // processing overlay. Removing EmbedUnity from the widget tree while
@@ -603,6 +622,22 @@ class _ClientUnityRecordingScreenState
         WidgetsBinding.instance.addPostFrameCallback((_) {
           unawaited(_onStopRecording());
         });
+      }
+
+      final feedback = ref.read(recordingFeedbackServiceProvider);
+
+      if (next is ClientRecordingComplete &&
+          prev is! ClientRecordingComplete) {
+        if (next.result.overallScore >=
+            RecordingFeedbackService.successScoreThreshold) {
+          feedback.play(RecordingFeedbackEvent.success);
+        } else {
+          feedback.play(RecordingFeedbackEvent.processingComplete);
+        }
+      }
+
+      if (next is ClientRecordingError && prev is! ClientRecordingError) {
+        feedback.play(RecordingFeedbackEvent.error);
       }
     });
 
