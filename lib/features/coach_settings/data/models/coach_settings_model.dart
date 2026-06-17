@@ -34,6 +34,9 @@ abstract class CoachSettingsModel with _$CoachSettingsModel {
     /// Useful for coaches who want to onboard by invite only.
     @Default(true) bool isDiscoverable,
 
+    /// Current number of active (non-ended) client subscriptions.
+    @Default(0) int activeClientCount,
+
     DateTime? createdAt,
     DateTime? updatedAt,
   }) = _CoachSettingsModel;

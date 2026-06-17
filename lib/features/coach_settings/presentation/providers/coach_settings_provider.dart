@@ -25,8 +25,23 @@ class CoachSettingsLoading extends CoachSettingsState {
 }
 
 class CoachSettingsLoaded extends CoachSettingsState {
-  const CoachSettingsLoaded({required this.settings});
+  const CoachSettingsLoaded({
+    required this.settings,
+    this.isUpdating = false,
+  });
+
   final CoachSettingsModel settings;
+  final bool isUpdating;
+
+  CoachSettingsLoaded copyWith({
+    CoachSettingsModel? settings,
+    bool? isUpdating,
+  }) {
+    return CoachSettingsLoaded(
+      settings: settings ?? this.settings,
+      isUpdating: isUpdating ?? this.isUpdating,
+    );
+  }
 }
 
 class CoachSettingsError extends CoachSettingsState {
@@ -76,28 +91,39 @@ class CoachSettingsNotifier extends _$CoachSettingsNotifier {
   ///
   /// Only non-null fields in [request] are sent. On success the state
   /// is updated with the server's response (authoritative).
-  Future<bool> updateSettings(UpdateCoachSettingsRequest request) async {
+  /// Returns `null` on success, or the [AppError] on failure.
+  Future<AppError?> updateSettings(UpdateCoachSettingsRequest request) async {
+    final current = state;
+    if (current is CoachSettingsLoaded) {
+      state = current.copyWith(isUpdating: true);
+    }
+
     final result = await _repo.updateSettings(request);
 
     return result.when(
       success: (settings) {
         state = CoachSettingsLoaded(settings: settings);
-        return true;
+        return null;
       },
       failure: (error) {
         AppLogger.error(
           'Update coach settings failed: ${error.message}',
           tag: 'CoachSettingsNotifier',
         );
-        return false;
+        if (current is CoachSettingsLoaded) {
+          state = current.copyWith(isUpdating: false);
+        }
+        return error;
       },
     );
   }
 
   /// Toggle the `acceptingClients` flag.
-  Future<bool> toggleAcceptingClients() async {
+  Future<AppError?> toggleAcceptingClients() async {
     final current = state;
-    if (current is! CoachSettingsLoaded) return false;
+    if (current is! CoachSettingsLoaded) {
+      return const UnknownError(message: 'Settings not loaded');
+    }
 
     return updateSettings(
       UpdateCoachSettingsRequest(
@@ -107,9 +133,11 @@ class CoachSettingsNotifier extends _$CoachSettingsNotifier {
   }
 
   /// Toggle the `isDiscoverable` flag.
-  Future<bool> toggleDiscoverability() async {
+  Future<AppError?> toggleDiscoverability() async {
     final current = state;
-    if (current is! CoachSettingsLoaded) return false;
+    if (current is! CoachSettingsLoaded) {
+      return const UnknownError(message: 'Settings not loaded');
+    }
 
     return updateSettings(
       UpdateCoachSettingsRequest(
@@ -119,7 +147,7 @@ class CoachSettingsNotifier extends _$CoachSettingsNotifier {
   }
 
   /// Set the max client capacity.
-  Future<bool> setMaxClients(int maxClients) async {
+  Future<AppError?> setMaxClients(int maxClients) async {
     return updateSettings(UpdateCoachSettingsRequest(maxClients: maxClients));
   }
 }
@@ -133,6 +161,16 @@ class CoachSettingsNotifier extends _$CoachSettingsNotifier {
 bool coachSettingsLoading(Ref ref) {
   final state = ref.watch(coachSettingsProvider);
   return state is CoachSettingsLoading;
+}
+
+/// Whether a settings update is in progress.
+@riverpod
+bool coachSettingsUpdating(Ref ref) {
+  final state = ref.watch(coachSettingsProvider);
+  return switch (state) {
+    CoachSettingsLoaded(:final isUpdating) => isUpdating,
+    _ => false,
+  };
 }
 
 /// The loaded coach settings, or null if not yet loaded.

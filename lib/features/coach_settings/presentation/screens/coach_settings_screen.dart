@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/errors/api_error_codes.dart';
+import '../../../../core/errors/error_messages.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/app_error.dart';
 import '../../../../widgets/widgets.dart';
 import '../../data/models/coach_settings_model.dart';
 import '../providers/coach_settings_provider.dart';
@@ -26,6 +29,8 @@ class CoachSettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
+  int? _sliderValue;
+
   @override
   void initState() {
     super.initState();
@@ -36,6 +41,12 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(coachSettingsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    ref.listen(coachSettingsProvider, (previous, next) {
+      if (next case CoachSettingsLoaded(:final settings)) {
+        setState(() => _sliderValue = settings.maxClients);
+      }
+    });
 
     return Scaffold(
       appBar: AppBar(
@@ -55,37 +66,53 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
         child: CircularProgressIndicator(),
       ),
       CoachSettingsError(:final error) => Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 48,
-              color: isDark ? AppColors.error : AppColors.errorLight,
-            ),
-            const SizedBox(height: 12),
-            Text(error.message, textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            AppButton(
-              label: 'Retry',
-              onPressed: () => ref.read(coachSettingsProvider.notifier).load(),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 48,
+                color: isDark ? AppColors.error : AppColors.errorLight,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _loadErrorMessage(error),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              AppButton(
+                label: 'Retry',
+                onPressed: () => ref.read(coachSettingsProvider.notifier).load(),
+              ),
+            ],
+          ),
         ),
       ),
-      CoachSettingsLoaded(:final settings) => _buildSettings(settings, isDark),
+      CoachSettingsLoaded(:final settings, :final isUpdating) =>
+        _buildSettings(settings, isDark, isUpdating),
     };
   }
 
-  Widget _buildSettings(CoachSettingsModel settings, bool isDark) {
+  String _loadErrorMessage(AppError error) {
+    return errorMessageFor(error);
+  }
+
+  Widget _buildSettings(
+    CoachSettingsModel settings,
+    bool isDark,
+    bool isUpdating,
+  ) {
     final theme = Theme.of(context);
+    final sliderValue = _sliderValue ?? settings.maxClients;
+    final atCapacity = settings.activeClientCount >= settings.maxClients;
 
     return RefreshIndicator(
       onRefresh: () => ref.read(coachSettingsProvider.notifier).load(),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
-          // ── Header Card ──────────────────────────────
           AppCard.elevated(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -119,7 +146,6 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
           ),
           const SizedBox(height: 16),
 
-          // ── Accepting Clients Toggle ─────────────────
           AppCard.elevated(
             child: Row(
               children: [
@@ -145,16 +171,22 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
                     ],
                   ),
                 ),
-                Switch(
-                  value: settings.acceptingClients,
-                  onChanged: (_) => _toggleAcceptingClients(),
-                ),
+                if (isUpdating)
+                  const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  Switch(
+                    value: settings.acceptingClients,
+                    onChanged: (_) => _toggleAcceptingClients(),
+                  ),
               ],
             ),
           ),
           const SizedBox(height: 12),
 
-          // ── Discoverable Toggle ──────────────────────
           AppCard.elevated(
             child: Row(
               children: [
@@ -180,16 +212,22 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
                     ],
                   ),
                 ),
-                Switch(
-                  value: settings.isDiscoverable,
-                  onChanged: (_) => _toggleDiscoverability(),
-                ),
+                if (isUpdating)
+                  const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  Switch(
+                    value: settings.isDiscoverable,
+                    onChanged: (_) => _toggleDiscoverability(),
+                  ),
               ],
             ),
           ),
           const SizedBox(height: 12),
 
-          // ── Max Clients ──────────────────────────────
           AppCard.elevated(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -214,6 +252,21 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
                                   : AppColors.mutedForegroundLight,
                             ),
                           ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '${settings.activeClientCount} / $sliderValue active clients'
+                            '${atCapacity ? ' — at capacity' : ''}',
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: atCapacity
+                                  ? (isDark
+                                        ? AppColors.warning
+                                        : AppColors.warningMuted)
+                                  : (isDark
+                                        ? AppColors.mutedForegroundDark
+                                        : AppColors.mutedForegroundLight),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -230,7 +283,7 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
                         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                       ),
                       child: Text(
-                        '${settings.maxClients}',
+                        '$sliderValue',
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                           color: isDark
@@ -243,12 +296,13 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
                 ),
                 const SizedBox(height: 16),
                 AppSlider(
-                  value: settings.maxClients.toDouble(),
+                  value: sliderValue.toDouble(),
                   min: 1,
                   max: 200,
                   divisions: 199,
+                  disabled: isUpdating,
                   onChanged: (value) {
-                    // Update local display only during drag
+                    setState(() => _sliderValue = value.round());
                   },
                   onChangeEnd: (value) => _setMaxClients(value.round()),
                 ),
@@ -281,7 +335,6 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
           ),
           const SizedBox(height: 24),
 
-          // ── Quick Actions ────────────────────────────
           Text(
             'Quick Actions',
             style: theme.textTheme.titleMedium?.copyWith(
@@ -294,7 +347,7 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
               Expanded(
                 child: AppButton.outline(
                   label: 'Set to 20',
-                  onPressed: () => _setMaxClients(20),
+                  onPressed: isUpdating ? null : () => _setMaxClients(20),
                   size: AppButtonSize.sm,
                 ),
               ),
@@ -302,7 +355,7 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
               Expanded(
                 child: AppButton.outline(
                   label: 'Set to 40',
-                  onPressed: () => _setMaxClients(40),
+                  onPressed: isUpdating ? null : () => _setMaxClients(40),
                   size: AppButtonSize.sm,
                 ),
               ),
@@ -310,7 +363,7 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
               Expanded(
                 child: AppButton.outline(
                   label: 'Set to 100',
-                  onPressed: () => _setMaxClients(100),
+                  onPressed: isUpdating ? null : () => _setMaxClients(100),
                   size: AppButtonSize.sm,
                 ),
               ),
@@ -321,37 +374,40 @@ class _CoachSettingsScreenState extends ConsumerState<CoachSettingsScreen> {
     );
   }
 
-  // ──────────────────────────────────────────────────────────
-  // Actions
-  // ──────────────────────────────────────────────────────────
-
   Future<void> _toggleAcceptingClients() async {
-    final success = await ref
+    final error = await ref
         .read(coachSettingsProvider.notifier)
         .toggleAcceptingClients();
-    if (mounted && !success) {
-      AppToast.error(context, 'Failed to update setting');
+    if (mounted && error != null) {
+      AppToast.error(context, errorMessageFor(error));
     }
   }
 
   Future<void> _toggleDiscoverability() async {
-    final success = await ref
+    final error = await ref
         .read(coachSettingsProvider.notifier)
         .toggleDiscoverability();
-    if (mounted && !success) {
-      AppToast.error(context, 'Failed to update setting');
+    if (mounted && error != null) {
+      AppToast.error(context, errorMessageFor(error));
     }
   }
 
   Future<void> _setMaxClients(int value) async {
-    final success = await ref
+    final error = await ref
         .read(coachSettingsProvider.notifier)
         .setMaxClients(value);
-    if (mounted) {
-      if (success) {
-        AppToast.success(context, 'Max clients set to $value');
-      } else {
-        AppToast.error(context, 'Failed to update max clients');
+    if (!mounted) return;
+
+    if (error == null) {
+      AppToast.success(context, 'Max clients set to $value');
+    } else {
+      final message = errorMessageFor(error);
+      AppToast.error(context, message);
+      if (error.code == ApiErrorCode.coachMaxClientsBelowActive) {
+        final current = ref.read(coachSettingsProvider);
+        if (current case CoachSettingsLoaded(:final settings)) {
+          setState(() => _sliderValue = settings.maxClients);
+        }
       }
     }
   }
