@@ -86,8 +86,12 @@ class ApiConstants {
   // Unified Stats Endpoints
   static const String unifiedWeeklyStats = '/stats/weekly';
 
-  // Unified Session History Endpoints
+  // Unified Session Endpoints
   static const String unifiedSessionHistory = '/sessions/history';
+  static const String sessionCalendar = '/sessions/calendar';
+
+  /// GET /sessions/:id — unified session detail (coach or standalone)
+  static String sessionDetail(String id) => '/sessions/$id';
 
   // Coach Discovery Endpoints (Client-Facing)
   static const String discoverCoaches = '/user/coaches';
