@@ -15,3 +15,19 @@ Future<List<MissionListItemModel>> missionsList(Ref ref) async {
     failure: (e) => throw Exception(e.message),
   );
 }
+
+/// Offer tag of the first unclaimed coupon reward the user has earned.
+/// Null if no coupon mission is completed but not yet redeemed.
+@riverpod
+Future<String?> activeCouponOfferTag(Ref ref) async {
+  final missions = await ref.watch(missionsListProvider.future);
+  for (final mission in missions) {
+    if (mission.rewardType == 'COUPON' &&
+        mission.isCompleted &&
+        mission.coupon != null &&
+        !mission.coupon!.claimed) {
+      return mission.coupon!.offerTag;
+    }
+  }
+  return null;
+}

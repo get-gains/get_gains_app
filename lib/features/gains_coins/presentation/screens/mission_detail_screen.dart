@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../subscription/presentation/widgets/profile_sheet.dart';
 import '../../data/models/mission_list_item_model.dart';
 import '../providers/missions_provider.dart';
+import '../widgets/partner_detail_dialog.dart';
 
 /// Full detail view for a single mission.
 ///
@@ -77,6 +79,18 @@ class _MissionDetail extends StatelessWidget {
     }
   }
 
+  void _showPartnerDialog(BuildContext context) {
+    if (mission.partner == null) return;
+    showDialog(
+      context: context,
+      builder: (_) => PartnerDetailDialog(partner: mission.partner!),
+    );
+  }
+
+  void _redeemCoupon(BuildContext context) {
+    showProfileSheet(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -92,12 +106,36 @@ class _MissionDetail extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Closed banner
+          if (mission.isClosed)
+            AppCard(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.lock_outline, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      'This mission has ended',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (mission.isClosed) const SizedBox(height: 16),
+
           // Partner chip
           if (mission.partner != null)
-            AppBadge(
-              label: mission.partner!.name,
-              variant: AppBadgeVariant.primary,
-              size: AppBadgeSize.sm,
+            InkWell(
+              onTap: () => _showPartnerDialog(context),
+              borderRadius: BorderRadius.circular(8),
+              child: AppBadge(
+                label: mission.partner!.name,
+                variant: AppBadgeVariant.primary,
+                size: AppBadgeSize.sm,
+              ),
             ),
           if (mission.partner != null) const SizedBox(height: 12),
 
@@ -193,59 +231,7 @@ class _MissionDetail extends StatelessWidget {
           const SizedBox(height: 16),
 
           // Reward block
-          if (mission.rewardCoins > 0)
-            AppCard(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFD700).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.stars_rounded,
-                        color: Color(0xFFFFD700),
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            mission.rewardTitle ?? 'Reward',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            '${mission.rewardCoins} Gains Coins',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: isDark
-                                  ? AppColors.textSecondaryDark
-                                  : AppColors.textSecondaryLight,
-                            ),
-                          ),
-                          if (mission.rewardDescription != null)
-                            Text(
-                              mission.rewardDescription!,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: isDark
-                                    ? AppColors.textSecondaryDark
-                                    : AppColors.textSecondaryLight,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          _RewardCard(mission: mission, onRedeem: () => _redeemCoupon(context)),
 
           // Dates
           if (mission.endsAt != null) ...[
@@ -299,5 +285,163 @@ class _MissionDetail extends StatelessWidget {
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+  }
+}
+
+class _RewardCard extends StatelessWidget {
+  const _RewardCard({required this.mission, required this.onRedeem});
+
+  final MissionListItemModel mission;
+  final VoidCallback onRedeem;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+
+    return AppCard(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: _rewardColor().withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                _rewardIcon(),
+                color: _rewardColor(),
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    mission.rewardTitle ?? _defaultRewardTitle(),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  _RewardBody(
+                    mission: mission,
+                    isDark: isDark,
+                    onRedeem: onRedeem,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _defaultRewardTitle() {
+    return switch (mission.rewardType) {
+      'COINS' => 'Gains Coins',
+      'RAFFLE' => 'Raffle Entry',
+      'COUPON' => 'Premium Coupon',
+      _ => 'Reward',
+    };
+  }
+
+  IconData _rewardIcon() {
+    return switch (mission.rewardType) {
+      'COINS' => Icons.stars_rounded,
+      'RAFFLE' => Icons.card_giftcard,
+      'COUPON' => Icons.local_offer,
+      _ => Icons.card_giftcard,
+    };
+  }
+
+  Color _rewardColor() {
+    return switch (mission.rewardType) {
+      'COINS' => const Color(0xFFFFD700),
+      'RAFFLE' => AppColors.primaryLight,
+      'COUPON' => AppColors.success,
+      _ => AppColors.primaryLight,
+    };
+  }
+}
+
+class _RewardBody extends StatelessWidget {
+  const _RewardBody({
+    required this.mission,
+    required this.isDark,
+    required this.onRedeem,
+  });
+
+  final MissionListItemModel mission;
+  final bool isDark;
+  final VoidCallback onRedeem;
+
+  TextStyle? _mutedStyle(BuildContext context) {
+    return Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: isDark
+              ? AppColors.textSecondaryDark
+              : AppColors.textSecondaryLight,
+        );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    switch (mission.rewardType) {
+      case 'COINS':
+        return Text(
+          '${mission.rewardCoins} Gains Coins',
+          style: _mutedStyle(context),
+        );
+      case 'RAFFLE':
+        final raffle = mission.raffle;
+        if (raffle == null) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              raffle.isWinner
+                  ? 'You won! Rank #${raffle.winnerRank}'
+                  : '${raffle.entryCount} ticket${raffle.entryCount == 1 ? '' : 's'} entered',
+              style: _mutedStyle(context),
+            ),
+            if (mission.isClosed && !raffle.isWinner)
+              Text(
+                'Raffle closed',
+                style: _mutedStyle(context),
+              ),
+          ],
+        );
+      case 'COUPON':
+        final coupon = mission.coupon;
+        if (coupon == null) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              coupon.claimed
+                  ? '${coupon.discountPercent}% off Premium claimed'
+                  : '${coupon.discountPercent}% off Premium when completed',
+              style: _mutedStyle(context),
+            ),
+            if (coupon.claimed)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: AppButton(
+                  onPressed: onRedeem,
+                  label: 'Redeem Coupon',
+                  size: AppButtonSize.sm,
+                ),
+              ),
+          ],
+        );
+      default:
+        return const SizedBox.shrink();
+    }
   }
 }
