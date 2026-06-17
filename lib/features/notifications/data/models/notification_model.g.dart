@@ -37,4 +37,5 @@ const _$NotificationTypeEnumMap = {
   NotificationType.coachSubscribed: 'coach_subscribed',
   NotificationType.rosterRemoved: 'roster_removed',
   NotificationType.subscriptionExpiring: 'subscription_expiring',
+  NotificationType.missionRaffleWon: 'mission_raffle_won',
 };

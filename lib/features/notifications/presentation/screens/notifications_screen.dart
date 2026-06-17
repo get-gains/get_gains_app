@@ -148,6 +148,7 @@ class _NotificationList extends ConsumerWidget {
       case NotificationType.subscriptionExpiring:
         context.push('/settings');
       case NotificationType.rosterRemoved:
+      case NotificationType.missionRaffleWon:
         break;
     }
   }
@@ -240,6 +241,8 @@ class _NotificationTile extends StatelessWidget {
         return const Icon(Icons.person_remove, size: 24);
       case NotificationType.subscriptionExpiring:
         return const Icon(Icons.warning_amber, size: 24);
+      case NotificationType.missionRaffleWon:
+        return const Icon(Icons.emoji_events, size: 24);
     }
   }
 
