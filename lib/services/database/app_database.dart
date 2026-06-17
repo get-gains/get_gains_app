@@ -740,6 +740,24 @@ class AppDatabase extends _$AppDatabase {
         .get();
   }
 
+  /// Get completed sessions for a user within a date range (by startedAt).
+  Future<List<WorkoutSession>> getCompletedSessionsInRange(
+    String userId,
+    DateTime start,
+    DateTime end,
+  ) {
+    return (select(workoutSessions)
+          ..where(
+            (ws) =>
+                ws.userId.equals(userId) &
+                ws.completedAt.isNotNull() &
+                ws.startedAt.isBiggerOrEqualValue(start) &
+                ws.startedAt.isSmallerOrEqualValue(end),
+          )
+          ..orderBy([(ws) => OrderingTerm.asc(ws.startedAt)]))
+        .get();
+  }
+
   /// Count completed workout sessions for a user
   Future<int> countCompletedSessions(String userId) async {
     final countExp = countAll();
