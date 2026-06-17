@@ -35,6 +35,7 @@ class UnityMessageContract {
   // ── Pose / Skeleton methods ──────────────────────────────────────
 
   /// Load a full set of landmark frames into Unity for playback.
+  /// The rig is automatically reset to bind pose before the new frames are applied.
   /// Message: JSON string with format:
   /// ```json
   /// {
@@ -47,6 +48,10 @@ class UnityMessageContract {
   /// }
   /// ```
   static const String methodLoadPoseFrames = 'LoadPoseFrames';
+
+  /// Snap the humanoid back to its initial bind pose (manual reset between recordings).
+  /// Message: "" (ignored by Unity).
+  static const String methodResetPose = 'ResetPose';
 
   /// Play/resume the loaded pose animation.
   static const String methodPlayPose = 'PlayPose';
@@ -62,8 +67,11 @@ class UnityMessageContract {
 
   /// Set camera angle in Unity scene.
   /// Message = one of: "FRONT", "SIDE_LEFT", "SIDE_RIGHT", "REAR",
-  ///                     "ANGLE_45_LEFT", "ANGLE_45_RIGHT"
+  ///                     "ANGLE_45_LEFT", "ANGLE_45_RIGHT", "DIAGONAL"
   static const String methodSetCameraAngle = 'SetCameraAngle';
+
+  /// Default 3/4 diagonal camera angle sent from every Unity-embedded screen.
+  static const String cameraAngleDiagonal = 'DIAGONAL';
 
   /// Debug / tuning for humanoid pose vs landmarks. Message: JSON, e.g.
   /// `{"swapArmLandmarks":false,"swapLegLandmarks":false,"forceShowStickFigure":false,"invertArmDepthZ":true,"invertHeadDepthZ":true,"invertLegDepthZ":true}`
