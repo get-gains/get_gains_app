@@ -836,6 +836,141 @@ class WorkoutRepository {
 
   // ============== Performed Set Operations ==============
 
+  /// Fetch completed sessions for a calendar month from the local database.
+  ///
+  /// Unlike [getSessionHistory] (which calls the server API), this queries
+  /// the local Drift DB so just-completed sessions appear immediately.
+  Future<Result<List<WorkoutSessionSummary>, AppError>> getLocalSessionsForMonth(
+    String userId,
+    DateTime month,
+  ) async {
+    try {
+      // Use local midnight for the start and end-of-day for the last day so
+      // that sessions in UTC+N timezones are never cut off by a UTC midnight
+      // boundary. E.g. a session at 06:01 UTC+8 is stored as 22:01 UTC June 16
+      // — if we capped at UTC midnight of June 30, it would fall outside the
+      // range even though it belongs to June 17 local time.
+      final firstDay = DateTime(month.year, month.month, 1, 0, 0, 0);
+      final lastDay = DateTime(
+        month.year,
+        month.month + 1,
+        0, // last day of month
+        23,
+        59,
+        59,
+        999,
+      );
+
+      final sessions = await _db.getCompletedSessionsInRange(
+        userId,
+        firstDay,
+        lastDay,
+      );
+
+      final summaries = <WorkoutSessionSummary>[];
+      for (final session in sessions) {
+        final sets = await _db.getPerformedSets(session.id);
+        String? routineName;
+        if (session.routineId != null) {
+          final routine = await _db.getRoutineById(session.routineId!);
+          routineName = routine?.name;
+        }
+        summaries.add(
+          WorkoutSessionSummary(
+            id: session.remoteId ?? session.id.toString(),
+            userId: session.userId,
+            assignedProgramId: session.assignedProgramRoutineId,
+            routineId: session.routineId?.toString(),
+            startedAt: session.startedAt,
+            completedAt: session.completedAt,
+            notes: session.notes,
+            totalSets: sets.length,
+            routineName: routineName,
+          ),
+        );
+      }
+
+      return Success(summaries);
+    } catch (e) {
+      AppLogger.error(
+        'Failed to get local sessions for month',
+        tag: 'WorkoutRepo',
+        error: e,
+      );
+      return Failure(
+        DatabaseError(message: 'Failed to load calendar data: $e'),
+      );
+    }
+  }
+
+  /// Fetch completed sessions for a calendar month from the **server**.
+  ///
+  /// Calls `GET /sessions/calendar?month=YYYY-MM` which returns both
+  /// coach-assigned and standalone sessions so the calendar shows all
+  /// workout types. Falls back gracefully to an empty list on error so
+  /// the caller can still show locally-stored coach sessions.
+  Future<Result<List<WorkoutSessionSummary>, AppError>> getServerSessionsForMonth(
+    DateTime month,
+  ) async {
+    try {
+      final monthStr =
+          '${month.year}-${month.month.toString().padLeft(2, '0')}';
+
+      final result = await _apiClient.get<Map<String, dynamic>>(
+        ApiConstants.sessionCalendar,
+        queryParameters: {'month': monthStr},
+      );
+
+      return result.when(
+        success: (data) {
+          final sessionsList = (data['sessions'] as List? ?? []);
+          final summaries = <WorkoutSessionSummary>[];
+          for (final json in sessionsList) {
+            final s = json as Map<String, dynamic>;
+            final startedAtStr = s['startedAt'] as String?;
+            final completedAtStr = s['completedAt'] as String?;
+            if (startedAtStr == null) continue;
+            summaries.add(
+              WorkoutSessionSummary(
+                id: s['id'] as String,
+                userId: '', // not needed for calendar display
+                startedAt: DateTime.parse(startedAtStr),
+                completedAt: completedAtStr != null
+                    ? DateTime.parse(completedAtStr)
+                    : null,
+                totalSets: (s['totalSets'] as num?)?.toInt() ?? 0,
+                routineName: s['routineName'] as String?,
+              ),
+            );
+          }
+          AppLogger.info(
+            'Fetched ${summaries.length} sessions from server calendar',
+            tag: 'WorkoutRepo',
+          );
+          return Success(summaries);
+        },
+        failure: (error) {
+          AppLogger.warning(
+            'Server calendar fetch failed: ${error.message}',
+            tag: 'WorkoutRepo',
+          );
+          return Failure(error);
+        },
+      );
+    } catch (e) {
+      AppLogger.error(
+        'Failed to fetch server calendar sessions',
+        tag: 'WorkoutRepo',
+        error: e,
+      );
+      return Failure(
+        DatabaseError(message: 'Failed to load server calendar data: $e'),
+      );
+    }
+  }
+
+  // ============== Performed Set Operations ==============
+
   /// Log a completed set
   Future<Result<PerformedSetModel, AppError>> logSet({
     required String workoutSessionModelId,
@@ -1689,7 +1824,8 @@ class WorkoutRepository {
     AppLogger.debug('Fetching weekly stats from server', tag: 'WorkoutRepo');
 
     final queryParams = <String, dynamic>{
-      if (weekOf != null) 'weekOf': weekOf.toIso8601String(),
+      if (weekOf != null)
+        'weekOf': '${weekOf.toUtc().toIso8601String().split('.')[0]}Z',
     };
 
     final result = await _apiClient.get<Map<String, dynamic>>(
@@ -1747,7 +1883,8 @@ class WorkoutRepository {
     );
 
     final queryParams = <String, dynamic>{
-      if (weekOf != null) 'weekOf': weekOf.toIso8601String(),
+      if (weekOf != null)
+        'weekOf': '${weekOf.toUtc().toIso8601String().split('.')[0]}Z',
     };
 
     final result = await _apiClient.get<Map<String, dynamic>>(
@@ -1835,8 +1972,10 @@ class WorkoutRepository {
     final queryParams = <String, dynamic>{
       'limit': limit,
       'offset': offset,
-      if (startDate != null) 'startDate': startDate.toIso8601String(),
-      if (endDate != null) 'endDate': endDate.toIso8601String(),
+      if (startDate != null)
+        'startDate': '${startDate.toUtc().toIso8601String().split('.')[0]}Z',
+      if (endDate != null)
+        'endDate': '${endDate.toUtc().toIso8601String().split('.')[0]}Z',
     };
 
     final result = await _apiClient.get<Map<String, dynamic>>(
