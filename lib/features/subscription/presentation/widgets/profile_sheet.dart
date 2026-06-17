@@ -2,11 +2,14 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/auth_state_provider.dart';
+import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../home/presentation/screens/home_screen.dart' show isCoachProvider;
 import '../../../profile/profile.dart';
 import '../providers/subscription_provider.dart';
 import 'plan_card.dart';
@@ -29,6 +32,8 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
     final fitnessProfileAsync = ref.watch(userProfileProvider);
     final subscriptionState = ref.watch(subscriptionProvider);
     final isSubscribed = ref.watch(isSubscribedProvider);
+    final coachStatus = ref.watch(isCoachProvider).asData?.value;
+    final isCoach = coachStatus != null && coachStatus.isCoach;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final email = authState.email ?? '';
@@ -67,7 +72,7 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
               const SizedBox(height: 16),
             ],
 
-            _buildMenuItems(context, isDark),
+            _buildMenuItems(context, isDark, isCoach),
           ],
         ),
       ),
@@ -318,7 +323,7 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
     );
   }
 
-  Widget _buildMenuItems(BuildContext context, bool isDark) {
+  Widget _buildMenuItems(BuildContext context, bool isDark, bool isCoach) {
     return Column(
       children: [
         const Divider(),
@@ -329,6 +334,15 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
             Navigator.of(context).pop();
           },
         ),
+        if (!isCoach)
+          AppListTile(
+            leading: const Icon(Icons.card_membership),
+            title: 'Redeem Coach Invite',
+            onTap: () {
+              Navigator.of(context).pop();
+              context.push(AppRoutes.redeemInvite);
+            },
+          ),
         AppListTile(
           leading: const Icon(Icons.help_outline),
           title: 'Help & Support',

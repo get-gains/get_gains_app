@@ -16,12 +16,24 @@ import '../../../form_library/presentation/widgets/featured_forms_strip.dart';
 import '../providers/home_providers.dart';
 import '../widgets/widgets.dart';
 
-final isCoachProvider = FutureProvider.autoDispose<bool>((ref) async {
+class CoachStatus {
+  const CoachStatus({
+    required this.isCoach,
+    required this.isDeactivated,
+  });
+
+  final bool isCoach;
+  final bool isDeactivated;
+}
+
+final isCoachProvider = FutureProvider.autoDispose<CoachStatus>((ref) async {
+  const empty = CoachStatus(isCoach: false, isDeactivated: false);
+
   final authState = ref.watch(authStateProvider);
   final currentUserId = authState.userId;
 
   if (!authState.isAuthenticated || currentUserId == null) {
-    return false;
+    return empty;
   }
 
   final apiClient = ref.watch(apiClientProvider);
@@ -41,17 +53,18 @@ final isCoachProvider = FutureProvider.autoDispose<bool>((ref) async {
       }
 
       final user = data['user'];
-      if (user is! Map<String, dynamic>) return false;
+      if (user is! Map<String, dynamic>) return empty;
 
       final topLevelIsCoach = parseBool(data['isCoach'] ?? data['is_coach']);
-      if (topLevelIsCoach != null) return topLevelIsCoach;
+      final isCoach = topLevelIsCoach ??
+          parseBool(user['isCoach'] ?? user['is_coach']) ??
+          false;
 
-      final nestedIsCoach = parseBool(user['isCoach'] ?? user['is_coach']);
-      if (nestedIsCoach != null) return nestedIsCoach;
+      final isDeactivated = parseBool(data['coachDeactivated']) ?? false;
 
-      return false;
+      return CoachStatus(isCoach: isCoach, isDeactivated: isDeactivated);
     },
-    failure: (_) => false,
+    failure: (_) => empty,
   );
 });
 
@@ -106,8 +119,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _maybeStartTour();
     }
 
-    final isCoachAsync = ref.watch(isCoachProvider);
-    final isCoach = isCoachAsync.asData?.value ?? false;
+    final coachStatus = ref.watch(isCoachProvider).asData?.value;
+    final isCoach = coachStatus?.isCoach ?? false;
+    final isDeactivated = coachStatus?.isDeactivated ?? false;
     final mediaQuery = MediaQuery.of(context);
     final screenSize = mediaQuery.size;
     final topInset = mediaQuery.padding.top;
@@ -142,10 +156,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                           // ── Role-based hero block ──────────────────
                           if (isCoach) ...[
-                            const CoachPulseBlock(),
+                            CoachPulseBlock(isDeactivated: isDeactivated),
                             const SizedBox(height: 16),
-                            const CoachToolsBlock(),
-                            const SizedBox(height: 16),
+                            if (!isDeactivated) ...[
+                              const CoachToolsBlock(),
+                              const SizedBox(height: 16),
+                            ],
                             // Coach's own workout (collapsed today block)
                             Padding(
                               padding: const EdgeInsets.symmetric(

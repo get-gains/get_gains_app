@@ -5,6 +5,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../core/utils/logger.dart';
 import '../features/auth/auth.dart';
 import '../features/client_pose/client_pose.dart';
+import '../features/coach_onboarding/coach_onboarding.dart';
 import '../features/coach_pose/coach_pose.dart';
 import '../features/coach_client_progress/coach_client_progress.dart';
 import '../features/coach_programs/coach_programs.dart';
@@ -77,6 +78,10 @@ class AppRoutes {
 
   // Coach Hub
   static const String coachHub = '/coach/hub';
+
+  // Coach Onboarding
+  static const String redeemInvite = '/coach/redeem-invite';
+  static const String coachProfileSetup = '/coach/profile-setup';
 
   // Workout History & Progress
   static const String workoutHistory = '/workout/history';
@@ -405,6 +410,24 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: AppRoutes.coachHub,
         builder: (context, state) => const CoachHubScreen(),
+      ),
+
+      // Coach Onboarding
+      GoRoute(
+        path: AppRoutes.redeemInvite,
+        builder: (context, state) => const RedeemInviteScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.coachProfileSetup,
+        builder: (context, state) {
+          final invitationCode = state.extra as String?;
+          if (invitationCode == null) {
+            return const _PlaceholderScreen(
+              title: 'Invalid invitation code',
+            );
+          }
+          return CoachProfileSetupScreen(invitationCode: invitationCode);
+        },
       ),
 
       // Workout History & Progress

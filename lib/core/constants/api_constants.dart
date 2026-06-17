@@ -64,6 +64,10 @@ class ApiConstants {
   static const String coachClass = '/coach/class';
   static const String coachSettings = '/coach/settings';
 
+  // Coach Onboarding Endpoints
+  static const String coachVerifyInvite = '/coach/verify-invite';
+  static const String coachProfile = '/coach/profile';
+
   // Coach Client Progress Endpoints
   // Sessions:         GET /coach/clients/:userId/sessions
   // Session detail:   GET /coach/clients/:userId/sessions/:sessionId
