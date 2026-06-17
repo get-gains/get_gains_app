@@ -32,8 +32,8 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
     final fitnessProfileAsync = ref.watch(userProfileProvider);
     final subscriptionState = ref.watch(subscriptionProvider);
     final isSubscribed = ref.watch(isSubscribedProvider);
-    final isCoachAsync = ref.watch(isCoachProvider);
-    final isCoach = isCoachAsync.asData?.value ?? false;
+    final coachStatus = ref.watch(isCoachProvider).asData?.value;
+    final isCoach = coachStatus != null && coachStatus.isCoach;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final email = authState.email ?? '';
