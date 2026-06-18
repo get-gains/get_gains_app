@@ -62,6 +62,12 @@ String? _messageForCode(ApiErrorCode code) => switch (code) {
     'This coach is paused and not accepting clients.',
   ApiErrorCode.userCoachAlreadySubscribed =>
     "You're already subscribed to this coach.",
+  ApiErrorCode.authCoachRequired =>
+    'You need a coach profile to access these settings.',
+  ApiErrorCode.coachDeactivated =>
+    'Your coach account has been deactivated. Contact support for assistance.',
+  ApiErrorCode.coachMaxClientsBelowActive =>
+    'Max clients cannot be set below your current active client count.',
 
   // ── Coins / Shop ─────────────────────────────────────────────────
   ApiErrorCode.coinInsufficientBalance => "You don't have enough coins.",

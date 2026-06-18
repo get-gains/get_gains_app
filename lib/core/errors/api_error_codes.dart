@@ -239,6 +239,12 @@ enum ApiErrorCode {
   /// `COACH_PROGRAM_LOCKED`
   coachProgramLocked('COACH_PROGRAM_LOCKED'),
 
+  /// `COACH_DEACTIVATED`
+  coachDeactivated('COACH_DEACTIVATED'),
+
+  /// `COACH_MAX_CLIENTS_BELOW_ACTIVE`
+  coachMaxClientsBelowActive('COACH_MAX_CLIENTS_BELOW_ACTIVE'),
+
   /// `PROGRAM_ROUTINE_NOT_FOUND`
   programRoutineNotFound('PROGRAM_ROUTINE_NOT_FOUND'),
 

@@ -11,6 +11,13 @@ part 'coach_settings_provider.g.dart';
 // State Classes
 // ──────────────────────────────────────────────────────────
 
+/// Identifies which coach setting field is currently being saved.
+enum CoachSettingsUpdateField {
+  acceptingClients,
+  isDiscoverable,
+  maxClients,
+}
+
 /// Sealed state for coach settings.
 sealed class CoachSettingsState {
   const CoachSettingsState();
@@ -25,8 +32,26 @@ class CoachSettingsLoading extends CoachSettingsState {
 }
 
 class CoachSettingsLoaded extends CoachSettingsState {
-  const CoachSettingsLoaded({required this.settings});
+  const CoachSettingsLoaded({
+    required this.settings,
+    this.updatingField,
+  });
+
   final CoachSettingsModel settings;
+  final CoachSettingsUpdateField? updatingField;
+
+  CoachSettingsLoaded copyWith({
+    CoachSettingsModel? settings,
+    CoachSettingsUpdateField? updatingField,
+    bool clearUpdatingField = false,
+  }) {
+    return CoachSettingsLoaded(
+      settings: settings ?? this.settings,
+      updatingField: clearUpdatingField
+          ? null
+          : (updatingField ?? this.updatingField),
+    );
+  }
 }
 
 class CoachSettingsError extends CoachSettingsState {
@@ -76,51 +101,72 @@ class CoachSettingsNotifier extends _$CoachSettingsNotifier {
   ///
   /// Only non-null fields in [request] are sent. On success the state
   /// is updated with the server's response (authoritative).
-  Future<bool> updateSettings(UpdateCoachSettingsRequest request) async {
+  /// Returns `null` on success, or the [AppError] on failure.
+  Future<AppError?> updateSettings(
+    UpdateCoachSettingsRequest request, {
+    required CoachSettingsUpdateField field,
+  }) async {
+    final current = state;
+    if (current is CoachSettingsLoaded) {
+      state = current.copyWith(updatingField: field);
+    }
+
     final result = await _repo.updateSettings(request);
 
     return result.when(
       success: (settings) {
         state = CoachSettingsLoaded(settings: settings);
-        return true;
+        return null;
       },
       failure: (error) {
         AppLogger.error(
           'Update coach settings failed: ${error.message}',
           tag: 'CoachSettingsNotifier',
         );
-        return false;
+        if (current is CoachSettingsLoaded) {
+          state = current.copyWith(clearUpdatingField: true);
+        }
+        return error;
       },
     );
   }
 
   /// Toggle the `acceptingClients` flag.
-  Future<bool> toggleAcceptingClients() async {
+  Future<AppError?> toggleAcceptingClients() async {
     final current = state;
-    if (current is! CoachSettingsLoaded) return false;
+    if (current is! CoachSettingsLoaded) {
+      return const UnknownError(message: 'Settings not loaded');
+    }
 
     return updateSettings(
       UpdateCoachSettingsRequest(
         acceptingClients: !current.settings.acceptingClients,
       ),
+      field: CoachSettingsUpdateField.acceptingClients,
     );
   }
 
   /// Toggle the `isDiscoverable` flag.
-  Future<bool> toggleDiscoverability() async {
+  Future<AppError?> toggleDiscoverability() async {
     final current = state;
-    if (current is! CoachSettingsLoaded) return false;
+    if (current is! CoachSettingsLoaded) {
+      return const UnknownError(message: 'Settings not loaded');
+    }
 
     return updateSettings(
       UpdateCoachSettingsRequest(
         isDiscoverable: !current.settings.isDiscoverable,
       ),
+      field: CoachSettingsUpdateField.isDiscoverable,
     );
   }
 
   /// Set the max client capacity.
-  Future<bool> setMaxClients(int maxClients) async {
-    return updateSettings(UpdateCoachSettingsRequest(maxClients: maxClients));
+  Future<AppError?> setMaxClients(int maxClients) async {
+    return updateSettings(
+      UpdateCoachSettingsRequest(maxClients: maxClients),
+      field: CoachSettingsUpdateField.maxClients,
+    );
   }
 }
 
@@ -133,6 +179,16 @@ class CoachSettingsNotifier extends _$CoachSettingsNotifier {
 bool coachSettingsLoading(Ref ref) {
   final state = ref.watch(coachSettingsProvider);
   return state is CoachSettingsLoading;
+}
+
+/// Whether a settings update is in progress.
+@riverpod
+bool coachSettingsUpdating(Ref ref) {
+  final state = ref.watch(coachSettingsProvider);
+  return switch (state) {
+    CoachSettingsLoaded(:final updatingField) => updatingField != null,
+    _ => false,
+  };
 }
 
 /// The loaded coach settings, or null if not yet loaded.
