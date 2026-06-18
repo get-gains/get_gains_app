@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'recording_feedback_service.g.dart';
@@ -20,9 +20,9 @@ enum RecordingFeedbackEvent {
 
 /// Plays audio and haptic feedback during recording flows.
 ///
-/// Uses preloaded [AudioPool]s with CC0 Kenney interface sounds under
-/// `assets/sounds/`. Camera recording uses `enableAudio: false` — playback
-/// does not conflict with the mic.
+/// Uses preloaded [AudioSource]s with CC0 Kenney interface sounds under
+/// `assets/sounds/` via [flutter_soloud]. Camera recording uses
+/// `enableAudio: false` — playback does not conflict with the mic.
 class RecordingFeedbackService {
   RecordingFeedbackService({this.enabled = true});
 
@@ -33,20 +33,19 @@ class RecordingFeedbackService {
   /// results; otherwise [RecordingFeedbackEvent.processingComplete] is used.
   static const double successScoreThreshold = 0.6;
 
-  static const _assetPrefix = 'sounds/';
-
   static const _eventAssets = <RecordingFeedbackEvent, String>{
-    RecordingFeedbackEvent.setupReady: '${_assetPrefix}setup_ready.wav',
-    RecordingFeedbackEvent.countdownTick: '${_assetPrefix}countdown_tick.wav',
-    RecordingFeedbackEvent.recordingStart: '${_assetPrefix}record_start.wav',
-    RecordingFeedbackEvent.recordingStop: '${_assetPrefix}record_stop.wav',
+    RecordingFeedbackEvent.setupReady: 'assets/sounds/setup_ready.wav',
+    RecordingFeedbackEvent.countdownTick: 'assets/sounds/countdown_tick.wav',
+    RecordingFeedbackEvent.recordingStart: 'assets/sounds/record_start.wav',
+    RecordingFeedbackEvent.recordingStop: 'assets/sounds/record_stop.wav',
     RecordingFeedbackEvent.processingComplete:
-        '${_assetPrefix}processing_complete.wav',
-    RecordingFeedbackEvent.success: '${_assetPrefix}success.wav',
-    RecordingFeedbackEvent.error: '${_assetPrefix}error.wav',
+        'assets/sounds/processing_complete.wav',
+    RecordingFeedbackEvent.success: 'assets/sounds/success.wav',
+    RecordingFeedbackEvent.error: 'assets/sounds/error.wav',
   };
 
-  final Map<String, AudioPool> _pools = {};
+  final SoLoud _soloud = SoLoud.instance;
+  final Map<String, AudioSource> _sources = {};
   Future<void>? _initFuture;
   bool _disposed = false;
 
@@ -59,18 +58,17 @@ class RecordingFeedbackService {
 
   Future<void> _ensureInitialized() {
     if (_disposed) return Future.value();
-    return _initFuture ??= _initializePools();
+    return _initFuture ??= _initializeSources();
   }
 
-  Future<void> _initializePools() async {
+  Future<void> _initializeSources() async {
+    if (!_soloud.isInitialized) {
+      await _soloud.init();
+    }
+
     final uniqueAssets = _eventAssets.values.toSet();
     for (final asset in uniqueAssets) {
-      _pools[asset] = await AudioPool.createFromAsset(
-        path: asset,
-        minPlayers: 1,
-        maxPlayers: asset.contains('countdown_tick') ? 3 : 2,
-        playerMode: PlayerMode.lowLatency,
-      );
+      _sources[asset] = await _soloud.loadAsset(asset);
     }
   }
 
@@ -80,11 +78,11 @@ class RecordingFeedbackService {
     final asset = _eventAssets[event];
     if (asset == null) return;
 
-    final pool = _pools[asset];
-    if (pool == null) return;
+    final source = _sources[asset];
+    if (source == null) return;
 
     try {
-      await pool.start(volume: 0.85);
+      _soloud.play(source, volume: 0.85);
     } catch (_) {
       // Non-fatal: haptics still fire if audio fails.
     }
@@ -92,10 +90,10 @@ class RecordingFeedbackService {
 
   Future<void> dispose() async {
     _disposed = true;
-    final pools = _pools.values.toList();
-    _pools.clear();
-    for (final pool in pools) {
-      await pool.dispose();
+    final sources = _sources.values.toList();
+    _sources.clear();
+    for (final source in sources) {
+      await _soloud.disposeSource(source);
     }
   }
 
