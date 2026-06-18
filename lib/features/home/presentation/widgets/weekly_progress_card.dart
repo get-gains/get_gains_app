@@ -14,6 +14,7 @@ class WeeklyProgressCard extends StatelessWidget {
     required this.totalMinutes,
     required this.streakDays,
     this.completedWeekdays,
+    this.onTap,
   });
 
   final int workoutsCompleted;
@@ -25,133 +26,138 @@ class WeeklyProgressCard extends StatelessWidget {
   /// When null, falls back to filling the first [workoutsCompleted] days.
   final Set<int>? completedWeekdays;
 
+  /// Called when the card is tapped (e.g., navigate to calendar).
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final progress = workoutsGoal > 0 ? workoutsCompleted / workoutsGoal : 0.0;
 
-    return AppCard(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Progress header
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Weekly Goal',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  '$workoutsCompleted / $workoutsGoal workouts',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
+    final cardContent = Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Progress header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Weekly Goal',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              Text(
+                '$workoutsCompleted / $workoutsGoal workouts',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
 
-            // Progress bar
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: LinearProgressIndicator(
-                value: progress.clamp(0.0, 1.0),
-                minHeight: 10,
-                backgroundColor: isDark
-                    ? AppColors.surface2Dark
-                    : AppColors.surface2Light,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  isDark ? AppColors.primaryDark : AppColors.primaryLight,
-                ),
+          // Progress bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: progress.clamp(0.0, 1.0),
+              minHeight: 10,
+              backgroundColor:
+                  isDark ? AppColors.surface2Dark : AppColors.surface2Light,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                isDark ? AppColors.primaryDark : AppColors.primaryLight,
               ),
             ),
+          ),
 
-            const SizedBox(height: 20),
+          const SizedBox(height: 20),
 
-            // Stats row
-            Row(
-              children: [
-                Expanded(
-                  child: _StatItem(
-                    icon: Icons.local_fire_department,
-                    value: '$streakDays',
-                    label: 'Day Streak',
-                    iconColor: Colors.orange,
+          // Stats row
+          Row(
+            children: [
+              Expanded(
+                child: _StatItem(
+                  icon: Icons.local_fire_department,
+                  value: '$streakDays',
+                  label: 'Day Streak',
+                  iconColor: Colors.orange,
+                  isDark: isDark,
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 40,
+                color: isDark ? AppColors.borderDark : AppColors.borderLight,
+              ),
+              Expanded(
+                child: _StatItem(
+                  icon: Icons.timer,
+                  value: _formatMinutes(totalMinutes),
+                  label: 'Total Time',
+                  iconColor:
+                      isDark ? AppColors.primaryDark : AppColors.primaryLight,
+                  isDark: isDark,
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 40,
+                color: isDark ? AppColors.borderDark : AppColors.borderLight,
+              ),
+              Expanded(
+                child: _StatItem(
+                  icon: Icons.fitness_center,
+                  value: '$workoutsCompleted',
+                  label: 'Workouts',
+                  iconColor: isDark
+                      ? AppColors.secondaryDark
+                      : AppColors.secondaryLight,
+                  isDark: isDark,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Day indicators
+          Row(
+            children: List.generate(7, (index) {
+              // index 0 = Monday … index 6 = Sunday
+              // DateTime.weekday: 1=Mon … 7=Sun
+              final weekday = index + 1;
+              final dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+              final isCompleted = completedWeekdays != null
+                  ? completedWeekdays!.contains(weekday)
+                  : index < workoutsCompleted;
+              final isToday = weekday == DateTime.now().weekday;
+
+              return Expanded(
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: _DayIndicator(
+                    label: dayLabels[index],
+                    isCompleted: isCompleted,
+                    isToday: isToday,
                     isDark: isDark,
                   ),
                 ),
-                Container(
-                  width: 1,
-                  height: 40,
-                  color: isDark ? AppColors.borderDark : AppColors.borderLight,
-                ),
-                Expanded(
-                  child: _StatItem(
-                    icon: Icons.timer,
-                    value: _formatMinutes(totalMinutes),
-                    label: 'Total Time',
-                    iconColor: isDark
-                        ? AppColors.primaryDark
-                        : AppColors.primaryLight,
-                    isDark: isDark,
-                  ),
-                ),
-                Container(
-                  width: 1,
-                  height: 40,
-                  color: isDark ? AppColors.borderDark : AppColors.borderLight,
-                ),
-                Expanded(
-                  child: _StatItem(
-                    icon: Icons.fitness_center,
-                    value: '$workoutsCompleted',
-                    label: 'Workouts',
-                    iconColor: isDark
-                        ? AppColors.secondaryDark
-                        : AppColors.secondaryLight,
-                    isDark: isDark,
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-
-            // Day indicators
-            Row(
-              children: List.generate(7, (index) {
-                // index 0 = Monday … index 6 = Sunday
-                // DateTime.weekday: 1=Mon … 7=Sun
-                final weekday = index + 1;
-                final dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-                final isCompleted = completedWeekdays != null
-                    ? completedWeekdays!.contains(weekday)
-                    : index < workoutsCompleted;
-                final isToday = weekday == DateTime.now().weekday;
-
-                return Expanded(
-                  child: AspectRatio(
-                    aspectRatio: 1,
-                    child: _DayIndicator(
-                      label: dayLabels[index],
-                      isCompleted: isCompleted,
-                      isToday: isToday,
-                      isDark: isDark,
-                    ),
-                  ),
-                );
-              }),
-            ),
-          ],
-        ),
+              );
+            }),
+          ),
+        ],
       ),
+    );
+
+    return AppCard(
+      onTap: onTap,
+      child: cardContent,
     );
   }
 
