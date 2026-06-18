@@ -72,6 +72,7 @@ dependencies:
   share_plus: ^10.1.4
   gal: ^2.3.0
   audioplayers: ^6.7.1
+  flutter_launcher_icons: ^0.14.4
 
 dev_dependencies:
   flutter_test:

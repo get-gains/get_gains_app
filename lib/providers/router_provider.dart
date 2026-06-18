@@ -14,6 +14,8 @@ import '../features/coaches/coaches.dart';
 import '../features/home/home.dart';
 import '../features/profile/profile.dart';
 import '../features/workout/workout.dart';
+import '../features/workout/presentation/screens/workout_calendar_screen.dart';
+import '../features/workout/presentation/screens/workout_session_detail_screen.dart';
 import '../features/standalone_workout/standalone_workout.dart';
 import '../features/unity/unity.dart';
 import '../features/gains_coins/presentation/screens/coin_history_screen.dart';
@@ -86,6 +88,8 @@ class AppRoutes {
   // Workout History & Progress
   static const String workoutHistory = '/workout/history';
   static const String progress = '/progress';
+  static const String workoutCalendar = '/progress/calendar';
+  static const String workoutSessionDetail = '/workout/session/:id';
 
   // Coach Pose routes
   static const String coachExercises = '/coach/exercises';
@@ -438,6 +442,16 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: AppRoutes.progress,
         builder: (context, state) => const ProgressScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.workoutCalendar,
+        builder: (context, state) => const WorkoutCalendarScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.workoutSessionDetail,
+        builder: (context, state) => WorkoutSessionDetailScreen(
+          sessionId: state.pathParameters['id']!,
+        ),
       ),
 
       // Coach Pose Routes

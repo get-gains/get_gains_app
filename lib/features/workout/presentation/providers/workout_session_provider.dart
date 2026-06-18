@@ -7,6 +7,7 @@ import '../../../../providers/auth_state_provider.dart';
 import '../../../../services/sync/workout_sync_service.dart';
 import '../../data/models/models.dart';
 import '../../data/workout_repository.dart';
+import 'calendar_provider.dart';
 
 part 'workout_session_provider.g.dart';
 
@@ -417,6 +418,9 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
         }
         if (!ref.mounted) return;
         state = WorkoutSessionCompleted(session, routine: currentState.routine);
+        // Invalidate the calendar cache (all months) so today's session
+        // appears immediately when the user next opens the calendar.
+        ref.invalidate(monthlyWorkoutDaysProvider);
       },
       failure: (error) {
         // Restore previous state on error
