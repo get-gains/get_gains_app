@@ -207,3 +207,21 @@ Future<List<WorkoutSessionSummary>> recentActivity(Ref ref) async {
   }
   return const [];
 }
+
+// ──────────────────────────────────────────────────────────
+// Monthly Insight
+// ──────────────────────────────────────────────────────────
+
+/// Fetches monthly training insight from `GET /api/stats/monthly-insight?month=YYYY-MM`.
+/// Includes avg volume/session, trend %, 6-month sparkline, and top exercise weight gains.
+@riverpod
+Future<MonthlyInsight> monthlyInsight(Ref ref) async {
+  final now = DateTime.now();
+  final month = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+  final repo = ref.watch(workoutRepositoryProvider);
+  final result = await repo.getMonthlyInsight(month);
+  return result.when(
+    success: (model) => model,
+    failure: (error) => throw error,
+  );
+}

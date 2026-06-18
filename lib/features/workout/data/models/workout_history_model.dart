@@ -23,6 +23,9 @@ abstract class WorkoutSessionSummary with _$WorkoutSessionSummary {
 
     /// Routine name resolved by the server (optional).
     String? routineName,
+
+    /// Session source: "standalone" or "coach".
+    String? source,
   }) = _WorkoutSessionSummary;
 
   factory WorkoutSessionSummary.fromJson(Map<String, dynamic> json) =>

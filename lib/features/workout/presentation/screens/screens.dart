@@ -3,6 +3,7 @@
 /// Screens for workout feature.
 library;
 
+export 'monthly_sessions_screen.dart';
 export 'my_program_detail_screen.dart';
 export 'my_program_list_screen.dart';
 export 'progress_screen.dart';
