@@ -9,6 +9,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/auth_state_provider.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../gains_coins/presentation/providers/missions_provider.dart';
 import '../../../home/presentation/screens/home_screen.dart' show isCoachProvider;
 import '../../../profile/profile.dart';
 import '../providers/subscription_provider.dart';
@@ -120,6 +121,53 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
     return state.currentOffering?.availablePackages ?? [];
   }
 
+  Widget _buildCouponCta(BuildContext context) {
+    final offerTagAsync = ref.watch(activeCouponOfferTagProvider);
+
+    return offerTagAsync.when(
+      data: (offerTag) {
+        if (offerTag == null) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: AppCard(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Mission reward available',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'You earned a 20% off Premium coupon. Redeem it now.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.textSecondaryLight,
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  AppButton.primary(
+                    label: 'Redeem 20% Off',
+                    icon: Icons.local_offer,
+                    isFullWidth: true,
+                    onPressed: () => ref
+                        .read(subscriptionProvider.notifier)
+                        .purchaseDiscountedOption(offerTag),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+
   Widget _buildFreeUserSection(
     BuildContext context,
     SubscriptionLoaded state,
@@ -188,6 +236,8 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
           ),
         ),
         const SizedBox(height: 16),
+
+        _buildCouponCta(context),
 
         if (hasPackages) ...[
           AppButton.primary(
