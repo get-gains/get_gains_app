@@ -89,6 +89,7 @@ class ApiConstants {
 
   // Unified Stats Endpoints
   static const String unifiedWeeklyStats = '/stats/weekly';
+  static const String monthlyInsight = '/stats/monthly-insight';
 
   // Unified Session Endpoints
   static const String unifiedSessionHistory = '/sessions/history';
