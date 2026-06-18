@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -17,34 +20,9 @@ enum RecordingFeedbackEvent {
 
 /// Plays audio and haptic feedback during recording flows.
 ///
-/// Phase 1 uses [SystemSound] + [HapticFeedback] (no extra dependencies).
-///
-/// ## Phase 2 — migrate to audioplayers
-///
-/// When custom sound assets are ready:
-///
-/// 1. Add `audioplayers: ^6.7.1` to pubspec.yaml.
-/// 2. Register assets under `assets/sounds/`:
-///    - `countdown_tick.wav`
-///    - `record_start.wav`
-///    - `record_stop.wav`
-///    - `success.wav`
-///    - `error.wav`
-/// 3. Add an `init()` method that preloads [AudioPool]s:
-///    ```dart
-///    _tickPool = await AudioPool.createFromAsset(
-///      path: 'sounds/countdown_tick.wav',
-///      minPlayers: 1,
-///      maxPlayers: 3,
-///      playerMode: PlayerMode.lowLatency,
-///    );
-///    ```
-/// 4. Replace `_playSystemSound` calls with `await pool.start(volume: 0.8)`.
-/// 5. Keep this public API (`play(event)`) unchanged so screens need no edits.
-/// 6. Call `dispose()` on pools when the service is torn down.
-///
-/// Use short mono `.wav` files (~50–200 ms), 44.1 or 48 kHz, under 100 KB each.
-/// Camera recording uses `enableAudio: false` — playback does not conflict with mic.
+/// Uses preloaded [AudioPool]s with CC0 Kenney interface sounds under
+/// `assets/sounds/`. Camera recording uses `enableAudio: false` — playback
+/// does not conflict with the mic.
 class RecordingFeedbackService {
   RecordingFeedbackService({this.enabled = true});
 
@@ -55,26 +33,69 @@ class RecordingFeedbackService {
   /// results; otherwise [RecordingFeedbackEvent.processingComplete] is used.
   static const double successScoreThreshold = 0.6;
 
+  static const _assetPrefix = 'sounds/';
+
+  static const _eventAssets = <RecordingFeedbackEvent, String>{
+    RecordingFeedbackEvent.setupReady: '${_assetPrefix}setup_ready.wav',
+    RecordingFeedbackEvent.countdownTick: '${_assetPrefix}countdown_tick.wav',
+    RecordingFeedbackEvent.recordingStart: '${_assetPrefix}record_start.wav',
+    RecordingFeedbackEvent.recordingStop: '${_assetPrefix}record_stop.wav',
+    RecordingFeedbackEvent.processingComplete:
+        '${_assetPrefix}processing_complete.wav',
+    RecordingFeedbackEvent.success: '${_assetPrefix}success.wav',
+    RecordingFeedbackEvent.error: '${_assetPrefix}error.wav',
+  };
+
+  final Map<String, AudioPool> _pools = {};
+  Future<void>? _initFuture;
+  bool _disposed = false;
+
   void play(RecordingFeedbackEvent event) {
     if (!enabled) return;
 
-    _playSystemSound(event);
+    unawaited(_ensureInitialized().then((_) => _playAsset(event)));
     _playHaptic(event);
   }
 
-  void _playSystemSound(RecordingFeedbackEvent event) {
-    final sound = switch (event) {
-      RecordingFeedbackEvent.setupReady => SystemSoundType.alert,
-      RecordingFeedbackEvent.countdownTick => SystemSoundType.click,
-      RecordingFeedbackEvent.countdownCancel => null,
-      RecordingFeedbackEvent.recordingStart => SystemSoundType.alert,
-      RecordingFeedbackEvent.recordingStop => SystemSoundType.click,
-      RecordingFeedbackEvent.processingComplete => SystemSoundType.alert,
-      RecordingFeedbackEvent.success => SystemSoundType.alert,
-      RecordingFeedbackEvent.error => SystemSoundType.alert,
-    };
-    if (sound != null) {
-      SystemSound.play(sound);
+  Future<void> _ensureInitialized() {
+    if (_disposed) return Future.value();
+    return _initFuture ??= _initializePools();
+  }
+
+  Future<void> _initializePools() async {
+    final uniqueAssets = _eventAssets.values.toSet();
+    for (final asset in uniqueAssets) {
+      _pools[asset] = await AudioPool.createFromAsset(
+        path: asset,
+        minPlayers: 1,
+        maxPlayers: asset.contains('countdown_tick') ? 3 : 2,
+        playerMode: PlayerMode.lowLatency,
+      );
+    }
+  }
+
+  Future<void> _playAsset(RecordingFeedbackEvent event) async {
+    if (_disposed || event == RecordingFeedbackEvent.countdownCancel) return;
+
+    final asset = _eventAssets[event];
+    if (asset == null) return;
+
+    final pool = _pools[asset];
+    if (pool == null) return;
+
+    try {
+      await pool.start(volume: 0.85);
+    } catch (_) {
+      // Non-fatal: haptics still fire if audio fails.
+    }
+  }
+
+  Future<void> dispose() async {
+    _disposed = true;
+    final pools = _pools.values.toList();
+    _pools.clear();
+    for (final pool in pools) {
+      await pool.dispose();
     }
   }
 
@@ -103,5 +124,9 @@ class RecordingFeedbackService {
 /// Singleton [RecordingFeedbackService] for recording screens.
 @Riverpod(keepAlive: true)
 RecordingFeedbackService recordingFeedbackService(Ref ref) {
-  return RecordingFeedbackService();
+  final service = RecordingFeedbackService();
+  ref.onDispose(() {
+    unawaited(service.dispose());
+  });
+  return service;
 }
