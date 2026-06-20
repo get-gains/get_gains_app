@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/constants/api_constants.dart';
@@ -5,28 +8,59 @@ import '../../../core/utils/app_error.dart';
 import '../../../core/utils/logger.dart';
 import '../../../core/utils/result.dart';
 import '../../../services/api/api_client.dart';
+import '../../../services/cache/cache_service.dart';
+import '../../../services/database/app_database.dart'
+    hide StandaloneProgram, StandaloneProgramRoutine;
+import '../../../services/outbox/outbox_service.dart';
+import '../../../services/storage/secure_storage_service.dart';
 import '../../workout/data/models/models.dart';
 import 'models/models.dart';
 
 part 'standalone_workout_repository.g.dart';
 
 @Riverpod(keepAlive: true)
-StandaloneWorkoutRepository standaloneWorkoutRepository(
-  Ref ref,
-) {
-  final apiClient = ref.watch(apiClientProvider);
-  return StandaloneWorkoutRepository(apiClient: apiClient);
+StandaloneWorkoutRepository standaloneWorkoutRepository(Ref ref) {
+  return StandaloneWorkoutRepository(
+    apiClient: ref.watch(apiClientProvider),
+    database: ref.watch(appDatabaseProvider),
+    outbox: ref.watch(outboxServiceProvider),
+    cache: ref.watch(cacheServiceProvider),
+    storage: ref.watch(secureStorageServiceProvider),
+  );
 }
 
 class StandaloneWorkoutRepository {
-  StandaloneWorkoutRepository({required ApiClient apiClient})
-    : _apiClient = apiClient;
+  StandaloneWorkoutRepository({
+    required ApiClient apiClient,
+    required AppDatabase database,
+    required OutboxService outbox,
+    required CacheService cache,
+    required SecureStorageService storage,
+  }) : _apiClient = apiClient,
+       _db = database,
+       _outbox = outbox,
+       _cache = cache,
+       _storage = storage;
 
   final ApiClient _apiClient;
+  final AppDatabase _db;
+  final OutboxService _outbox;
+  final CacheService _cache;
+  final SecureStorageService _storage;
 
-  // ════════════════════════════════════════════════════════
-  //  PROGRAM OPERATIONS
-  // ════════════════════════════════════════════════════════
+  Future<String> get _userId async => (await _storage.getUserId()) ?? '';
+
+  static const _ckPrograms = 'standalone_programs';
+  static String _ckProgram(String id) => 'standalone_program:$id';
+  static const _ckActiveProgram = 'standalone_active_program';
+  static const _ckActiveSession = 'standalone_active_session';
+  static String _ckSession(String id) => 'standalone_session:$id';
+  static const _ckSessionsHistory = 'standalone_sessions_history';
+  static const _ckStats = 'standalone_stats';
+  static String _ckExerciseStat(String id) => 'standalone_exercise_stat:$id';
+  static String _now() => DateTime.now().toIso8601String();
+
+  // ============== PROGRAM OPERATIONS ==============
 
   Future<Result<StandaloneProgramListResponse, AppError>> getPrograms({
     int limit = 20,
@@ -36,20 +70,22 @@ class StandaloneWorkoutRepository {
       ApiConstants.standalonePrograms,
       queryParameters: {'limit': limit, 'offset': offset},
     );
-    return result.when(
-      success: (data) {
-        final d = data!;
-        final pagination = d['pagination'] as Map<String, dynamic>?;
-        if (pagination != null) {
-          d['total'] = pagination['total'];
-          d['limit'] = pagination['limit'];
-          d['offset'] = pagination['offset'];
-          d['hasMore'] = pagination['hasMore'];
-        }
-        return Success(StandaloneProgramListResponse.fromJson(d));
-      },
-      failure: (error) => Failure(error),
-    );
+    if (result is Success<Map<String, dynamic>, AppError>) {
+      final d = result.value;
+      final pagination = d['pagination'] as Map<String, dynamic>?;
+      if (pagination != null) {
+        d['total'] = pagination['total'];
+        d['limit'] = pagination['limit'];
+        d['offset'] = pagination['offset'];
+        d['hasMore'] = pagination['hasMore'];
+      }
+      _cache.putJson(_ckPrograms, d, version: _now());
+      return Success(StandaloneProgramListResponse.fromJson(d));
+    }
+    final cached = await _cache.get<Map<String, dynamic>>(_ckPrograms, (json) => json);
+    if (cached != null) return Success(StandaloneProgramListResponse.fromJson(cached));
+    final failure = result as Failure<Map<String, dynamic>, AppError>;
+    return Failure(failure.error);
   }
 
   Future<Result<StandaloneProgramDetail, AppError>> getProgram(
@@ -58,121 +94,233 @@ class StandaloneWorkoutRepository {
     final result = await _apiClient.get<Map<String, dynamic>>(
       '${ApiConstants.standalonePrograms}/$programId',
     );
-    return result.when(
-      success: (data) {
-        final program = data!['program'] as Map<String, dynamic>? ?? data;
-        return Success(StandaloneProgramDetail.fromJson(program));
-      },
-      failure: (error) => Failure(error),
-    );
+    if (result is Success<Map<String, dynamic>, AppError>) {
+      final d = result.value;
+      final program = d['program'] as Map<String, dynamic>? ?? d;
+      _cache.putJson(_ckProgram(programId), program, version: _now());
+      return Success(StandaloneProgramDetail.fromJson(program));
+    }
+    final cached = await _cache.get<Map<String, dynamic>>(_ckProgram(programId), (json) => json);
+    if (cached != null) return Success(StandaloneProgramDetail.fromJson(cached));
+    final failure = result as Failure<Map<String, dynamic>, AppError>;
+    return Failure(failure.error);
   }
 
   Future<Result<StandaloneProgramDetail, AppError>> getActiveProgram() async {
     final result = await _apiClient.get<Map<String, dynamic>>(
       ApiConstants.standaloneActiveProgram,
     );
-    return result.when(
-      success: (data) {
-        final program = data!['program'] as Map<String, dynamic>? ?? data;
-        return Success(StandaloneProgramDetail.fromJson(program));
-      },
-      failure: (error) => Failure(error),
-    );
+    if (result is Success<Map<String, dynamic>, AppError>) {
+      final d = result.value;
+      final program = d['program'] as Map<String, dynamic>? ?? d;
+      _cache.putJson(_ckActiveProgram, program, version: _now());
+      return Success(StandaloneProgramDetail.fromJson(program));
+    }
+    final cached = await _cache.get<Map<String, dynamic>>(_ckActiveProgram, (json) => json);
+    if (cached != null) return Success(StandaloneProgramDetail.fromJson(cached));
+    final failure = result as Failure<Map<String, dynamic>, AppError>;
+    return Failure(failure.error);
   }
 
   Future<Result<StandaloneProgram, AppError>> createProgram(
     CreateStandaloneProgramRequest request,
   ) async {
-    final result = await _apiClient.post<Map<String, dynamic>>(
-      ApiConstants.standalonePrograms,
-      data: request.toJson(),
+    final id = _outbox.newId();
+    final userId = await _userId;
+    final now = DateTime.now();
+
+    await _db.upsertStandaloneProgram(
+      StandaloneProgramsCompanion.insert(
+        id: id,
+        userId: userId,
+        name: request.name,
+        description: request.description,
+        createdAt: now,
+        updatedAt: now,
+      ),
     );
-    return result.when(
-      success: (data) =>
-          Success(StandaloneProgram.fromJson(data!['program'])),
-      failure: (error) => Failure(error),
+
+    await _outbox.enqueue(
+      entityType: 'standalone_program',
+      operation: 'create',
+      payload: jsonEncode({...request.toJson(), 'id': id}),
     );
+
+    return Success(StandaloneProgram(
+      id: id,
+      name: request.name,
+      description: request.description,
+      createdAt: now,
+      updatedAt: now,
+    ));
   }
 
   Future<Result<StandaloneProgram, AppError>> updateProgram(
     String programId,
     UpdateStandaloneProgramRequest request,
   ) async {
-    final result = await _apiClient.patch<Map<String, dynamic>>(
-      '${ApiConstants.standalonePrograms}/$programId',
-      data: request.toJson(),
+    final now = DateTime.now();
+
+    await _db.upsertStandaloneProgram(
+      StandaloneProgramsCompanion.insert(
+        id: programId,
+        userId: await _userId,
+        name: request.name ?? '',
+        description: request.description ?? '',
+        createdAt: now,
+        updatedAt: now,
+      ),
     );
-    return result.when(
-      success: (data) =>
-          Success(StandaloneProgram.fromJson(data!['program'])),
-      failure: (error) => Failure(error),
+
+    await _outbox.enqueue(
+      entityType: 'standalone_program',
+      operation: 'update',
+      payload: jsonEncode({...request.toJson(), 'id': programId}),
     );
+
+    return Success(StandaloneProgram(
+      id: programId,
+      name: request.name ?? '',
+      description: request.description ?? '',
+      createdAt: null,
+      updatedAt: now,
+    ));
   }
 
   Future<Result<void, AppError>> deleteProgram(String programId) async {
-    final result = await _apiClient.delete<Map<String, dynamic>>(
-      '${ApiConstants.standalonePrograms}/$programId',
+    await _db.deleteStandaloneProgram(programId);
+    await _outbox.enqueue(
+      entityType: 'standalone_program',
+      operation: 'delete',
+      payload: jsonEncode({'id': programId}),
     );
-    return result.when(success: (_) => const Success(null), failure: Failure.new);
+    return const Success(null);
   }
 
   Future<Result<void, AppError>> activateProgram(String programId) async {
-    final result = await _apiClient.post<Map<String, dynamic>>(
-      '${ApiConstants.standalonePrograms}/$programId/activate',
+    final userId = await _userId;
+    await _db.deactivateAllStandaloneAssignments(userId);
+    await _db.upsertStandaloneAssignment(
+      StandaloneAssignedProgramsCompanion.insert(
+        id: _outbox.newId(),
+        userId: userId,
+        programId: programId,
+        startDate: DateTime.now(),
+        isActive: const Value(true),
+        updatedAt: DateTime.now(),
+      ),
     );
-    return result.when(success: (_) => const Success(null), failure: Failure.new);
+
+    await _outbox.enqueue(
+      entityType: 'standalone_program',
+      operation: 'activate',
+      payload: jsonEncode({'id': programId}),
+    );
+
+    return const Success(null);
   }
 
   Future<Result<void, AppError>> deactivateProgram(String programId) async {
-    final result = await _apiClient.post<Map<String, dynamic>>(
-      '${ApiConstants.standalonePrograms}/$programId/deactivate',
+    final userId = await _userId;
+    await _db.deactivateAllStandaloneAssignments(userId);
+
+    await _outbox.enqueue(
+      entityType: 'standalone_program',
+      operation: 'deactivate',
+      payload: jsonEncode({'id': programId}),
     );
-    return result.when(success: (_) => const Success(null), failure: Failure.new);
+
+    return const Success(null);
   }
 
-  // ════════════════════════════════════════════════════════
-  //  BUILDER (BULK)
-  // ════════════════════════════════════════════════════════
+  // ============== BUILDER (BULK) ==============
 
   Future<Result<StandaloneProgramDetail, AppError>> buildProgram(
     BuildStandaloneProgramRequest request,
   ) async {
-    final result = await _apiClient.post<Map<String, dynamic>>(
-      ApiConstants.standaloneProgramsBuild,
-      data: request.toJson(),
+    final id = _outbox.newId();
+    final userId = await _userId;
+    final now = DateTime.now();
+
+    await _db.upsertStandaloneProgram(
+      StandaloneProgramsCompanion.insert(
+        id: id,
+        userId: userId,
+        name: request.name,
+        description: request.description,
+        createdAt: now,
+        updatedAt: now,
+      ),
     );
-    return result.when(
-      success: (data) {
-        final program = data!['program'] as Map<String, dynamic>? ?? data;
-        return Success(StandaloneProgramDetail.fromJson(program));
-      },
-      failure: (error) => Failure(error),
+
+    final routines = <StandaloneProgramRoutine>[];
+    for (final r in request.routines) {
+      final prId = _outbox.newId();
+      await _db.upsertStandaloneProgramRoutine(
+        StandaloneProgramRoutinesCompanion.insert(
+          id: prId,
+          programId: id,
+          routineId: r.routineId,
+          dayOfWeek: '',
+          createdAt: now,
+        ),
+      );
+      routines.add(StandaloneProgramRoutine(
+        id: prId,
+        routineId: r.routineId,
+        routineName: '',
+        orderInProgram: r.orderInProgram,
+      ));
+    }
+
+    await _outbox.enqueue(
+      entityType: 'standalone_program',
+      operation: 'create',
+      payload: jsonEncode({...request.toJson(), 'id': id}),
     );
+
+    return Success(StandaloneProgramDetail(
+      id: id,
+      name: request.name,
+      description: request.description,
+      routines: routines,
+      createdAt: now,
+    ));
   }
 
-  // ════════════════════════════════════════════════════════
-  //  PROGRAM ROUTINE OPERATIONS
-  // ════════════════════════════════════════════════════════
+  // ============== PROGRAM ROUTINE OPERATIONS ==============
 
   Future<Result<StandaloneProgramDetail, AppError>> addProgramRoutine(
     String programId,
     AddProgramRoutineRequest request,
   ) async {
-    final result = await _apiClient.post<Map<String, dynamic>>(
-      '${ApiConstants.standalonePrograms}/$programId/routines',
-      data: {
+    final id = _outbox.newId();
+    final now = DateTime.now();
+
+    await _db.upsertStandaloneProgramRoutine(
+      StandaloneProgramRoutinesCompanion.insert(
+        id: id,
+        programId: programId,
+        routineId: request.routineId,
+        dayOfWeek: '',
+        createdAt: now,
+      ),
+    );
+
+    await _outbox.enqueue(
+      entityType: 'standalone_program_routine',
+      operation: 'create',
+      payload: jsonEncode({
+        'id': id,
+        'program_id': programId,
         'routine_id': request.routineId,
         'order_in_program': request.orderInProgram,
-      },
+      }),
     );
-    return result.when(
-      success: (data) {
-        final programRoutine = data!['program_routine'] as Map<String, dynamic>;
-        // Re-fetch full program tree to get updated state
-        return getProgram(programId);
-      },
-      failure: (error) => Failure(error),
-    );
+
+    final cached = await _cache.get<Map<String, dynamic>>(_ckProgram(programId), (json) => json);
+    if (cached != null) return Success(StandaloneProgramDetail.fromJson(cached));
+    return getProgram(programId);
   }
 
   Future<Result<void, AppError>> updateProgramRoutine(
@@ -180,43 +328,68 @@ class StandaloneWorkoutRepository {
     String programRoutineId,
     UpdateProgramRoutineRequest request,
   ) async {
-    final result = await _apiClient.patch<Map<String, dynamic>>(
-      '${ApiConstants.standalonePrograms}/$programId/routines/$programRoutineId',
-      data: {'order_in_program': request.orderInProgram},
+    await _outbox.enqueue(
+      entityType: 'standalone_program_routine',
+      operation: 'update',
+      payload: jsonEncode({
+        'id': programRoutineId,
+        'program_id': programId,
+        'order_in_program': request.orderInProgram,
+      }),
     );
-    return result.when(success: (_) => const Success(null), failure: Failure.new);
+    return const Success(null);
   }
 
   Future<Result<void, AppError>> deleteProgramRoutine(
     String programId,
     String programRoutineId,
   ) async {
-    final result = await _apiClient.delete<Map<String, dynamic>>(
-      '${ApiConstants.standalonePrograms}/$programId/routines/$programRoutineId',
+    await _db.deleteStandaloneProgramRoutine(programRoutineId);
+    await _outbox.enqueue(
+      entityType: 'standalone_program_routine',
+      operation: 'delete',
+      payload: jsonEncode({'id': programRoutineId, 'program_id': programId}),
     );
-    return result.when(success: (_) => const Success(null), failure: Failure.new);
+    return const Success(null);
   }
 
-  // ════════════════════════════════════════════════════════
-  //  ROUTINE EXERCISE OPERATIONS
-  // ════════════════════════════════════════════════════════
+  // ============== ROUTINE EXERCISE OPERATIONS ==============
 
   Future<Result<void, AppError>> addRoutineExercise(
     String routineId,
     AddRoutineExerciseRequest request,
   ) async {
-    final result = await _apiClient.post<Map<String, dynamic>>(
-      '${ApiConstants.standaloneRoutines}/$routineId/exercises',
-      data: {
+    final id = _outbox.newId();
+
+    await _db.upsertRoutineExercise(
+      RoutineExercisesCompanion.insert(
+        id: id,
+        routineId: routineId,
+        exerciseId: request.exerciseId,
+        sets: request.sets,
+        repsMin: request.repsMin,
+        repsMax: request.repsMax,
+        restSeconds: request.restSeconds,
+        orderInRoutine: request.orderInRoutine,
+      ),
+    );
+
+    await _outbox.enqueue(
+      entityType: 'standalone_routine_exercise',
+      operation: 'create',
+      payload: jsonEncode({
+        'id': id,
+        'routine_id': routineId,
         'exercise_id': request.exerciseId,
         'sets': request.sets,
         'reps_min': request.repsMin,
         'reps_max': request.repsMax,
         'rest_seconds': request.restSeconds,
         'order_in_routine': request.orderInRoutine,
-      },
+      }),
     );
-    return result.when(success: (_) => const Success(null), failure: Failure.new);
+
+    return const Success(null);
   }
 
   Future<Result<void, AppError>> updateRoutineExercise(
@@ -224,118 +397,156 @@ class StandaloneWorkoutRepository {
     String routineExerciseId,
     UpdateRoutineExerciseRequest request,
   ) async {
-    final Map<String, dynamic> body = {};
-    if (request.sets != null) body['sets'] = request.sets;
-    if (request.repsMin != null) body['reps_min'] = request.repsMin;
-    if (request.repsMax != null) body['reps_max'] = request.repsMax;
-    if (request.restSeconds != null) body['rest_seconds'] = request.restSeconds;
-    if (request.orderInRoutine != null) body['order_in_routine'] = request.orderInRoutine;
+    final payload = <String, dynamic>{'id': routineExerciseId, 'routine_id': routineId};
+    if (request.sets != null) payload['sets'] = request.sets;
+    if (request.repsMin != null) payload['reps_min'] = request.repsMin;
+    if (request.repsMax != null) payload['reps_max'] = request.repsMax;
+    if (request.restSeconds != null) payload['rest_seconds'] = request.restSeconds;
+    if (request.orderInRoutine != null) payload['order_in_routine'] = request.orderInRoutine;
 
-    final result = await _apiClient.patch<Map<String, dynamic>>(
-      '${ApiConstants.standaloneRoutines}/$routineId/exercises/$routineExerciseId',
-      data: body,
+    await _outbox.enqueue(
+      entityType: 'standalone_routine_exercise',
+      operation: 'update',
+      payload: jsonEncode(payload),
     );
-    return result.when(success: (_) => const Success(null), failure: Failure.new);
+
+    return const Success(null);
   }
 
   Future<Result<void, AppError>> deleteRoutineExercise(
     String routineId,
     String routineExerciseId,
   ) async {
-    final result = await _apiClient.delete<Map<String, dynamic>>(
-      '${ApiConstants.standaloneRoutines}/$routineId/exercises/$routineExerciseId',
+    await _outbox.enqueue(
+      entityType: 'standalone_routine_exercise',
+      operation: 'delete',
+      payload: jsonEncode({'id': routineExerciseId, 'routine_id': routineId}),
     );
-    return result.when(success: (_) => const Success(null), failure: Failure.new);
+    return const Success(null);
   }
 
-  // ════════════════════════════════════════════════════════
-  //  STANDALONE ROUTINE CRUD
-  // ════════════════════════════════════════════════════════
+  // ============== STANDALONE ROUTINE CRUD ==============
 
-  /// Create a new standalone routine.
-  /// Returns the created routine ID for use with [addProgramRoutine].
   Future<Result<String, AppError>> createRoutine({
     required String name,
     String description = '',
     int estimatedDurationMinutes = 45,
   }) async {
-    final result = await _apiClient.post<Map<String, dynamic>>(
-      ApiConstants.standaloneRoutines,
-      data: {
+    final id = _outbox.newId();
+    final now = DateTime.now();
+
+    await _db.upsertRoutine(
+      RoutinesCompanion.insert(
+        id: id,
+        name: name,
+        description: description,
+        estimatedDurationMinutes: estimatedDurationMinutes,
+        updatedAt: now,
+      ),
+    );
+
+    await _outbox.enqueue(
+      entityType: 'standalone_routine',
+      operation: 'create',
+      payload: jsonEncode({
+        'id': id,
         'name': name,
         'description': description,
         'estimated_duration_minutes': estimatedDurationMinutes,
-      },
+      }),
     );
-    return result.when(
-      success: (data) {
-        final routine = data!['routine'] as Map<String, dynamic>;
-        return Success(routine['id'] as String);
-      },
-      failure: (error) => Failure(error),
-    );
+
+    return Success(id);
   }
 
-  // ════════════════════════════════════════════════════════
-  //  PERSONAL EXERCISE CRUD
-  // ════════════════════════════════════════════════════════
+  // ============== PERSONAL EXERCISE CRUD ==============
 
-  /// Create a new personal exercise.
-  /// Returns the created exercise ID for use with [addRoutineExercise].
   Future<Result<String, AppError>> createExercise({
     required String name,
     String description = '',
   }) async {
-    final result = await _apiClient.post<Map<String, dynamic>>(
-      ApiConstants.standaloneExercises,
-      data: {
+    final id = _outbox.newId();
+    final now = DateTime.now();
+
+    await _db.upsertExercise(
+      ExercisesCompanion.insert(
+        id: id,
+        name: name,
+        description: description,
+        primaryMuscleGroup: '',
+        updatedAt: now,
+      ),
+    );
+
+    await _outbox.enqueue(
+      entityType: 'standalone_exercise',
+      operation: 'create',
+      payload: jsonEncode({
+        'id': id,
         'name': name,
         'description': description,
-      },
+      }),
     );
-    return result.when(
-      success: (data) {
-        final exercise = data!['exercise'] as Map<String, dynamic>;
-        return Success(exercise['id'] as String);
-      },
-      failure: (error) => Failure(error),
-    );
+
+    return Success(id);
   }
 
-  // ════════════════════════════════════════════════════════
-  //  SESSION OPERATIONS
-  // ════════════════════════════════════════════════════════
+  // ============== SESSION OPERATIONS ==============
 
   Future<Result<StandaloneSession, AppError>> startSession(
     StartStandaloneSessionRequest request,
   ) async {
-    final result = await _apiClient.post<Map<String, dynamic>>(
-      ApiConstants.standaloneSessions,
-      data: {'program_routine_id': request.programRoutineId},
+    final id = _outbox.newId();
+    final userId = await _userId;
+    final now = DateTime.now();
+
+    await _db.insertWorkoutSession(
+      WorkoutSessionsCompanion.insert(
+        id: id,
+        userId: userId,
+        standaloneProgramRoutineId: Value(request.programRoutineId),
+        startedAt: now,
+        createdAt: now,
+      ),
     );
-    return result.when(
-      success: (data) =>
-          Success(StandaloneSession.fromJson(data!['session'])),
-      failure: (error) => Failure(error),
+
+    await _outbox.enqueue(
+      entityType: 'standalone_session',
+      operation: 'create',
+      payload: jsonEncode({
+        'id': id,
+        'program_routine_id': request.programRoutineId,
+      }),
     );
+
+    final exercises = await _loadRoutineExercises(request.programRoutineId);
+
+    return Success(StandaloneSession(
+      id: id,
+      userId: userId,
+      programRoutineId: request.programRoutineId,
+      startedAt: now,
+      exercises: exercises,
+    ));
   }
 
   Future<Result<StandaloneSession?, AppError>> getActiveSession() async {
     final result = await _apiClient.get<Map<String, dynamic>>(
       ApiConstants.standaloneActiveSession,
     );
-    return result.when(
-      success: (data) {
-        final session = data!['session'];
-        if (session == null) return const Success(null);
-        return Success(StandaloneSession.fromJson(session));
-      },
-      failure: (error) => Failure(error),
-    );
+    if (result is Success<Map<String, dynamic>, AppError>) {
+      final d = result.value;
+      final session = d['session'];
+      if (session == null) return const Success(null);
+      _cache.putJson(_ckActiveSession, session as Map<String, dynamic>, version: _now());
+      return Success(StandaloneSession.fromJson(session));
+    }
+    final cached = await _cache.get<Map<String, dynamic>>(_ckActiveSession, (json) => json);
+    if (cached != null) return Success(StandaloneSession.fromJson(cached));
+    final failure = result as Failure<Map<String, dynamic>, AppError>;
+    return Failure(failure.error);
   }
 
-  /// Load the active session and return data suitable for the workout screen.
-  /// Returns `null` on success with no active session.
   Future<
     Result<
       ({
@@ -362,39 +573,36 @@ class StandaloneWorkoutRepository {
           performedSets: const [],
         );
         final exercises = session.exercises
-            .map(
-              (e) => RoutineExerciseModel(
-                id: e.id,
-                exerciseId: e.exerciseId,
-                sets: e.sets,
-                repsMin: e.repsMin,
-                repsMax: e.repsMax,
-                restSeconds: e.restSeconds,
-                orderInRoutine: e.orderInRoutine,
-              ),
-            )
+            .map((e) => RoutineExerciseModel(
+                  id: e.id,
+                  exerciseId: e.exerciseId,
+                  sets: e.sets,
+                  repsMin: e.repsMin,
+                  repsMax: e.repsMax,
+                  restSeconds: e.restSeconds,
+                  orderInRoutine: e.orderInRoutine,
+                ))
             .toList();
-        return Success((
-          session: workoutSession,
-          exercises: exercises,
-          routineName: session.routineName ?? 'Workout',
-        ));
+        return Success((session: workoutSession, exercises: exercises, routineName: session.routineName ?? 'Workout'));
       },
       failure: (error) => Failure(error),
     );
   }
 
-  Future<Result<StandaloneSession, AppError>> getSession(
-    String sessionId,
-  ) async {
+  Future<Result<StandaloneSession, AppError>> getSession(String sessionId) async {
     final result = await _apiClient.get<Map<String, dynamic>>(
       '${ApiConstants.standaloneSessions}/$sessionId',
     );
-    return result.when(
-      success: (data) =>
-          Success(StandaloneSession.fromJson(data!['session'])),
-      failure: (error) => Failure(error),
-    );
+    if (result is Success<Map<String, dynamic>, AppError>) {
+      final d = result.value;
+      final session = d['session'] as Map<String, dynamic>;
+      _cache.putJson(_ckSession(sessionId), session, version: _now());
+      return Success(StandaloneSession.fromJson(session));
+    }
+    final cached = await _cache.get<Map<String, dynamic>>(_ckSession(sessionId), (json) => json);
+    if (cached != null) return Success(StandaloneSession.fromJson(cached));
+    final failure = result as Failure<Map<String, dynamic>, AppError>;
+    return Failure(failure.error);
   }
 
   Future<Result<StandaloneSessionListResponse, AppError>> getSessionHistory({
@@ -405,135 +613,117 @@ class StandaloneWorkoutRepository {
       ApiConstants.standaloneSessions,
       queryParameters: {'limit': limit, 'offset': offset},
     );
-    return result.when(
-      success: (data) {
-        final d = data!;
-        final pagination = d['pagination'] as Map<String, dynamic>?;
-        if (pagination != null) {
-          d['total'] = pagination['total'];
-          d['limit'] = pagination['limit'];
-          d['offset'] = pagination['offset'];
-          d['hasMore'] = pagination['hasMore'];
-        }
-        return Success(StandaloneSessionListResponse.fromJson(d));
-      },
-      failure: (error) => Failure(error),
-    );
+    if (result is Success<Map<String, dynamic>, AppError>) {
+      final d = result.value;
+      final pagination = d['pagination'] as Map<String, dynamic>?;
+      if (pagination != null) {
+        d['total'] = pagination['total'];
+        d['limit'] = pagination['limit'];
+        d['offset'] = pagination['offset'];
+        d['hasMore'] = pagination['hasMore'];
+      }
+      _cache.putJson(_ckSessionsHistory, d, version: _now());
+      return Success(StandaloneSessionListResponse.fromJson(d));
+    }
+    final cached = await _cache.get<Map<String, dynamic>>(_ckSessionsHistory, (json) => json);
+    if (cached != null) return Success(StandaloneSessionListResponse.fromJson(cached));
+    final failure = result as Failure<Map<String, dynamic>, AppError>;
+    return Failure(failure.error);
   }
 
   Future<Result<StandaloneSession, AppError>> completeSession(
     String sessionId, {
     String? feedback,
   }) async {
-    final result = await _apiClient.post<Map<String, dynamic>>(
-      '${ApiConstants.standaloneSessions}/$sessionId/complete',
-      data: {'feedback': feedback},
+    await _db.completeWorkoutSession(sessionId, notes: feedback);
+
+    await _outbox.enqueue(
+      entityType: 'standalone_session',
+      operation: 'complete',
+      payload: jsonEncode({'id': sessionId, 'feedback': feedback}),
     );
-    return result.when(
-      success: (data) =>
-          Success(StandaloneSession.fromJson(data!['session'])),
-      failure: (error) => Failure(error),
-    );
+
+    return getSession(sessionId);
   }
 
-  /// Start a workout session and return [WorkoutSessionModel] for set
-  /// logging.
   Future<Result<WorkoutSessionModel, AppError>> startWorkoutSession({
     required String userId,
     required String programRoutineId,
   }) async {
-    AppLogger.debug('Starting standalone workout session',
-        tag: 'StandaloneRepo');
+    AppLogger.debug('Starting standalone workout session', tag: 'StandaloneRepo');
 
-    final result = await _apiClient.post<Map<String, dynamic>>(
-      ApiConstants.standaloneSessions,
-      data: {'program_routine_id': programRoutineId},
+    final id = _outbox.newId();
+    final now = DateTime.now();
+
+    await _db.insertWorkoutSession(
+      WorkoutSessionsCompanion.insert(
+        id: id,
+        userId: userId,
+        standaloneProgramRoutineId: Value(programRoutineId),
+        startedAt: now,
+        createdAt: now,
+      ),
     );
 
-    return result.when(
-      success: (data) {
-        try {
-          final sessionJson = data!['session'] as Map<String, dynamic>;
-          final session = _parseWorkoutSessionModel(sessionJson);
-
-          AppLogger.info(
-            'Standalone session started: ${session.id}',
-            tag: 'StandaloneRepo',
-          );
-          return Success(session);
-        } catch (e, st) {
-          AppLogger.error(
-            'Failed to parse standalone session',
-            tag: 'StandaloneRepo',
-            error: e,
-            stackTrace: st,
-          );
-          return Failure(
-            UnknownError(message: 'Failed to parse session: $e'),
-          );
-        }
-      },
-      failure: (error) => Failure(error),
+    await _outbox.enqueue(
+      entityType: 'standalone_session',
+      operation: 'create',
+      payload: jsonEncode({'id': id, 'program_routine_id': programRoutineId}),
     );
-  }
 
-  /// Parses a server session response handling both snake_case and
-  /// camelCase keys.
-  WorkoutSessionModel _parseWorkoutSessionModel(
-    Map<String, dynamic> json,
-  ) {
-    return WorkoutSessionModel(
-      id: json['id'] as String,
-      userId: (json['user_id'] ?? json['userId'] ?? '') as String,
-      assignedProgramRoutineId:
-          (json['assigned_program_routine_id'] ??
-                  json['assignedProgramRoutineId'])
-              as String?,
-      startedAt:
-          DateTime.parse((json['started_at'] ?? json['startedAt']) as String),
-      completedAt: json['completed_at'] != null
-          ? DateTime.parse(json['completed_at'] as String)
-          : json['completedAt'] != null
-              ? DateTime.parse(json['completedAt'] as String)
-              : null,
-      notes: (json['notes'] ?? json['notes']) as String?,
-      createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'] as String)
-          : json['createdAt'] != null
-              ? DateTime.parse(json['createdAt'] as String)
-              : null,
-      updatedAt: json['updated_at'] != null
-          ? DateTime.parse(json['updated_at'] as String)
-          : json['updatedAt'] != null
-              ? DateTime.parse(json['updatedAt'] as String)
-              : null,
+    AppLogger.info('Standalone session started: $id', tag: 'StandaloneRepo');
+    return Success(WorkoutSessionModel(
+      id: id,
+      userId: userId,
+      assignedProgramRoutineId: programRoutineId,
+      startedAt: now,
+      createdAt: now,
       performedSets: const [],
-    );
+    ));
   }
 
-  // ════════════════════════════════════════════════════════
-  //  PERFORMED SET OPERATIONS
-  // ════════════════════════════════════════════════════════
+  // ============== PERFORMED SET OPERATIONS ==============
 
   Future<Result<StandalonePerformedSet, AppError>> logSet(
     String sessionId,
     LogStandaloneSetRequest request,
   ) async {
-    final result = await _apiClient.post<Map<String, dynamic>>(
-      '${ApiConstants.standaloneSessions}/$sessionId/sets',
-      data: {
+    final id = _outbox.newId();
+    final now = DateTime.now();
+
+    await _db.upsertPerformedSet(
+      PerformedSetsCompanion.insert(
+        id: id,
+        workoutSessionId: sessionId,
+        assignedProgramRoutineExerciseId: request.routineExerciseId,
+        setNumber: request.setNumber,
+        repsCompleted: request.reps,
+        weightKg: Value(request.weight),
+        createdAt: now,
+      ),
+    );
+
+    await _outbox.enqueue(
+      entityType: 'standalone_set_log',
+      operation: 'create',
+      payload: jsonEncode({
+        'id': id,
+        'session_id': sessionId,
         'routine_exercise_id': request.routineExerciseId,
         'set_number': request.setNumber,
         'reps': request.reps,
         'weight': request.weight,
-      },
+      }),
     );
-    return result.when(
-      success: (data) => Success(
-        StandalonePerformedSet.fromJson(data!['performed_set']),
-      ),
-      failure: (error) => Failure(error),
-    );
+
+    return Success(StandalonePerformedSet(
+      id: id,
+      routineExerciseId: request.routineExerciseId,
+      setNumber: request.setNumber,
+      reps: request.reps,
+      weight: request.weight,
+      createdAt: now,
+    ));
   }
 
   Future<Result<StandalonePerformedSet, AppError>> updateSet(
@@ -541,40 +731,53 @@ class StandaloneWorkoutRepository {
     String setId,
     UpdateStandaloneSetRequest request,
   ) async {
-    final result = await _apiClient.patch<Map<String, dynamic>>(
-      '${ApiConstants.standaloneSessions}/$sessionId/sets/$setId',
-      data: request.toJson(),
+    final payload = <String, dynamic>{'id': setId, 'session_id': sessionId};
+    if (request.reps != null) payload['reps'] = request.reps;
+    if (request.weight != null) payload['weight'] = request.weight;
+
+    await _outbox.enqueue(
+      entityType: 'standalone_set_log',
+      operation: 'update',
+      payload: jsonEncode(payload),
     );
-    return result.when(
-      success: (data) => Success(
-        StandalonePerformedSet.fromJson(data!['performed_set']),
-      ),
-      failure: (error) => Failure(error),
-    );
+
+    return Success(StandalonePerformedSet(
+      id: setId,
+      routineExerciseId: '',
+      setNumber: 0,
+      reps: request.reps ?? 0,
+      weight: request.weight ?? 0,
+    ));
   }
 
   Future<Result<void, AppError>> deleteSet(
     String sessionId,
     String setId,
   ) async {
-    final result = await _apiClient.delete<Map<String, dynamic>>(
-      '${ApiConstants.standaloneSessions}/$sessionId/sets/$setId',
+    await _db.deletePerformedSet(setId);
+
+    await _outbox.enqueue(
+      entityType: 'standalone_set_log',
+      operation: 'delete',
+      payload: jsonEncode({'id': setId, 'session_id': sessionId}),
     );
-    return result.when(success: (_) => const Success(null), failure: Failure.new);
+
+    return const Success(null);
   }
 
-  // ════════════════════════════════════════════════════════
-  //  STATS OPERATIONS
-  // ════════════════════════════════════════════════════════
+  // ============== STATS OPERATIONS ==============
 
   Future<Result<StandaloneStats, AppError>> getStats() async {
-    final result = await _apiClient.get<Map<String, dynamic>>(
-      ApiConstants.standaloneStats,
-    );
-    return result.when(
-      success: (data) => Success(StandaloneStats.fromJson(data!)),
-      failure: (error) => Failure(error),
-    );
+    final result = await _apiClient.get<Map<String, dynamic>>(ApiConstants.standaloneStats);
+    if (result is Success<Map<String, dynamic>, AppError>) {
+      final d = result.value;
+      _cache.putJson(_ckStats, d, version: _now());
+      return Success(StandaloneStats.fromJson(d));
+    }
+    final cached = await _cache.get<Map<String, dynamic>>(_ckStats, (json) => json);
+    if (cached != null) return Success(StandaloneStats.fromJson(cached));
+    final failure = result as Failure<Map<String, dynamic>, AppError>;
+    return Failure(failure.error);
   }
 
   Future<Result<StandaloneExerciseStat, AppError>> getExerciseStat(
@@ -583,9 +786,41 @@ class StandaloneWorkoutRepository {
     final result = await _apiClient.get<Map<String, dynamic>>(
       '${ApiConstants.standaloneStats}/exercise/$exerciseId',
     );
-    return result.when(
-      success: (data) => Success(StandaloneExerciseStat.fromJson(data!)),
-      failure: (error) => Failure(error),
-    );
+    if (result is Success<Map<String, dynamic>, AppError>) {
+      final d = result.value;
+      _cache.putJson(_ckExerciseStat(exerciseId), d, version: _now());
+      return Success(StandaloneExerciseStat.fromJson(d));
+    }
+    final cached = await _cache.get<Map<String, dynamic>>(_ckExerciseStat(exerciseId), (json) => json);
+    if (cached != null) return Success(StandaloneExerciseStat.fromJson(cached));
+    final failure = result as Failure<Map<String, dynamic>, AppError>;
+    return Failure(failure.error);
+  }
+
+  // ============== HELPERS ==============
+
+  Future<List<StandaloneSessionExercise>> _loadRoutineExercises(String programRoutineId) async {
+    try {
+      final pr = await (_db.select(_db.standaloneProgramRoutines)
+            ..where((tbl) => tbl.id.equals(programRoutineId)))
+          .getSingleOrNull();
+      if (pr == null) return [];
+
+      final exercises = await _db.getRoutineExercises(pr.routineId);
+      return exercises
+          .map((re) => StandaloneSessionExercise(
+                id: re.id,
+                exerciseId: re.exerciseId,
+                exerciseName: '',
+                sets: re.sets,
+                repsMin: re.repsMin,
+                repsMax: re.repsMax,
+                restSeconds: re.restSeconds,
+                orderInRoutine: re.orderInRoutine,
+              ))
+          .toList();
+    } catch (_) {
+      return [];
+    }
   }
 }

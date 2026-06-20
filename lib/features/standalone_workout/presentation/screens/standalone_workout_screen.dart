@@ -209,10 +209,7 @@ class _StandaloneWorkoutScreenState
     result.when(
       success: (_) async {
         final db = ref.read(appDatabaseProvider);
-        final localSession = await db.getWorkoutSessionByRemoteId(_session.id);
-        if (localSession != null) {
-          await db.completeWorkoutSession(localSession.id, notes: notes);
-        }
+        await db.completeWorkoutSession(_session.id, notes: notes);
 
         if (mounted) {
           AppToast.success(context, 'Workout complete!');

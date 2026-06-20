@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:cuid2/cuid2.dart';
+import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../core/utils/app_error.dart';
@@ -15,7 +16,7 @@ import '../storage/secure_storage_service.dart';
 part 'outbox_service.g.dart';
 
 /// Generates a collision-resistant unique ID for new outbox entries.
-final _cuidGenerator = Cuid();
+final _cuidGenerator = cuidConfig();
 
 class OutboxService {
   final AppDatabase _db;
@@ -31,7 +32,7 @@ class OutboxService {
     this._storage,
   );
 
-  String newId() => _cuidGenerator.generate();
+  String newId() => _cuidGenerator.gen();
 
   Future<String> enqueue({
     required String entityType,
@@ -39,7 +40,7 @@ class OutboxService {
     required String payload,
     String? parentOutboxId,
   }) async {
-    final id = _cuidGenerator.generate();
+    final id = _cuidGenerator.gen();
     await _db.insertOutboxEntry(
       OutboxEntriesCompanion.insert(
         id: id,
@@ -50,11 +51,7 @@ class OutboxService {
         createdAt: DateTime.now(),
       ),
     );
-    AppLogger.debug('Enqueued outbox entry', tag: 'Outbox', data: {
-      'id': id,
-      'entityType': entityType,
-      'operation': operation,
-    });
+    AppLogger.debug('Enqueued outbox entry id=$id entityType=$entityType operation=$operation', tag: 'Outbox');
 
     if (await _connectivity.isConnected() && await _storage.isAuthenticated()) {
       unawaited(drain());
@@ -104,11 +101,7 @@ class OutboxService {
   }
 
   Future<void> _processRow(OutboxEntry entry) async {
-    AppLogger.debug('Processing outbox row', tag: 'Outbox', data: {
-      'id': entry.id,
-      'entityType': entry.entityType,
-      'operation': entry.operation,
-    });
+    AppLogger.debug('Processing outbox row id=${entry.id} entityType=${entry.entityType} operation=${entry.operation}', tag: 'Outbox');
 
     final body = jsonDecode(entry.payload) as Map<String, dynamic>;
 
@@ -124,8 +117,7 @@ class OutboxService {
           status: 'synced',
           syncedAt: DateTime.now(),
         );
-        AppLogger.debug('Outbox row synced', tag: 'Outbox',
-            data: {'id': entry.id});
+        AppLogger.debug('Outbox row synced id=${entry.id}', tag: 'Outbox');
       },
       failure: (error) async {
         await _db.incrementRetryCount(entry.id);
@@ -134,10 +126,7 @@ class OutboxService {
           status: 'failed',
           lastError: error.message,
         );
-        AppLogger.warning('Outbox row failed', tag: 'Outbox', data: {
-          'id': entry.id,
-          'error': error.message,
-        });
+        AppLogger.warning('Outbox row failed id=${entry.id} error=${error.message}', tag: 'Outbox');
       },
     );
   }
@@ -230,8 +219,7 @@ class OutboxService {
         return '$base/standalone/routines/${payload['routine_id'] ?? payload['routineId']}/exercises';
 
       default:
-        AppLogger.warning('Unknown entity type in outbox', tag: 'Outbox',
-            data: {'entityType': entityType});
+        AppLogger.warning('Unknown entity type in outbox: $entityType', tag: 'Outbox');
         return '$base/$entityType';
     }
   }

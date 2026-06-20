@@ -178,15 +178,12 @@ Future<UnifiedSessionDetail?> sessionDetail(
   final apiClient = ref.watch(apiClientProvider);
 
   // ── 1. Try local DB (coach sessions synced to Drift) ──
-  final localId = await repo.resolveLocalWorkoutSessionId(sessionId);
-  if (localId != null) {
-    final result = await repo.getWorkoutSession(localId);
-    final localSession = result.when(
-      success: (s) => s,
-      failure: (_) => null,
-    );
-
-    if (localSession != null) {
+  final localResult = await repo.getWorkoutSession(sessionId);
+  final localSession = localResult.when(
+    success: (s) => s,
+    failure: (_) => null,
+  );
+  if (localSession != null) {
       // Build exercise groups from performed sets
       final exerciseGroups = <String, List<UnifiedSet>>{};
       final exerciseNames = <String, String>{};
@@ -221,14 +218,11 @@ Future<UnifiedSessionDetail?> sessionDetail(
 
       String? routineName;
       if (localSession.routineId != null) {
-        final rid = int.tryParse(localSession.routineId!);
-        if (rid != null) {
-          final routineResult = await repo.getRoutineById(rid);
-          routineResult.when(
-            success: (r) => routineName = r?.name,
-            failure: (_) {},
-          );
-        }
+        final routineResult = await repo.getRoutineById(localSession.routineId!);
+        routineResult.when(
+          success: (r) => routineName = r?.name,
+          failure: (_) {},
+        );
       }
 
       final duration = localSession.completedAt?.difference(localSession.startedAt);
@@ -248,7 +242,6 @@ Future<UnifiedSessionDetail?> sessionDetail(
             .fold(0, (s, ps) => s + ps.repsCompleted),
         totalVolumeKg: localSession.totalVolume,
       );
-    }
   }
 
   // ── 2. Fallback: fetch from server (standalone sessions & coach not in DB) ──

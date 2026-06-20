@@ -4,6 +4,8 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../core/utils/app_error.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../../providers/auth_state_provider.dart';
+import '../../../../services/outbox/outbox_service.dart';
+import '../../../gains_coins/data/coins_repository.dart';
 import '../../data/models/models.dart';
 import '../../data/workout_repository.dart';
 import 'calendar_provider.dart';
@@ -388,16 +390,8 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
 
     state = const WorkoutSessionLoading();
 
-    final localId = await _repository.resolveLocalWorkoutSessionId(
-      currentState.session.id,
-    );
-    if (localId == null) {
-      state = currentState;
-      return;
-    }
-
     final result = await _repository.completeWorkoutSession(
-      sessionId: localId,
+      sessionId: currentState.session.id,
       notes: notes,
     );
 
@@ -405,17 +399,23 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
 
     result.when(
       success: (session) async {
-        // TODO(Phase 2.4): Drain outbox so the server has all sets and the
-        // coin reward is reflected when the completion screen reads the balance.
-        // await ref.read(outboxServiceProvider).drain().timeout(...);
+        // Drain outbox so the server has all sets and the coin reward
+        // is reflected when the completion screen reads the balance.
+        try {
+          await ref
+              .read(outboxServiceProvider)
+              .drain()
+              .timeout(const Duration(seconds: 6));
+          // Refresh coin balance after outbox drain
+          ref.read(coinsRepositoryProvider).syncBalance();
+        } catch (_) {
+          // Best-effort — user can still see local data
+        }
         if (!ref.mounted) return;
         state = WorkoutSessionCompleted(session, routine: currentState.routine);
-        // Invalidate the calendar cache (all months) so today's session
-        // appears immediately when the user next opens the calendar.
         ref.invalidate(monthlyWorkoutDaysProvider);
       },
       failure: (error) {
-        // Restore previous state on error
         state = currentState;
       },
     );

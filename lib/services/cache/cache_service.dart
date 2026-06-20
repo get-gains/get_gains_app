@@ -22,8 +22,7 @@ class CacheService {
       final json = jsonDecode(row.content) as Map<String, dynamic>;
       return fromJson(json);
     } catch (e) {
-      AppLogger.warning('Failed to decode cached asset', tag: 'Cache',
-          data: {'key': key, 'error': e.toString()});
+      AppLogger.warning('Failed to decode cached asset key=$key error=$e', tag: 'Cache');
       return null;
     }
   }
@@ -39,7 +38,7 @@ class CacheService {
       version: version,
       content: content,
     );
-    AppLogger.debug('Cached asset stored', tag: 'Cache', data: {'key': key});
+    AppLogger.debug('Cached asset stored key=$key', tag: 'Cache');
   }
 
   Future<void> putJson(
