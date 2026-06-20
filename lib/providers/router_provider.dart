@@ -90,6 +90,7 @@ class AppRoutes {
   static const String progress = '/progress';
   static const String workoutCalendar = '/progress/calendar';
   static const String workoutSessionDetail = '/workout/session/:id';
+  static const String monthlySessions = '/progress/monthly/:month';
 
   // Coach Pose routes
   static const String coachExercises = '/coach/exercises';
@@ -451,6 +452,12 @@ GoRouter router(Ref ref) {
         path: AppRoutes.workoutSessionDetail,
         builder: (context, state) => WorkoutSessionDetailScreen(
           sessionId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.monthlySessions,
+        builder: (context, state) => MonthlySessionsScreen(
+          month: state.pathParameters['month']!,
         ),
       ),
 

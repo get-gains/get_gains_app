@@ -940,6 +940,7 @@ class WorkoutRepository {
                     : null,
                 totalSets: (s['totalSets'] as num?)?.toInt() ?? 0,
                 routineName: s['routineName'] as String?,
+                source: s['source'] as String?,
               ),
             );
           }
@@ -1952,6 +1953,60 @@ class WorkoutRepository {
       error: failure.error,
     );
     return Failure(failure.error);
+  }
+
+  /// Fetch monthly training insight from the server.
+  ///
+  /// Calls `GET /api/stats/monthly-insight?month=YYYY-MM`.
+  /// Returns [MonthlyInsight] with avg volume/session, trend %, sparkline,
+  /// and top exercise weight improvements.
+  Future<Result<MonthlyInsight, AppError>> getMonthlyInsight(
+    String month,
+  ) async {
+    AppLogger.debug(
+      'Fetching monthly insight: $month',
+      tag: 'WorkoutRepo',
+    );
+
+    final result = await _apiClient.get<Map<String, dynamic>>(
+      ApiConstants.monthlyInsight,
+      queryParameters: {'month': month},
+    );
+
+    return result.when(
+      success: (data) {
+        try {
+          final model = MonthlyInsight.fromJson(data);
+          AppLogger.info(
+            'Monthly insight: ${model.volumeDisplay}, '
+            'trend=${model.trendDisplay}, '
+            '${model.exerciseImprovements.length} improvements',
+            tag: 'WorkoutRepo',
+          );
+          return Success(model);
+        } catch (e) {
+          AppLogger.error(
+            'Failed to parse monthly insight',
+            tag: 'WorkoutRepo',
+            error: e,
+          );
+          return Failure(
+            UnknownError(
+              message: 'Failed to parse monthly insight: $e',
+              originalError: e,
+            ),
+          );
+        }
+      },
+      failure: (error) {
+        AppLogger.error(
+          'Failed to fetch monthly insight',
+          tag: 'WorkoutRepo',
+          error: error,
+        );
+        return Failure(error);
+      },
+    );
   }
 
   /// Fetch paginated workout session history from the server.
