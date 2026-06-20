@@ -4,7 +4,6 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../core/utils/app_error.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../../providers/auth_state_provider.dart';
-import '../../../../services/sync/workout_sync_service.dart';
 import '../../data/models/models.dart';
 import '../../data/workout_repository.dart';
 import 'calendar_provider.dart';
@@ -406,16 +405,9 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
 
     result.when(
       success: (session) async {
-        // Drain pending sync so the server has all sets and the coin reward
-        // is reflected when the completion screen reads the balance.
-        try {
-          await ref
-              .read(workoutSyncServiceProvider)
-              .syncAll()
-              .timeout(const Duration(seconds: 6));
-        } catch (_) {
-          // Offline — coins land on next sync cycle.
-        }
+        // TODO(Phase 2.4): Drain outbox so the server has all sets and the
+        // coin reward is reflected when the completion screen reads the balance.
+        // await ref.read(outboxServiceProvider).drain().timeout(...);
         if (!ref.mounted) return;
         state = WorkoutSessionCompleted(session, routine: currentState.routine);
         // Invalidate the calendar cache (all months) so today's session

@@ -72,6 +72,7 @@ dependencies:
   share_plus: ^10.1.4
   gal: ^2.3.0
   flutter_soloud: ^4.0.9
+  cuid2: ^4.1.0
 
 dev_dependencies:
   flutter_test:

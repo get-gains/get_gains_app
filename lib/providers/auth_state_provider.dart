@@ -6,6 +6,7 @@ import '../features/profile/presentation/providers/user_profile_provider.dart';
 import '../features/subscription/presentation/providers/subscription_provider.dart';
 import '../features/subscription/services/revenuecat_service.dart';
 import '../services/api/api_client.dart';
+import '../services/connectivity/connectivity_service.dart';
 import '../services/storage/secure_storage_service.dart';
 
 part 'auth_state_provider.g.dart';
@@ -100,6 +101,29 @@ class AuthStateNotifier extends _$AuthStateNotifier {
     // ignore: avoid_print
     print('[AuthState] build() called, scheduling _checkAuthStatus');
     Future.microtask(() => _checkAuthStatus());
+
+    // Proactive token refresh when connectivity is restored
+    ref.listen(isOnlineProvider, (prev, next) async {
+      if (prev == false && next == true) {
+        if (state.status == AuthStatus.authenticated) {
+          final expired = await _storage.isTokenExpired();
+          if (expired) {
+            AppLogger.info(
+              'Connectivity restored, refreshing token proactively',
+              tag: 'Auth',
+            );
+            final apiClient = ref.read(apiClientProvider);
+            await apiClient.tryRefreshToken();
+          }
+        } else if (state.status == AuthStatus.unauthenticated) {
+          AppLogger.info(
+            'Connectivity restored, re-evaluating auth status',
+            tag: 'Auth',
+          );
+          await _checkAuthStatus();
+        }
+      }
+    });
 
     return const AuthState(isLoading: true);
   }
