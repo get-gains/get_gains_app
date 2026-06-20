@@ -71,7 +71,7 @@ dependencies:
   flutter_animate: ^4.5.0
   share_plus: ^10.1.4
   gal: ^2.3.0
-  flutter_launcher_icons: ^0.14.4
+  flutter_soloud: ^4.0.9
 
 dev_dependencies:
   flutter_test:
@@ -103,6 +103,7 @@ flutter:
   # Assets including environment configuration
   assets:
     - assets/images/logo.jpg
+    - assets/sounds/
     - .env
 
   # An image asset can refer to one or more resolution-specific "variants", see

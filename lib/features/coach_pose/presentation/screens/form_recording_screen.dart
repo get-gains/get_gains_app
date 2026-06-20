@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../services/feedback/recording_feedback_service.dart';
 import '../../data/models/exercise_form_model.dart';
 import '../../services/pose_detection_service.dart';
 import '../providers/exercise_detail_provider.dart';
@@ -350,10 +351,46 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
       previous,
       next,
     ) {
+      final feedback = ref.read(recordingFeedbackServiceProvider);
+
+      if (previous?.phase == RecordingPhase.setupGuidance &&
+          next.phase == RecordingPhase.countdown) {
+        feedback.play(RecordingFeedbackEvent.setupReady);
+      }
+
+      if (previous != null &&
+          previous.phase == RecordingPhase.countdown &&
+          next.phase == RecordingPhase.countdown &&
+          previous.countdownSeconds > next.countdownSeconds) {
+        feedback.play(RecordingFeedbackEvent.countdownTick);
+      }
+
+      if (previous?.phase == RecordingPhase.countdown &&
+          next.phase == RecordingPhase.setupGuidance) {
+        feedback.play(RecordingFeedbackEvent.countdownCancel);
+      }
+
+      if (previous?.phase == RecordingPhase.countdown &&
+          next.phase == RecordingPhase.recording) {
+        feedback.play(RecordingFeedbackEvent.recordingStart);
+      }
+
+      if (previous?.phase == RecordingPhase.recording &&
+          next.phase == RecordingPhase.processing) {
+        feedback.play(RecordingFeedbackEvent.recordingStop);
+      }
+
+      if (previous != null &&
+          previous.phase != RecordingPhase.error &&
+          next.phase == RecordingPhase.error) {
+        feedback.play(RecordingFeedbackEvent.error);
+      }
+
       final didCompleteUpload =
           previous?.phase != RecordingPhase.complete &&
           next.phase == RecordingPhase.complete;
       if (didCompleteUpload) {
+        feedback.play(RecordingFeedbackEvent.success);
         ref.invalidate(exerciseDetailProvider(widget.exerciseId));
         _showSuccess(context, isDark);
       }
