@@ -62,7 +62,7 @@ class UnityMessageContract {
   /// Seek to a specific frame index. Message = index string, e.g. "42".
   static const String methodSeekPoseFrame = 'SeekPoseFrame';
 
-  /// Set the skeleton color. Message = hex string, e.g. "#00FFFF".
+  /// Set the skeleton color. Message = hex string, e.g. "#FFA500".
   static const String methodSetSkeletonColor = 'SetSkeletonColor';
 
   /// Set camera angle in Unity scene.
@@ -112,6 +112,9 @@ class UnityMessageContract {
   /// Message type sent from Unity when the scene has finished loading.
   /// Flutter uses this to show the Unity view and enable send buttons.
   static const String unityEventSceneLoaded = 'scene_loaded';
+
+  /// Message type sent from Unity when EnterComparisonMode was processed.
+  static const String unityEventComparisonEntered = 'comparison_entered';
 
   /// Message type sent from Unity when pose frames finish loading.
   static const String unityEventPoseReady = 'pose_ready';

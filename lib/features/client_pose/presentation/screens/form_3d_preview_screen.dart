@@ -128,7 +128,7 @@ class _Form3DPreviewScreenState extends ConsumerState<Form3DPreviewScreen> {
     sendToUnity(
       UnityMessageContract.gameObjectName,
       UnityMessageContract.methodSetSkeletonColor,
-      '#00FFFF',
+      '#FFA500',
     );
     sendToUnity(
       UnityMessageContract.gameObjectName,

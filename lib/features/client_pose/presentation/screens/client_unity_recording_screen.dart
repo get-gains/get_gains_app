@@ -93,6 +93,7 @@ class _ClientUnityRecordingScreenState
   bool _showUnityComparison = false;
   bool _isUnityComparisonLoaded = false;
   bool _comparisonFramesSent = false;
+  Timer? _comparisonSendTimer;
   // ── Workout mode: set logger ─────────────────────────────────────────────────────
   bool get _isWorkoutMode => widget.workoutSessionId != null;
   final TextEditingController _weightController = TextEditingController();
@@ -414,7 +415,7 @@ class _ClientUnityRecordingScreenState
     sendToUnity(
       UnityMessageContract.gameObjectName,
       UnityMessageContract.methodSetSkeletonColor,
-      '#00FFFF',
+      '#FFA500',
     );
   }
 
@@ -531,6 +532,8 @@ class _ClientUnityRecordingScreenState
         '',
       );
     }
+    _comparisonSendTimer?.cancel();
+    _comparisonSendTimer = null;
     _showUnityComparison = false;
     _isUnityComparisonLoaded = false;
     _comparisonFramesSent = false;
@@ -617,6 +620,7 @@ class _ClientUnityRecordingScreenState
   void dispose() {
     WakelockPlus.disable();
     _autoStartTimer?.cancel();
+    _comparisonSendTimer?.cancel();
     _stopSetupStream();
     _cameraController?.dispose();
     _weightController.dispose();
@@ -1460,6 +1464,13 @@ class _ClientUnityRecordingScreenState
     if (message == UnityMessageContract.unityEventSceneLoaded) {
       setState(() => _isUnityComparisonLoaded = true);
       _sendComparisonFramesToUnity();
+      return;
+    }
+    // Unity echoes back when EnterComparisonMode is processed.
+    if (message == UnityMessageContract.unityEventComparisonEntered) {
+      _comparisonSendTimer?.cancel();
+      _comparisonSendTimer = null;
+      if (mounted) setState(() => _comparisonFramesSent = true);
     }
   }
 
@@ -1468,11 +1479,7 @@ class _ClientUnityRecordingScreenState
     final state = ref.read(clientRecordingProvider(widget.exerciseId));
     if (state is! ClientRecordingComplete) return;
     if (_comparisonFramesSent) return;
-    if (state.referenceLandmarkFrames.isEmpty && state.clientLandmarkFrames.isEmpty) return;
 
-    _comparisonFramesSent = true;
-
-    // Set the recorded angle hint on both comparison models.
     sendToUnity(
       UnityMessageContract.gameObjectName,
       UnityMessageContract.methodSetRecordingAngleHint,
@@ -1516,6 +1523,8 @@ class _ClientUnityRecordingScreenState
                 setState(() {
                   _showUnityComparison = !_showUnityComparison;
                   if (!_showUnityComparison) {
+                    _comparisonSendTimer?.cancel();
+                    _comparisonSendTimer = null;
                     _isUnityComparisonLoaded = false;
                     _comparisonFramesSent = false;
                     sendToUnity(
@@ -1570,14 +1579,27 @@ class _ClientUnityRecordingScreenState
     );
   }
 
+
+
   Widget _buildUnityComparisonView(
     BuildContext context,
     ClientRecordingComplete state,
   ) {
-    // Send frames once Unity reports scene_loaded.
-    if (_isUnityComparisonLoaded && !_comparisonFramesSent) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Unity may already be running (scene_loaded already sent) or may still be
+    // attaching. Retry sending frames on a timer until they are acknowledged.
+    if (!_comparisonFramesSent) {
+      _comparisonSendTimer?.cancel();
+      _comparisonSendTimer = Timer.periodic(const Duration(milliseconds: 400), (timer) {
+        if (!mounted || !_showUnityComparison || _comparisonFramesSent) {
+          timer.cancel();
+          _comparisonSendTimer = null;
+          return;
+        }
         _sendComparisonFramesToUnity();
+      });
+      // First attempt as soon as the frame is built.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _showUnityComparison) _sendComparisonFramesToUnity();
       });
     }
 
@@ -1587,7 +1609,7 @@ class _ClientUnityRecordingScreenState
         fit: StackFit.expand,
         children: [
           EmbedUnity(onMessageFromUnity: _onComparisonMessageFromUnity),
-          if (!_isUnityComparisonLoaded)
+          if (!_comparisonFramesSent)
             Container(
               color: const Color(0xFF0F0F1A),
               child: const Center(
@@ -1615,14 +1637,14 @@ class _ClientUnityRecordingScreenState
   ) {
     return Row(
       children: [
-        // Coach skeleton (cyan)
+        // Coach skeleton (green)
         Expanded(
           child: Column(
             children: [
               Text(
                 'Coach',
                 style: Theme.of(context).textTheme.labelSmall
-                    ?.copyWith(color: Colors.cyanAccent),
+                    ?.copyWith(color: Colors.greenAccent),
               ),
               const SizedBox(height: 4),
               Expanded(
@@ -1630,7 +1652,7 @@ class _ClientUnityRecordingScreenState
                     ? PoseViewWidget(
                         landmarkFrames: state.referenceLandmarkFrames,
                         mode: PoseViewMode.raw2D,
-                        color: Colors.cyanAccent,
+                        color: Colors.greenAccent,
                         backgroundColor: const Color(0xFF0F0F1A),
                         showControls: false,
                         borderRadius: BorderRadius.circular(12),
@@ -1653,14 +1675,14 @@ class _ClientUnityRecordingScreenState
           ),
         ),
         const SizedBox(width: 8),
-        // Client skeleton (green)
+        // Client skeleton (orange)
         Expanded(
           child: Column(
             children: [
               Text(
                 'You',
                 style: Theme.of(context).textTheme.labelSmall
-                    ?.copyWith(color: Colors.greenAccent),
+                    ?.copyWith(color: Colors.orangeAccent),
               ),
               const SizedBox(height: 4),
               Expanded(
@@ -1668,7 +1690,7 @@ class _ClientUnityRecordingScreenState
                     ? PoseViewWidget(
                         landmarkFrames: state.clientLandmarkFrames,
                         mode: PoseViewMode.raw2D,
-                        color: Colors.greenAccent,
+                        color: Colors.orangeAccent,
                         backgroundColor: const Color(0xFF0F0F1A),
                         showControls: false,
                         borderRadius: BorderRadius.circular(12),

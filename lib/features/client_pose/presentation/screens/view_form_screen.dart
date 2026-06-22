@@ -469,7 +469,7 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
     sendToUnity(
       UnityMessageContract.gameObjectName,
       UnityMessageContract.methodSetSkeletonColor,
-      '#00FFFF',
+      '#FFA500',
     );
     sendToUnity(
       UnityMessageContract.gameObjectName,
