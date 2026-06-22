@@ -744,39 +744,49 @@ class _ProcessingOverlay extends StatelessWidget {
         (state.phase == RecordingPhase.processing
             ? 'Processing landmarks...'
             : 'Uploading form...');
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final percent = (state.processingProgress * 100).toStringAsFixed(0);
     return Container(
-      color: Colors.black87,
+      color: isDark ? Colors.black87 : Colors.white.withValues(alpha: 0.95),
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             SizedBox(
-              width: 120,
-              height: 120,
+              width: 72,
+              height: 72,
               child: CircularProgressIndicator(
                 value: state.processingProgress > 0
                     ? state.processingProgress
                     : null,
-                strokeWidth: 6,
-                color: AppColors.primaryDark,
+                strokeWidth: 4,
               ),
             ),
             const SizedBox(height: 24),
             Text(
               message,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(color: Colors.white),
-              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 12),
             Text(
               '$percent%',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.white,
+              style: TextStyle(
+                fontSize: 28,
                 fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white70 : Colors.black87,
                 fontFamily: 'JetBrains Mono',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                'This may take a moment.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey, height: 1.4),
               ),
             ),
           ],
@@ -786,10 +796,38 @@ class _ProcessingOverlay extends StatelessWidget {
   }
 }
 
-/// Overlay shown on successful completion.
-class _CompleteOverlay extends StatelessWidget {
+/// Overlay shown on successful completion. Auto-pops after 1.5s.
+class _CompleteOverlay extends StatefulWidget {
   const _CompleteOverlay({this.form});
   final ExerciseFormModel? form;
+
+  @override
+  State<_CompleteOverlay> createState() => _CompleteOverlayState();
+}
+
+class _CompleteOverlayState extends State<_CompleteOverlay> {
+  Timer? _autoPopTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _autoPopTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) {
+        context.pop(widget.form?.id);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoPopTimer?.cancel();
+    super.dispose();
+  }
+
+  void _dismiss() {
+    _autoPopTimer?.cancel();
+    context.pop(widget.form?.id);
+  }
 
   String _formatDate(DateTime? dt) {
     if (dt == null) return 'Just now';
@@ -817,10 +855,10 @@ class _CompleteOverlay extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            if (form != null) ...[
+            if (widget.form != null) ...[
               const SizedBox(height: 8),
               Text(
-                '${form!.cameraAngle.displayName} · ${_formatDate(form!.createdAt)}',
+                '${widget.form!.cameraAngle.displayName} · ${_formatDate(widget.form!.createdAt)}',
                 style: Theme.of(
                   context,
                 ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
@@ -828,7 +866,7 @@ class _CompleteOverlay extends StatelessWidget {
             ],
             const SizedBox(height: 32),
             ElevatedButton(
-              onPressed: () => context.pop(form?.id),
+              onPressed: _dismiss,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryDark,
                 foregroundColor: Colors.white,

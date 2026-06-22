@@ -5,6 +5,7 @@ import '../../../../core/utils/app_error.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../../providers/auth_state_provider.dart';
 import '../../../../services/outbox/outbox_service.dart';
+import '../../../client_pose/data/client_pose_repository.dart';
 import '../../../gains_coins/data/coins_repository.dart';
 import '../../data/models/models.dart';
 import '../../data/workout_repository.dart';
@@ -193,6 +194,10 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
     // not the local Routines table.
     await _repository.syncPrograms();
     if (!ref.mounted) return;
+
+    // Pre-cache reference forms for all exercises across all programs
+    // so pose analysis works offline once the user starts a workout.
+    _preCacheForms(ref);
 
     // Check for an existing active session for the same routine first.
     // This prevents creating orphan sessions when the user leaves and
@@ -520,6 +525,25 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
 
     // All exercises completed
     return routine.exercises.length;
+  }
+
+  /// Pre-cache reference pose forms for all exercises across the user's
+  /// assigned programs so "Analyze Form" works offline during a workout.
+  ///
+  /// Fire-and-forget — never blocks the session start flow.
+  void _preCacheForms(Ref ref) {
+    final poseRepo = ref.read(clientPoseRepositoryProvider);
+    _repository.getPrograms().then((result) {
+      final programs = result.valueOrNull;
+      if (programs == null) return;
+      for (final p in programs) {
+        for (final r in p.routines) {
+          for (final e in r.exercises) {
+            poseRepo.preCacheExerciseForms([e.exerciseId]);
+          }
+        }
+      }
+    });
   }
 }
 

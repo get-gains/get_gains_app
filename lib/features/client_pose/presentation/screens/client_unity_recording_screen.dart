@@ -88,6 +88,11 @@ class _ClientUnityRecordingScreenState
   // Defaults to false — auto-enabled when Unity sends scene_loaded.
   // Prevents native crash dialog on emulators where libmain.so is absent.
   bool _showUnity = false;
+
+  // Results screen: show side-by-side 3D Unity comparison instead of 2D skeletons.
+  bool _showUnityComparison = false;
+  bool _isUnityComparisonLoaded = false;
+  bool _comparisonFramesSent = false;
   // ── Workout mode: set logger ─────────────────────────────────────────────────────
   bool get _isWorkoutMode => widget.workoutSessionId != null;
   final TextEditingController _weightController = TextEditingController();
@@ -395,6 +400,16 @@ class _ClientUnityRecordingScreenState
       UnityMessageContract.cameraAngleDiagonal,
     );
 
+    // Tell the retargeter the recorded angle so 45° body yaw stays stable.
+    final angleHint = state is ClientRecordingReady
+        ? state.cameraAngle
+        : (state as ClientRecordingActive).cameraAngle;
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodSetRecordingAngleHint,
+      angleHint,
+    );
+
     // Reference skeleton: cyan color
     sendToUnity(
       UnityMessageContract.gameObjectName,
@@ -509,6 +524,16 @@ class _ClientUnityRecordingScreenState
     _cancelAutoStartCountdown();
     _repsController.clear();
     _weightController.clear();
+    if (_showUnityComparison || _isUnityComparisonLoaded) {
+      sendToUnity(
+        UnityMessageContract.gameObjectName,
+        UnityMessageContract.methodExitComparisonMode,
+        '',
+      );
+    }
+    _showUnityComparison = false;
+    _isUnityComparisonLoaded = false;
+    _comparisonFramesSent = false;
     ref
         .read(clientRecordingProvider(widget.exerciseId).notifier)
         .resetForNewAttempt();
@@ -1429,6 +1454,246 @@ class _ClientUnityRecordingScreenState
     );
   }
 
+  /// Handles Unity messages from the results-screen comparison EmbedUnity.
+  void _onComparisonMessageFromUnity(String message) {
+    if (!mounted) return;
+    if (message == UnityMessageContract.unityEventSceneLoaded) {
+      setState(() => _isUnityComparisonLoaded = true);
+      _sendComparisonFramesToUnity();
+    }
+  }
+
+  /// Sends reference + client frames to Unity's side-by-side comparison mode.
+  void _sendComparisonFramesToUnity() {
+    final state = ref.read(clientRecordingProvider(widget.exerciseId));
+    if (state is! ClientRecordingComplete) return;
+    if (_comparisonFramesSent) return;
+    if (state.referenceLandmarkFrames.isEmpty && state.clientLandmarkFrames.isEmpty) return;
+
+    _comparisonFramesSent = true;
+
+    // Set the recorded angle hint on both comparison models.
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodSetRecordingAngleHint,
+      state.result.cameraAngle,
+    );
+
+    final payload = jsonEncode({
+      'referenceFrames': state.referenceLandmarkFrames.map((f) => f.toJson()).toList(),
+      'clientFrames': state.clientLandmarkFrames.map((f) => f.toJson()).toList(),
+      'fps': 15,
+      'loop': true,
+    });
+
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodEnterComparisonMode,
+      payload,
+    );
+  }
+
+  /// Builds the form comparison card with a 2D/3D toggle in the top-right.
+  Widget _buildComparisonSection(
+    BuildContext context,
+    ClientRecordingComplete state,
+    bool isDark,
+  ) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Form Comparison',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            // 2D ↔ 3D comparison toggle
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _showUnityComparison = !_showUnityComparison;
+                  if (!_showUnityComparison) {
+                    _isUnityComparisonLoaded = false;
+                    _comparisonFramesSent = false;
+                    sendToUnity(
+                      UnityMessageContract.gameObjectName,
+                      UnityMessageContract.methodExitComparisonMode,
+                      '',
+                    );
+                  }
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? AppColors.surface1Dark
+                      : AppColors.surface1Light,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _showUnityComparison ? Icons.view_in_ar : Icons.grain,
+                      size: 16,
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _showUnityComparison ? '3D' : '2D',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 260,
+          child: _showUnityComparison
+              ? _buildUnityComparisonView(context, state)
+              : _build2DComparisonView(context, state),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUnityComparisonView(
+    BuildContext context,
+    ClientRecordingComplete state,
+  ) {
+    // Send frames once Unity reports scene_loaded.
+    if (_isUnityComparisonLoaded && !_comparisonFramesSent) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _sendComparisonFramesToUnity();
+      });
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          EmbedUnity(onMessageFromUnity: _onComparisonMessageFromUnity),
+          if (!_isUnityComparisonLoaded)
+            Container(
+              color: const Color(0xFF0F0F1A),
+              child: const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(color: Colors.cyanAccent),
+                    SizedBox(height: 12),
+                    Text(
+                      'Loading 3D comparison...',
+                      style: TextStyle(color: Colors.cyanAccent),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _build2DComparisonView(
+    BuildContext context,
+    ClientRecordingComplete state,
+  ) {
+    return Row(
+      children: [
+        // Coach skeleton (cyan)
+        Expanded(
+          child: Column(
+            children: [
+              Text(
+                'Coach',
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: Colors.cyanAccent),
+              ),
+              const SizedBox(height: 4),
+              Expanded(
+                child: state.referenceLandmarkFrames.isNotEmpty
+                    ? PoseViewWidget(
+                        landmarkFrames: state.referenceLandmarkFrames,
+                        mode: PoseViewMode.raw2D,
+                        color: Colors.cyanAccent,
+                        backgroundColor: const Color(0xFF0F0F1A),
+                        showControls: false,
+                        borderRadius: BorderRadius.circular(12),
+                        mirrorX: true,
+                      )
+                    : Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F0F1A),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'No data',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Client skeleton (green)
+        Expanded(
+          child: Column(
+            children: [
+              Text(
+                'You',
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: Colors.greenAccent),
+              ),
+              const SizedBox(height: 4),
+              Expanded(
+                child: state.clientLandmarkFrames.isNotEmpty
+                    ? PoseViewWidget(
+                        landmarkFrames: state.clientLandmarkFrames,
+                        mode: PoseViewMode.raw2D,
+                        color: Colors.greenAccent,
+                        backgroundColor: const Color(0xFF0F0F1A),
+                        showControls: false,
+                        borderRadius: BorderRadius.circular(12),
+                        mirrorX: true,
+                      )
+                    : Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F0F1A),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'No data',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildResults(
     BuildContext context,
     ClientRecordingComplete state,
@@ -1446,98 +1711,10 @@ class _ClientUnityRecordingScreenState
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          // ── Side-by-side skeleton comparison ──────────────────────────
+          // ── Side-by-side form comparison ─────────────────────────────
           if (state.referenceLandmarkFrames.isNotEmpty ||
               state.clientLandmarkFrames.isNotEmpty) ...[
-            Text(
-              'Form Comparison',
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 220,
-              child: Row(
-                children: [
-                  // Coach skeleton (cyan)
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Text(
-                          'Coach',
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(color: Colors.cyanAccent),
-                        ),
-                        const SizedBox(height: 4),
-                        Expanded(
-                          child: state.referenceLandmarkFrames.isNotEmpty
-                              ? PoseViewWidget(
-                                  landmarkFrames: state.referenceLandmarkFrames,
-                                  mode: PoseViewMode.raw2D,
-                                  color: Colors.cyanAccent,
-                                  backgroundColor: const Color(0xFF0F0F1A),
-                                  showControls: false,
-                                  borderRadius: BorderRadius.circular(12),
-                                  mirrorX: true,
-                                )
-                              : Container(
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF0F0F1A),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Center(
-                                    child: Text(
-                                      'No data',
-                                      style: TextStyle(color: Colors.grey),
-                                    ),
-                                  ),
-                                ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Client skeleton (green)
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Text(
-                          'You',
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(color: Colors.greenAccent),
-                        ),
-                        const SizedBox(height: 4),
-                        Expanded(
-                          child: state.clientLandmarkFrames.isNotEmpty
-                              ? PoseViewWidget(
-                                  landmarkFrames: state.clientLandmarkFrames,
-                                  mode: PoseViewMode.raw2D,
-                                  color: Colors.greenAccent,
-                                  backgroundColor: const Color(0xFF0F0F1A),
-                                  showControls: false,
-                                  borderRadius: BorderRadius.circular(12),
-                                  mirrorX: true,
-                                )
-                              : Container(
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF0F0F1A),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Center(
-                                    child: Text(
-                                      'No data',
-                                      style: TextStyle(color: Colors.grey),
-                                    ),
-                                  ),
-                                ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _buildComparisonSection(context, state, isDark),
             const SizedBox(height: 16),
           ],
 
@@ -1558,12 +1735,6 @@ class _ClientUnityRecordingScreenState
                     fontWeight: FontWeight.bold,
                     color: scoreColor,
                   ),
-                ),
-                Text(
-                  _getScoreLabel(score),
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: scoreColor),
                 ),
               ],
             ),
@@ -2315,15 +2486,6 @@ class _ClientUnityRecordingScreenState
         style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
       ),
     );
-  }
-
-  String _getScoreLabel(double score) {
-    if (score >= 0.9) return 'Excellent';
-    if (score >= 0.8) return 'Great';
-    if (score >= 0.7) return 'Good';
-    if (score >= 0.6) return 'Fair';
-    if (score >= 0.4) return 'Needs Work';
-    return 'Keep Practicing';
   }
 
   String _formatAngle(String angle) {

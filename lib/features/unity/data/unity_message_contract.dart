@@ -73,6 +73,18 @@ class UnityMessageContract {
   /// Default 3/4 diagonal camera angle sent from every Unity-embedded screen.
   static const String cameraAngleDiagonal = 'DIAGONAL';
 
+  /// Tell the pose retargeter the recorded camera angle (e.g. "ANGLE_45_RIGHT").
+  /// This stabilises body yaw when depth cues are ambiguous.
+  static const String methodSetRecordingAngleHint = 'SetRecordingAngleHint';
+
+  /// Enter side-by-side 3D comparison mode.
+  /// Message: JSON with { referenceFrames, clientFrames, fps, loop }
+  /// The left (coach) model is tinted green and the right (client) model orange.
+  static const String methodEnterComparisonMode = 'EnterComparisonMode';
+
+  /// Exit side-by-side 3D comparison mode and return to single-avatar playback.
+  static const String methodExitComparisonMode = 'ExitComparisonMode';
+
   /// Debug / tuning for humanoid pose vs landmarks. Message: JSON, e.g.
   /// `{"swapArmLandmarks":false,"swapLegLandmarks":false,"forceShowStickFigure":false,"invertArmDepthZ":true,"invertHeadDepthZ":true,"invertLegDepthZ":true}`
   static const String methodSetPoseDebugOptions = 'SetPoseDebugOptions';

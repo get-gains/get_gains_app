@@ -122,6 +122,11 @@ class _Form3DPreviewScreenState extends ConsumerState<Form3DPreviewScreen> {
     );
     sendToUnity(
       UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodSetRecordingAngleHint,
+      widget.cameraAngle,
+    );
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
       UnityMessageContract.methodSetSkeletonColor,
       '#00FFFF',
     );

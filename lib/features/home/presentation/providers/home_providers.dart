@@ -100,7 +100,41 @@ Future<TodayRoutineModel> activeToday(Ref ref) async {
 
   // Coach flow (subscribed + has coach)
   if (s.hasCoach && s.isSubscribed && s.coachToday != null) {
-    return s.coachToday!.toRoutineModel();
+    final model = s.coachToday!.toRoutineModel();
+
+    // Enrich with exercises from cached programs (server only returns exerciseCount)
+    if (model.today != null) {
+      final workoutRepo = ref.watch(workoutRepositoryProvider);
+      final programsResult = await workoutRepo.getPrograms();
+      final programs = programsResult.valueOrNull ?? [];
+      for (final p in programs) {
+        for (final r in p.routines) {
+          if (r.id == model.today!.programRoutineId && r.exercises.isNotEmpty) {
+            return TodayRoutineModel(
+              isRestDay: false,
+              completedToday: model.completedToday,
+              today: TodayRoutineDetails(
+                programRoutineId: model.today!.programRoutineId,
+                dayOfWeek: model.today!.dayOfWeek,
+                assignedProgramId: p.id,
+                programName: p.name,
+                routine: RoutineModel(
+                  id: r.id,
+                  name: r.name,
+                  description: r.description,
+                  estimatedDurationMinutes: r.estimatedDurationMinutes,
+                  exercises: r.exercises,
+                  muscleGroupsTargeted: r.muscleGroupsTargeted,
+                  daysOfWeek: r.daysOfWeek,
+                ),
+              ),
+            );
+          }
+        }
+      }
+    }
+
+    return model;
   }
 
   // Standalone flow — load full program detail from local DB

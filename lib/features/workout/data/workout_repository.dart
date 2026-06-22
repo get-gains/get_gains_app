@@ -11,6 +11,7 @@ import '../../../services/api/api_client.dart';
 import '../../../services/cache/cache_service.dart';
 import '../../../services/database/app_database.dart';
 import '../../../services/outbox/outbox_service.dart';
+import '../../../services/storage/secure_storage_service.dart';
 import '../../home/data/models/today_status_model.dart';
 import '../../subscription/data/models/subscription_model.dart';
 import 'models/models.dart';
@@ -23,15 +24,18 @@ class WorkoutRepository {
     required ApiClient apiClient,
     required OutboxService outbox,
     required CacheService cache,
+    required SecureStorageService storage,
   }) : _db = database,
        _apiClient = apiClient,
        _outbox = outbox,
-       _cache = cache;
+       _cache = cache,
+       _storage = storage;
 
   final AppDatabase _db;
   final ApiClient _apiClient;
   final OutboxService _outbox;
   final CacheService _cache;
+  final SecureStorageService _storage;
 
   // ============== Cache keys ==============
 
@@ -40,6 +44,7 @@ class WorkoutRepository {
   static const _ckPrograms = 'assigned_programs';
   static const _ckTodayRoutine = 'today_routine';
   static const _ckWeeklyStats = 'unified_weekly_stats';
+  static const _ckTodayStatus = 'today_status';
   static String _ckSessionHistory(String source) => 'unified_history_$source';
   static String _ckSessionDetail(String id) => 'session_detail:$id';
 
@@ -811,6 +816,7 @@ class WorkoutRepository {
           'Today status: isCoach=${model.isCoach} subscribed=${model.isSubscribed} hasSubscribedCoach=${model.hasCoach}',
           tag: 'WorkoutRepo',
         );
+        _cache.put(_ckTodayStatus, jsonEncode(result.value), version: DateTime.now().toIso8601String());
         return Success(model);
       } catch (e) {
         AppLogger.error('Failed to parse today status', tag: 'WorkoutRepo', error: e);
@@ -825,6 +831,12 @@ class WorkoutRepository {
         AppLogger.info('Loaded today status via legacy fallback', tag: 'WorkoutRepo');
         return Success(legacyStatus);
       }
+    }
+    AppLogger.warning('Server today status unavailable — trying offline derivation', tag: 'WorkoutRepo');
+    final offlineStatus = await _buildTodayStatusOffline();
+    if (offlineStatus != null) {
+      AppLogger.info('Loaded today status via offline derivation', tag: 'WorkoutRepo');
+      return Success(offlineStatus);
     }
     AppLogger.error('Failed to fetch today status', tag: 'WorkoutRepo', error: failure.error);
     return Failure(failure.error);
@@ -987,6 +999,142 @@ class WorkoutRepository {
     final raw = _asString(value);
     if (raw == null) return null;
     return DateTime.tryParse(raw);
+  }
+
+  // ============== Today Status Offline Derivation ==============
+
+  Future<TodayStatusModel?> _buildTodayStatusOffline() async {
+    try {
+      // 1. Check cached subscription status
+      bool isSubscribed = false;
+      TodaySubscriptionInfo? subscription;
+      final subCache = await _cache.getRaw('subscription_status');
+      if (subCache != null) {
+        final subData = jsonDecode(subCache) as Map<String, dynamic>;
+        isSubscribed = _asBool(subData['isSubscribed']) ?? false;
+        final rawSub = _asMap(subData['subscription']);
+        if (rawSub != null) {
+          final id = _asString(rawSub['id']);
+          final status = _parseSubscriptionStatus(rawSub['status']);
+          final currentPeriodEnd = _parseDateTime(rawSub['currentPeriodEnd']);
+          final plan = _asMap(rawSub['plan']);
+          final tierLevel = _asInt(rawSub['tierLevel']) ?? _asInt(plan?['tierLevel']) ?? 0;
+          if (id != null && status != null && currentPeriodEnd != null) {
+            subscription = TodaySubscriptionInfo(
+              id: id,
+              status: status,
+              tierLevel: tierLevel,
+              currentPeriodEnd: currentPeriodEnd,
+            );
+          }
+        }
+      }
+
+      // 2. Check cached assigned programs for today's workout
+      bool hasCoach = false;
+      TodayWorkoutDetails? coachToday;
+      final programsCache = await _cache.getRaw(_ckPrograms);
+      if (programsCache != null) {
+        final programsData = jsonDecode(programsCache) as Map<String, dynamic>;
+        final programsList = programsData['programs'] as List?;
+        if (programsList != null && programsList.isNotEmpty) {
+          hasCoach = true;
+
+          final todayDayName = _getTodayDayName();
+          final userId = await _storage.getUserId();
+
+          for (final p in programsList) {
+            final program = _asMap(p);
+            if (program == null) continue;
+            if (!(_asBool(program['isActive']) ?? true)) continue;
+
+            final routines = program['routines'];
+            if (routines is! List || routines.isEmpty) continue;
+
+            for (final r in routines) {
+              final routine = _asMap(r);
+              if (routine == null) continue;
+
+              final daysOfWeek = routine['daysOfWeek'];
+              final List<String> days = daysOfWeek is List
+                  ? daysOfWeek.map((d) => d.toString().toUpperCase()).toList()
+                  : <String>[];
+
+              if (!days.contains(todayDayName)) continue;
+
+              final programRoutineId = _asString(routine['id']);
+              final routineName = _asString(routine['name']);
+              final exercises = routine['exercises'] is List ? routine['exercises'] as List : <dynamic>[];
+              final estimatedMinutes = _asInt(routine['estimatedDurationMinutes']) ??
+                  _asInt(routine['estimated_duration_minutes']) ?? 0;
+
+              // Check if completed today
+              bool completedToday = false;
+              if (programRoutineId != null && userId != null) {
+                final completed = await _db.getTodayCompletedSessionForRoutine(
+                  userId,
+                  programRoutineId,
+                );
+                completedToday = completed != null;
+              }
+
+              coachToday = TodayWorkoutDetails(
+                isRestDay: false,
+                programRoutineId: programRoutineId,
+                dayOfWeek: todayDayName,
+                programName: _asString(program['name']),
+                routineName: routineName,
+                exerciseCount: exercises.length,
+                estimatedMinutes: estimatedMinutes,
+                completedToday: completedToday,
+              );
+              break; // Found today's routine
+            }
+            if (coachToday != null) break;
+          }
+        }
+      }
+
+      if (coachToday == null && !hasCoach) {
+        // Check cached today status for standalone info
+        final todayCache = await _cache.getRaw(_ckTodayStatus);
+        if (todayCache != null) {
+          final todayData = jsonDecode(todayCache) as Map<String, dynamic>;
+          final standalone = todayData['standalone'] as Map<String, dynamic>?;
+          if (standalone != null) {
+            return TodayStatusModel(
+              isSubscribed: isSubscribed,
+              hasCoach: hasCoach,
+              subscription: subscription,
+              standalone: StandaloneStatus.fromJson(standalone),
+            );
+          }
+        }
+        return TodayStatusModel(
+          isSubscribed: isSubscribed,
+          hasCoach: hasCoach,
+          subscription: subscription,
+        );
+      }
+
+      return TodayStatusModel(
+        isSubscribed: isSubscribed,
+        hasCoach: hasCoach,
+        subscription: subscription,
+        coachToday: coachToday,
+      );
+    } catch (e, st) {
+      AppLogger.error('Offline today status derivation failed', tag: 'WorkoutRepo', error: e, stackTrace: st);
+      return null;
+    }
+  }
+
+  String _getTodayDayName() {
+    const days = [
+      'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY',
+      'FRIDAY', 'SATURDAY', 'SUNDAY',
+    ];
+    return days[DateTime.now().weekday - 1];
   }
 
   // ============== Stats Operations ==============
@@ -1238,5 +1386,6 @@ WorkoutRepository workoutRepository(Ref ref) {
     apiClient: ref.watch(apiClientProvider),
     outbox: ref.watch(outboxServiceProvider),
     cache: ref.watch(cacheServiceProvider),
+    storage: ref.watch(secureStorageServiceProvider),
   );
 }
