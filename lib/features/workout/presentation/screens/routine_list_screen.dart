@@ -8,55 +8,18 @@ import '../../../../core/access/access_gated.dart';
 import '../../../../core/access/access_guard.dart';
 import '../../../subscription/subscription.dart';
 import '../../data/models/models.dart';
-import '../../data/workout_repository.dart';
+import '../providers/routine_list_provider.dart';
 
 /// Routine List Screen
 ///
 /// Displays available workout routines for the user to start.
-class RoutineListScreen extends ConsumerStatefulWidget {
+class RoutineListScreen extends ConsumerWidget {
   const RoutineListScreen({super.key});
 
   @override
-  ConsumerState<RoutineListScreen> createState() => _RoutineListScreenState();
-}
-
-class _RoutineListScreenState extends ConsumerState<RoutineListScreen> {
-  late Future<List<RoutineModel>> _routinesFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadRoutines();
-  }
-
-  void _loadRoutines() {
-    _routinesFuture = _syncAndLoadRoutines();
-  }
-
-  Future<List<RoutineModel>> _syncAndLoadRoutines() async {
-    final repo = ref.read(workoutRepositoryProvider);
-
-    // Try to sync from server first
-    final syncResult = await repo.syncRoutines();
-
-    // If sync succeeded, return server data
-    return syncResult.when(
-      success: (routines) => routines,
-      failure: (_) async {
-        // If sync failed (offline), fallback to local DB
-        final localResult = await repo.getRoutines();
-        return localResult.valueOrNull ?? [];
-      },
-    );
-  }
-
-  void _openRoutineDetail(RoutineModel routine) {
-    context.push('/routines/${routine.id}', extra: routine);
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final routinesAsync = ref.watch(routineListProvider);
 
     return Scaffold(
       backgroundColor: isDark
@@ -69,15 +32,18 @@ class _RoutineListScreenState extends ConsumerState<RoutineListScreen> {
         ),
         feature: SubscriptionFeature.coachRoutines,
         compact: true,
-        child: FutureBuilder<List<RoutineModel>>(
-          future: _routinesFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            final routines = snapshot.data ?? [];
-
+        child: routinesAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (_, __) => Center(
+            child: AppEmptyState(
+              icon: Icons.error_outline,
+              title: 'Error',
+              description: 'Failed to load routines.',
+              actionLabel: 'Refresh',
+              onAction: () => ref.invalidate(routineListProvider),
+            ),
+          ),
+          data: (routines) {
             if (routines.isEmpty) {
               return Center(
                 child: AppEmptyState(
@@ -87,21 +53,13 @@ class _RoutineListScreenState extends ConsumerState<RoutineListScreen> {
                       'You don\'t have any routines yet.\n'
                       'Routines will appear here when assigned by your coach.',
                   actionLabel: 'Refresh',
-                  onAction: () {
-                    setState(() {
-                      _loadRoutines();
-                    });
-                  },
+                  onAction: () => ref.invalidate(routineListProvider),
                 ),
               );
             }
 
             return RefreshIndicator(
-              onRefresh: () async {
-                setState(() {
-                  _loadRoutines();
-                });
-              },
+              onRefresh: () async => ref.invalidate(routineListProvider),
               child: ListView.builder(
                 padding: const EdgeInsets.all(16),
                 itemCount: routines.length,
@@ -109,7 +67,10 @@ class _RoutineListScreenState extends ConsumerState<RoutineListScreen> {
                   final routine = routines[index];
                   return _RoutineCard(
                     routine: routine,
-                    onTap: () => _openRoutineDetail(routine),
+                    onTap: () => context.push(
+                      '/routines/${routine.id}',
+                      extra: routine,
+                    ),
                   );
                 },
               ),

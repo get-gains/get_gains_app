@@ -269,27 +269,32 @@ class _StandaloneWorkoutScreenState
         icon: Icons.edit_note,
         iconColor: AppColors.primaryDark,
         title: 'Workout Notes',
-        contentWidget: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'How did it feel? Optional — totally fine to skip.',
-              style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.mutedForegroundDark,
-              ),
+        contentWidget: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 200),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'How did it feel? Optional — totally fine to skip.',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.mutedForegroundDark,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    hintText:
+                        'e.g. Felt strong on bench, lower back tight on squat…',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                hintText:
-                    'e.g. Felt strong on bench, lower back tight on squat…',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
+          ),
         ),
         actionsDirection: Axis.vertical,
         actions: [
@@ -297,7 +302,6 @@ class _StandaloneWorkoutScreenState
             label: 'Save & Finish',
             onPressed: () {
               final text = controller.text;
-              controller.dispose();
               Navigator.pop(ctx, text);
             },
             isPrimary: true,
@@ -306,7 +310,6 @@ class _StandaloneWorkoutScreenState
           AppDialogAction(
             label: 'Skip',
             onPressed: () {
-              controller.dispose();
               Navigator.pop(ctx, null);
             },
             expanded: true,

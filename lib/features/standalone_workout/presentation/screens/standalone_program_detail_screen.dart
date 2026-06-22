@@ -11,7 +11,7 @@ import '../../../../widgets/app_button.dart';
 import '../../../../widgets/app_card.dart';
 import '../../../../widgets/app_empty_state.dart';
 import '../../../../widgets/app_toast.dart';
-import '../../../workout/data/models/exercise_model.dart';
+import '../../data/helpers/model_conversion.dart';
 import '../../data/models/models.dart';
 import '../../data/standalone_workout_repository.dart';
 import '../providers/standalone_program_provider.dart';
@@ -167,7 +167,7 @@ class _StandaloneProgramDetailScreenState
                     programId: program.id,
                     onPerform: () => _performWorkout(program, routine),
                     onAddExercise: () =>
-                        _showAddExerciseDialog(program, routine.id),
+                        _showAddExerciseDialog(program, routine.routineId),
                     onDeleteRoutine: () =>
                         _deleteRoutine(program, routine.id),
                   );
@@ -232,15 +232,7 @@ class _StandaloneProgramDetailScreenState
             extra: <String, dynamic>{
               'session': session,
               'exercises': routine.exercises
-                  .map((e) => RoutineExerciseModel(
-                        id: e.id,
-                        exerciseId: e.exerciseId,
-                        sets: e.sets,
-                        repsMin: e.repsMin,
-                        repsMax: e.repsMax,
-                        restSeconds: e.restSeconds,
-                        orderInRoutine: e.orderInRoutine,
-                      ))
+                  .map((e) => e.toRoutineExerciseModel())
                   .toList(),
               'routineName': routine.routineName,
             },
@@ -308,7 +300,7 @@ class _StandaloneProgramDetailScreenState
     if (result != null && mounted) {
       final repo = ref.read(standaloneWorkoutRepositoryProvider);
       final routineExercises = program.routines
-          .firstWhere((r) => r.id == routineId)
+          .firstWhere((r) => r.routineId == routineId)
           .exercises;
 
       final createExerciseResult = await repo.createExercise(

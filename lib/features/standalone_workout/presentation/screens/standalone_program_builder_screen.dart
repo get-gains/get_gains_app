@@ -10,7 +10,6 @@ import '../../../../widgets/app_card.dart';
 import '../../../../widgets/app_empty_state.dart';
 import '../../../../widgets/app_toast.dart';
 import '../../data/models/models.dart';
-import '../../data/standalone_workout_repository.dart';
 import '../providers/standalone_program_builder_provider.dart';
 
 /// Standalone Program Builder Screen
@@ -304,30 +303,17 @@ class _StandaloneProgramBuilderScreenState
     );
 
     if (result != null && mounted) {
-      final repo = ref.read(standaloneWorkoutRepositoryProvider);
-      final createResult = await repo.createRoutine(
+      final notifier = ref.read(standaloneProgramBuilderProvider.notifier);
+      final success = await notifier.createAndAddRoutine(
         name: result['name']!,
         description: result['description']!,
+        orderInProgram: program.routines.length + 1,
       );
-      createResult.when(
-        success: (routineId) async {
-          final notifier =
-              ref.read(standaloneProgramBuilderProvider.notifier);
-          final success = await notifier.addRoutine(
-            routineId: routineId,
-            orderInProgram: program.routines.length + 1,
-          );
-          if (success && mounted) {
-            AppToast.success(context, 'Routine added');
-          }
-        },
-        failure: (error) {
-          if (mounted) {
-            AppToast.error(
-                context, 'Failed to create routine: ${error.message}');
-          }
-        },
-      );
+      if (success && mounted) {
+        AppToast.success(context, 'Routine added');
+      } else if (mounted) {
+        AppToast.error(context, 'Failed to create routine');
+      }
     }
   }
 
@@ -440,7 +426,7 @@ class _StandaloneProgramBuilderScreenState
                         icon: const Icon(Icons.add, size: 18),
                         label: const Text('Add Exercise'),
                         onPressed: () =>
-                            _showAddExerciseDialog(program, routine.id),
+                            _showAddExerciseDialog(program, routine.routineId),
                       ),
                     ],
                   ),
@@ -531,38 +517,26 @@ class _StandaloneProgramBuilderScreenState
     );
 
     if (result != null && mounted) {
-      final repo = ref.read(standaloneWorkoutRepositoryProvider);
       final notifier = ref.read(standaloneProgramBuilderProvider.notifier);
       final routineExercises = program.routines
-          .firstWhere((r) => r.id == routineId)
+          .firstWhere((r) => r.routineId == routineId)
           .exercises;
 
-      final createExerciseResult = await repo.createExercise(
+      final success = await notifier.createAndAddExercise(
+        routineId: routineId,
         name: result['name'] as String,
         description: result['name'] as String,
+        sets: result['sets'] as int,
+        repsMin: result['repsMin'] as int,
+        repsMax: result['repsMax'] as int,
+        restSeconds: result['rest'] as int,
+        orderInRoutine: routineExercises.length + 1,
       );
-      createExerciseResult.when(
-        success: (exerciseId) async {
-          final success = await notifier.addExercise(
-            routineId,
-            exerciseId: exerciseId,
-            sets: result['sets'] as int,
-            repsMin: result['repsMin'] as int,
-            repsMax: result['repsMax'] as int,
-            restSeconds: result['rest'] as int,
-            orderInRoutine: routineExercises.length + 1,
-          );
-          if (success && mounted) {
-            AppToast.success(context, 'Exercise added');
-          }
-        },
-        failure: (error) {
-          if (mounted) {
-            AppToast.error(
-                context, 'Failed to create exercise: ${error.message}');
-          }
-        },
-      );
+      if (success && mounted) {
+        AppToast.success(context, 'Exercise added');
+      } else if (mounted) {
+        AppToast.error(context, 'Failed to create exercise');
+      }
     }
   }
 

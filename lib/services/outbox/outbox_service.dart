@@ -155,7 +155,7 @@ class OutboxService {
     String operation,
     Map<String, dynamic> payload,
   ) {
-    const base = '/api';
+    const base = '';
 
     switch (entityType) {
       case 'workout_session':

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../widgets/widgets.dart';
+import '../../data/models/models.dart';
 import '../providers/session_detail_provider.dart';
 
 /// Session detail screen — full workout breakdown.

@@ -41,6 +41,7 @@ class WorkoutRepository {
   static const _ckTodayRoutine = 'today_routine';
   static const _ckWeeklyStats = 'unified_weekly_stats';
   static String _ckSessionHistory(String source) => 'unified_history_$source';
+  static String _ckSessionDetail(String id) => 'session_detail:$id';
 
   // ============== Exercise Operations ==============
 
@@ -1125,6 +1126,45 @@ class WorkoutRepository {
         return Failure(error);
       },
     );
+  }
+
+  // ============== Session Detail (Server + Cache) ==============
+
+  Future<Result<UnifiedSessionDetail?, AppError>> getSessionDetail(
+    String sessionId,
+  ) async {
+    try {
+      // 1. Try cache first
+      final cachedRaw = await _cache.getRaw(_ckSessionDetail(sessionId));
+      if (cachedRaw != null) {
+        final json = jsonDecode(cachedRaw) as Map<String, dynamic>;
+        final sessionJson = json['session'] as Map<String, dynamic>?;
+        if (sessionJson != null) {
+          return Success(UnifiedSessionDetail.fromJson(sessionJson));
+        }
+      }
+
+      // 2. Fetch from server
+      final result = await _apiClient.get<Map<String, dynamic>>(
+        ApiConstants.sessionDetail(sessionId),
+      );
+
+      return result.when(
+        success: (data) {
+          _cache.putJson(
+            _ckSessionDetail(sessionId),
+            data,
+            version: DateTime.now().toIso8601String(),
+          );
+          final sessionJson = data['session'] as Map<String, dynamic>?;
+          if (sessionJson == null) return const Success(null);
+          return Success(UnifiedSessionDetail.fromJson(sessionJson));
+        },
+        failure: (error) => Failure(error),
+      );
+    } catch (e) {
+      return Failure(UnknownError(message: e.toString()));
+    }
   }
 
   // ============== Unified Session History (Server + Cache) ==============

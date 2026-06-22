@@ -7,6 +7,7 @@ export 'assigned_program_model.dart';
 export 'exercise_model.dart';
 export 'routine_model.dart';
 export 'today_routine_model.dart';
+export 'unified_session_detail_model.dart';
 export 'unified_session_summary_model.dart';
 export 'monthly_insight_model.dart';
 export 'monthly_volume_model.dart';

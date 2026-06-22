@@ -7,74 +7,24 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../data/models/models.dart';
-import '../../data/standalone_workout_repository.dart';
 import '../providers/standalone_program_provider.dart';
 
-class StandaloneProgramsScreen extends ConsumerStatefulWidget {
+class StandaloneProgramsScreen extends ConsumerWidget {
   const StandaloneProgramsScreen({super.key});
 
   @override
-  ConsumerState<StandaloneProgramsScreen> createState() =>
-      _StandaloneProgramsScreenState();
-}
-
-class _StandaloneProgramsScreenState
-    extends ConsumerState<StandaloneProgramsScreen> {
-  final _scrollController = ScrollController();
-  int _offset = 0;
-  bool _hasMore = true;
-  bool _isLoadingMore = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _scrollController.addListener(_onScroll);
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent - 200 &&
-        _hasMore &&
-        !_isLoadingMore) {
-      _loadMore();
-    }
-  }
-
-  Future<void> _loadMore() async {
-    setState(() => _isLoadingMore = true);
-    _offset += 20;
-    final repo = ref.read(standaloneWorkoutRepositoryProvider);
-    final result = await repo.getPrograms(limit: 20, offset: _offset);
-    result.when(
-      success: (data) {
-        setState(() {
-          _hasMore = data.hasMore;
-          _isLoadingMore = false;
-        });
-        ref.invalidate(standaloneProgramListProvider);
-      },
-      failure: (_) => setState(() => _isLoadingMore = false),
-    );
-  }
-
-  Future<void> _refresh() async {
-    setState(() {
-      _offset = 0;
-      _hasMore = true;
-    });
-    ref.invalidate(standaloneProgramListProvider);
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final programsAsync = ref.watch(standaloneProgramListProvider);
+    final pagination = ref.watch(standaloneProgramPaginationProvider);
+
+    void loadMore() {
+      ref.read(standaloneProgramPaginationProvider.notifier).loadMore();
+    }
+
+    Future<void> refresh() async {
+      await ref.read(standaloneProgramPaginationProvider.notifier).reset();
+    }
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
@@ -99,7 +49,7 @@ class _StandaloneProgramsScreenState
           title: 'Could Not Load',
           description: error.toString(),
           actionLabel: 'Retry',
-          onAction: _refresh,
+          onAction: refresh,
         ),
         data: (response) {
           final programs = response.programs;
@@ -115,30 +65,39 @@ class _StandaloneProgramsScreenState
           }
 
           return RefreshIndicator(
-            onRefresh: _refresh,
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: programs.length + (_isLoadingMore ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index >= programs.length) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
+            onRefresh: refresh,
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                if (notification is ScrollEndNotification &&
+                    notification.metrics.pixels >=
+                        notification.metrics.maxScrollExtent - 200) {
+                  loadMore();
                 }
-                final program = programs[index];
-                return _ProgramListItem(
-                  program: program,
-                  isDark: isDark,
-                  onTap: () => context.push(
-                    AppRoutes.standaloneProgramDetail.replaceAll(
-                      ':id',
-                      program.id,
-                    ),
-                  ),
-                );
+                return false;
               },
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: programs.length + (pagination.isLoadingMore ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (index >= programs.length) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  final program = programs[index];
+                  return _ProgramListItem(
+                    program: program,
+                    isDark: isDark,
+                    onTap: () => context.push(
+                      AppRoutes.standaloneProgramDetail.replaceAll(
+                        ':id',
+                        program.id,
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
           );
         },

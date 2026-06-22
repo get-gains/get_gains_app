@@ -5,10 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
-import '../../../coach_programs/data/models/program_model.dart';
 import '../../../subscription/subscription.dart';
 import '../../data/models/models.dart';
-import '../../data/workout_repository.dart';
+import '../providers/program_list_provider.dart';
 
 /// My Program List Screen
 ///
@@ -19,48 +18,15 @@ import '../../data/workout_repository.dart';
 /// For lapsed subscribers (has coach but subscription expired):
 /// - Coach programs are shown read-only with a "Renew" badge (tap opens paywall)
 /// - Self-programs are shown normally and are fully accessible
-class MyProgramListScreen extends ConsumerStatefulWidget {
+class MyProgramListScreen extends ConsumerWidget {
   const MyProgramListScreen({super.key});
 
   @override
-  ConsumerState<MyProgramListScreen> createState() =>
-      _MyProgramListScreenState();
-}
-
-class _MyProgramListScreenState extends ConsumerState<MyProgramListScreen> {
-  late Future<List<AssignedProgramModel>> _programsFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPrograms();
-  }
-
-  void _loadPrograms() {
-    _programsFuture = _syncAndLoad();
-  }
-
-  /// Sync coach programs from server; gracefully fall back to local DB on
-  /// 402 (subscription expired) or any other network failure.
-  Future<List<AssignedProgramModel>> _syncAndLoad() async {
-    final repo = ref.read(workoutRepositoryProvider);
-
-    final syncResult = await repo.syncPrograms();
-    return syncResult.when(
-      success: (programs) => programs,
-      failure: (_) async {
-        // 402 / network failure — serve cached coach programs from local DB
-        final localResult = await repo.getPrograms();
-        return localResult.valueOrNull ?? [];
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final subscriptionTier = ref.watch(subscriptionTierProvider);
     final isSubscribed = ref.watch(isSubscribedProvider);
+    final programsAsync = ref.watch(programListProvider);
 
     return Scaffold(
       backgroundColor: isDark
@@ -70,121 +36,122 @@ class _MyProgramListScreenState extends ConsumerState<MyProgramListScreen> {
         title: const Text('My Program'),
         centerTitle: true,
       ),
-      body: isSubscribed
-          ? _buildSubscribedBody(isDark)
-          : _buildLapsedBody(isDark, subscriptionTier),
+      body: programsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (_, __) => Center(
+          child: AppEmptyState(
+            icon: Icons.error_outline,
+            title: 'Error',
+            description: 'Failed to load programs.',
+            actionLabel: 'Retry',
+            onAction: () => ref.invalidate(programListProvider),
+          ),
+        ),
+        data: (programs) {
+          final refresh = () => ref.invalidate(programListProvider);
+
+          if (isSubscribed) {
+            return _buildSubscribedBody(context, ref, isDark, programs, refresh);
+          }
+          return _buildLapsedBody(context, ref, isDark, subscriptionTier, programs, refresh);
+        },
+      ),
     );
   }
 
   // ─── Subscribed: normal coach-program list ────────────────────────────────
 
-  Widget _buildSubscribedBody(bool isDark) {
-    return FutureBuilder<List<AssignedProgramModel>>(
-      future: _programsFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
+  Widget _buildSubscribedBody(
+    BuildContext context,
+    WidgetRef ref,
+    bool isDark,
+    List<AssignedProgramModel> programs,
+    VoidCallback refresh,
+  ) {
+    if (programs.isEmpty) {
+      return Center(
+        child: AppEmptyState(
+          icon: Icons.book_outlined,
+          title: 'No Programs Yet',
+          description:
+              'Your coach hasn\'t assigned a program to you yet.\n'
+              'Check back after your coach sets up your training plan.',
+          actionLabel: 'Refresh',
+          onAction: refresh,
+        ),
+      );
+    }
 
-        final programs = snapshot.data ?? [];
-
-        if (programs.isEmpty) {
-          return Center(
-            child: AppEmptyState(
-              icon: Icons.book_outlined,
-              title: 'No Programs Yet',
-              description:
-                  'Your coach hasn\'t assigned a program to you yet.\n'
-                  'Check back after your coach sets up your training plan.',
-              actionLabel: 'Refresh',
-              onAction: () => setState(_loadPrograms),
+    return RefreshIndicator(
+      onRefresh: () async => refresh(),
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: programs.length,
+        separatorBuilder: (context, _) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final program = programs[index];
+          return _ProgramCard(
+            program: program,
+            isDark: isDark,
+            isLocked: false,
+            onTap: () => context.push(
+              AppRoutes.myProgramDetail.replaceFirst(
+                ':programId',
+                program.id,
+              ),
+              extra: program,
             ),
           );
-        }
-
-        return RefreshIndicator(
-          onRefresh: () async => setState(_loadPrograms),
-          child: ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: programs.length,
-            separatorBuilder: (context, _) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final program = programs[index];
-              return _ProgramCard(
-                program: program,
-                isDark: isDark,
-                isLocked: false,
-                onTap: () => context.push(
-                  AppRoutes.myProgramDetail.replaceFirst(
-                    ':programId',
-                    program.id,
-                  ),
-                  extra: program,
-                ),
-              );
-            },
-          ),
-        );
-      },
+        },
+      ),
     );
   }
 
   // ─── Lapsed: disabled coach programs + accessible self-programs ───────────
 
-  Widget _buildLapsedBody(bool isDark, SubscriptionTier tier) {
-    return FutureBuilder<List<AssignedProgramModel>>(
-      future: _programsFuture,
-      builder: (context, coachSnapshot) {
-        final coachPrograms = coachSnapshot.data ?? [];
-        final isLoadingCoach =
-            coachSnapshot.connectionState == ConnectionState.waiting;
+  Widget _buildLapsedBody(
+    BuildContext context,
+    WidgetRef ref,
+    bool isDark,
+    SubscriptionTier tier,
+    List<AssignedProgramModel> programs,
+    VoidCallback refresh,
+  ) {
+    return RefreshIndicator(
+      onRefresh: () async => refresh(),
+      child: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(child: _RenewalBanner(isDark: isDark)),
 
-        return RefreshIndicator(
-          onRefresh: () async {
-            setState(_loadPrograms);
-          },
-          child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(child: _RenewalBanner(isDark: isDark)),
-
-              if (isLoadingCoach)
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                )
-              else if (coachPrograms.isNotEmpty) ...[
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                  sliver: SliverToBoxAdapter(
-                    child: Text(
-                      'Coach Programs',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                  ),
+          if (programs.isNotEmpty) ...[
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+              sliver: SliverToBoxAdapter(
+                child: Text(
+                  'Coach Programs',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold),
                 ),
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: SliverList.separated(
-                    itemCount: coachPrograms.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (context, i) => _ProgramCard(
-                      program: coachPrograms[i],
-                      isDark: isDark,
-                      isLocked: true,
-                      onTap: () => context.push(AppRoutes.myProgram),
-                    ),
-                  ),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverList.separated(
+                itemCount: programs.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, i) => _ProgramCard(
+                  program: programs[i],
+                  isDark: isDark,
+                  isLocked: true,
+                  onTap: () => context.push(AppRoutes.myProgram),
                 ),
-              ],
-            ],
-          ),
-        );
-      },
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
