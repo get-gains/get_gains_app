@@ -66,6 +66,12 @@ class StandaloneWorkoutRepository {
     int limit = 20,
     int offset = 0,
   }) async {
+    // 1. Try local DB first
+    final userId = await _userId;
+    final localResult = await _readLocalPrograms(userId);
+    if (localResult != null) return Success(localResult);
+
+    // 2. Try server
     final result = await _apiClient.get<Map<String, dynamic>>(
       ApiConstants.standalonePrograms,
       queryParameters: {'limit': limit, 'offset': offset},
@@ -91,6 +97,11 @@ class StandaloneWorkoutRepository {
   Future<Result<StandaloneProgramDetail, AppError>> getProgram(
     String programId,
   ) async {
+    // 1. Try local DB first
+    final localResult = await _readLocalProgram(programId);
+    if (localResult != null) return Success(localResult);
+
+    // 2. Try server
     final result = await _apiClient.get<Map<String, dynamic>>(
       '${ApiConstants.standalonePrograms}/$programId',
     );
@@ -107,6 +118,12 @@ class StandaloneWorkoutRepository {
   }
 
   Future<Result<StandaloneProgramDetail, AppError>> getActiveProgram() async {
+    // 1. Try local DB first
+    final userId = await _userId;
+    final localResult = await _readLocalActiveProgram(userId);
+    if (localResult != null) return Success(localResult);
+
+    // 2. Try server
     final result = await _apiClient.get<Map<String, dynamic>>(
       ApiConstants.standaloneActiveProgram,
     );
@@ -328,6 +345,7 @@ class StandaloneWorkoutRepository {
     String programRoutineId,
     UpdateProgramRoutineRequest request,
   ) async {
+    await _db.updateStandaloneProgramRoutineOrder(programRoutineId, request.orderInProgram);
     await _outbox.enqueue(
       entityType: 'standalone_program_routine',
       operation: 'update',
@@ -397,6 +415,15 @@ class StandaloneWorkoutRepository {
     String routineExerciseId,
     UpdateRoutineExerciseRequest request,
   ) async {
+    await _db.updateRoutineExerciseById(
+      routineExerciseId,
+      sets: request.sets,
+      repsMin: request.repsMin,
+      repsMax: request.repsMax,
+      restSeconds: request.restSeconds,
+      orderInRoutine: request.orderInRoutine,
+    );
+
     final payload = <String, dynamic>{'id': routineExerciseId, 'routine_id': routineId};
     if (request.sets != null) payload['sets'] = request.sets;
     if (request.repsMin != null) payload['reps_min'] = request.repsMin;
@@ -417,6 +444,7 @@ class StandaloneWorkoutRepository {
     String routineId,
     String routineExerciseId,
   ) async {
+    await _db.deleteRoutineExerciseById(routineExerciseId);
     await _outbox.enqueue(
       entityType: 'standalone_routine_exercise',
       operation: 'delete',
@@ -531,6 +559,12 @@ class StandaloneWorkoutRepository {
   }
 
   Future<Result<StandaloneSession?, AppError>> getActiveSession() async {
+    // 1. Try local DB first
+    final userId = await _userId;
+    final localResult = await _readLocalActiveSession(userId);
+    if (localResult != null) return Success(localResult);
+
+    // 2. Try server
     final result = await _apiClient.get<Map<String, dynamic>>(
       ApiConstants.standaloneActiveSession,
     );
@@ -590,6 +624,11 @@ class StandaloneWorkoutRepository {
   }
 
   Future<Result<StandaloneSession, AppError>> getSession(String sessionId) async {
+    // 1. Try local DB first
+    final localResult = await _readLocalSession(sessionId);
+    if (localResult != null) return Success(localResult);
+
+    // 2. Try server
     final result = await _apiClient.get<Map<String, dynamic>>(
       '${ApiConstants.standaloneSessions}/$sessionId',
     );
@@ -609,6 +648,12 @@ class StandaloneWorkoutRepository {
     int limit = 20,
     int offset = 0,
   }) async {
+    // 1. Try local DB first
+    final userId = await _userId;
+    final localResult = await _readLocalSessionHistory(userId, limit: limit, offset: offset);
+    if (localResult != null) return Success(localResult);
+
+    // 2. Try server
     final result = await _apiClient.get<Map<String, dynamic>>(
       ApiConstants.standaloneSessions,
       queryParameters: {'limit': limit, 'offset': offset},
@@ -731,6 +776,14 @@ class StandaloneWorkoutRepository {
     String setId,
     UpdateStandaloneSetRequest request,
   ) async {
+    await _db.updatePerformedSet(
+      setId,
+      PerformedSetsCompanion(
+        repsCompleted: request.reps != null ? Value(request.reps!) : const Value.absent(),
+        weightKg: request.weight != null ? Value(request.weight) : const Value.absent(),
+      ),
+    );
+
     final payload = <String, dynamic>{'id': setId, 'session_id': sessionId};
     if (request.reps != null) payload['reps'] = request.reps;
     if (request.weight != null) payload['weight'] = request.weight;
@@ -768,6 +821,12 @@ class StandaloneWorkoutRepository {
   // ============== STATS OPERATIONS ==============
 
   Future<Result<StandaloneStats, AppError>> getStats() async {
+    // 1. Try local DB first
+    final userId = await _userId;
+    final localResult = await _readLocalStats(userId);
+    if (localResult != null) return Success(localResult);
+
+    // 2. Try server
     final result = await _apiClient.get<Map<String, dynamic>>(ApiConstants.standaloneStats);
     if (result is Success<Map<String, dynamic>, AppError>) {
       final d = result.value;
@@ -783,6 +842,12 @@ class StandaloneWorkoutRepository {
   Future<Result<StandaloneExerciseStat, AppError>> getExerciseStat(
     String exerciseId,
   ) async {
+    // 1. Try local DB first
+    final userId = await _userId;
+    final localResult = await _readLocalExerciseStat(userId, exerciseId);
+    if (localResult != null) return Success(localResult);
+
+    // 2. Try server
     final result = await _apiClient.get<Map<String, dynamic>>(
       '${ApiConstants.standaloneStats}/exercise/$exerciseId',
     );
@@ -795,6 +860,314 @@ class StandaloneWorkoutRepository {
     if (cached != null) return Success(StandaloneExerciseStat.fromJson(cached));
     final failure = result as Failure<Map<String, dynamic>, AppError>;
     return Failure(failure.error);
+  }
+
+  // ============== LOCAL DB READ HELPERS ==============
+
+  Future<StandaloneProgramListResponse?> _readLocalPrograms(String userId) async {
+    try {
+      final programs = await _db.getStandalonePrograms(userId);
+      if (programs.isEmpty) return null;
+
+      final assignments = await _db.getStandaloneAssignments(userId);
+      final activeIds = assignments.where((a) => a.isActive).map((a) => a.programId).toSet();
+
+      return StandaloneProgramListResponse(
+        programs: programs.map((p) => StandaloneProgram(
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          isActive: activeIds.contains(p.id),
+          createdAt: p.createdAt,
+          updatedAt: p.updatedAt,
+        )).toList(),
+        total: programs.length,
+        limit: programs.length,
+        offset: 0,
+        hasMore: false,
+      );
+    } catch (e, st) {
+      AppLogger.error('Local program list read failed', tag: 'StandaloneRepo', error: e, stackTrace: st);
+      return null;
+    }
+  }
+
+  Future<StandaloneProgramDetail?> _readLocalProgram(String programId) async {
+    try {
+      final program = await _db.getStandaloneProgramById(programId);
+      if (program == null) return null;
+
+      final programRoutines = await _db.getStandaloneProgramRoutines(programId);
+      final routines = <StandaloneProgramRoutine>[];
+      for (final pr in programRoutines) {
+        final routine = await _db.getRoutineById(pr.routineId);
+        final exerciseRows = await _db.getRoutineExercises(pr.routineId);
+        final exercises = <StandaloneRoutineExercise>[];
+        for (final re in exerciseRows) {
+          final exercise = await _db.getExerciseById(re.exerciseId);
+          exercises.add(StandaloneRoutineExercise(
+            id: re.id,
+            exerciseId: re.exerciseId,
+            exerciseName: exercise?.name ?? '',
+            sets: re.sets,
+            repsMin: re.repsMin,
+            repsMax: re.repsMax,
+            restSeconds: re.restSeconds,
+            orderInRoutine: re.orderInRoutine,
+          ));
+        }
+        routines.add(StandaloneProgramRoutine(
+          id: pr.id,
+          routineId: pr.routineId,
+          routineName: routine?.name ?? '',
+          routineDescription: routine?.description ?? '',
+          orderInProgram: await _db.getStandaloneProgramRoutineOrder(pr.id),
+          exercises: exercises,
+        ));
+      }
+
+      return StandaloneProgramDetail(
+        id: program.id,
+        name: program.name,
+        description: program.description,
+        routines: routines,
+        createdAt: program.createdAt,
+      );
+    } catch (e, st) {
+      AppLogger.error('Local program read failed', tag: 'StandaloneRepo', error: e, stackTrace: st);
+      return null;
+    }
+  }
+
+  Future<StandaloneProgramDetail?> _readLocalActiveProgram(String userId) async {
+    try {
+      final assignment = await _db.getActiveStandaloneAssignment(userId);
+      if (assignment == null) return null;
+      return _readLocalProgram(assignment.programId);
+    } catch (e, st) {
+      AppLogger.error('Local active program read failed', tag: 'StandaloneRepo', error: e, stackTrace: st);
+      return null;
+    }
+  }
+
+  Future<StandaloneSession?> _readLocalActiveSession(String userId) async {
+    try {
+      final session = await _db.getActiveStandaloneSession(userId);
+      if (session == null || session.standaloneProgramRoutineId == null) return null;
+
+      final exercises = await _loadRoutineExercises(session.standaloneProgramRoutineId!);
+      final performedSets = await _db.getPerformedSets(session.id);
+
+      return StandaloneSession(
+        id: session.id,
+        userId: session.userId,
+        programRoutineId: session.standaloneProgramRoutineId!,
+        startedAt: session.startedAt,
+        completedAt: session.completedAt,
+        feedback: session.notes,
+        exercises: exercises,
+        performedSets: performedSets.map((ps) => StandalonePerformedSet(
+          id: ps.id,
+          routineExerciseId: ps.assignedProgramRoutineExerciseId,
+          setNumber: ps.setNumber,
+          reps: ps.repsCompleted,
+          weight: ps.weightKg ?? 0,
+          createdAt: ps.createdAt,
+        )).toList(),
+        setCount: performedSets.length,
+        createdAt: session.createdAt,
+      );
+    } catch (e, st) {
+      AppLogger.error('Local active session read failed', tag: 'StandaloneRepo', error: e, stackTrace: st);
+      return null;
+    }
+  }
+
+  Future<StandaloneSession?> _readLocalSession(String sessionId) async {
+    try {
+      final session = await _db.getWorkoutSessionById(sessionId);
+      if (session == null) return null;
+
+      final exercises = session.standaloneProgramRoutineId != null
+          ? await _loadRoutineExercises(session.standaloneProgramRoutineId!)
+          : <StandaloneSessionExercise>[];
+
+      final performedSets = await _db.getPerformedSets(session.id);
+
+      return StandaloneSession(
+        id: session.id,
+        userId: session.userId,
+        programRoutineId: session.standaloneProgramRoutineId ?? '',
+        startedAt: session.startedAt,
+        completedAt: session.completedAt,
+        feedback: session.notes,
+        exercises: exercises,
+        performedSets: performedSets.map((ps) => StandalonePerformedSet(
+          id: ps.id,
+          routineExerciseId: ps.assignedProgramRoutineExerciseId,
+          setNumber: ps.setNumber,
+          reps: ps.repsCompleted,
+          weight: ps.weightKg ?? 0,
+          createdAt: ps.createdAt,
+        )).toList(),
+        setCount: performedSets.length,
+        createdAt: session.createdAt,
+      );
+    } catch (e, st) {
+      AppLogger.error('Local session read failed', tag: 'StandaloneRepo', error: e, stackTrace: st);
+      return null;
+    }
+  }
+
+  Future<StandaloneSessionListResponse?> _readLocalSessionHistory(
+    String userId, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      final sessions = await _db.getStandaloneCompletedSessions(userId, limit: 1000, offset: 0);
+      if (sessions.isEmpty) return null;
+
+      final summaries = <StandaloneSessionSummary>[];
+      for (final s in sessions) {
+        final setCount = (await _db.getPerformedSets(s.id)).length;
+        summaries.add(StandaloneSessionSummary(
+          id: s.id,
+          routineName: '',
+          startedAt: s.startedAt,
+          completedAt: s.completedAt,
+          feedback: s.notes,
+          setCount: setCount,
+        ));
+      }
+
+      final total = summaries.length;
+      final paginated = summaries.skip(offset).take(limit).toList();
+
+      return StandaloneSessionListResponse(
+        sessions: paginated,
+        total: total,
+        limit: limit,
+        offset: offset,
+        hasMore: offset + limit < total,
+      );
+    } catch (e, st) {
+      AppLogger.error('Local session history read failed', tag: 'StandaloneRepo', error: e, stackTrace: st);
+      return null;
+    }
+  }
+
+  Future<StandaloneStats?> _readLocalStats(String userId) async {
+    try {
+      final sessions = await _db.getStandaloneCompletedSessions(userId, limit: 10000, offset: 0);
+      if (sessions.isEmpty) {
+        return const StandaloneStats(
+          workoutsThisWeek: 0,
+          streakDays: 0,
+          totalDurationMinutes: 0,
+          totalWorkouts: 0,
+          totalSets: 0,
+        );
+      }
+
+      int totalSets = 0;
+      int totalDurationMinutes = 0;
+      for (final s in sessions) {
+        final sets = await _db.getPerformedSets(s.id);
+        totalSets += sets.length;
+        if (s.completedAt != null) {
+          totalDurationMinutes += s.completedAt!.difference(s.startedAt).inMinutes;
+        }
+      }
+
+      final now = DateTime.now();
+      final weekStart = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+      final workoutsThisWeek = sessions
+          .where((s) => s.completedAt != null && !s.completedAt!.isBefore(weekStart))
+          .length;
+
+      int streakDays = 0;
+      final completedDates = sessions
+          .where((s) => s.completedAt != null)
+          .map((s) => DateTime(s.completedAt!.year, s.completedAt!.month, s.completedAt!.day))
+          .toSet()
+          .toList()
+        ..sort((a, b) => b.compareTo(a));
+
+      if (completedDates.isNotEmpty) {
+        final today = DateTime(now.year, now.month, now.day);
+        var checkDate = today;
+        for (final date in completedDates) {
+          if (date == checkDate) {
+            streakDays++;
+            checkDate = checkDate.subtract(const Duration(days: 1));
+          } else if (date.isBefore(checkDate)) {
+            break;
+          }
+        }
+      }
+
+      return StandaloneStats(
+        workoutsThisWeek: workoutsThisWeek,
+        streakDays: streakDays,
+        totalDurationMinutes: totalDurationMinutes,
+        totalWorkouts: sessions.length,
+        totalSets: totalSets,
+        weekStart: weekStart,
+      );
+    } catch (e, st) {
+      AppLogger.error('Local stats read failed', tag: 'StandaloneRepo', error: e, stackTrace: st);
+      return null;
+    }
+  }
+
+  Future<StandaloneExerciseStat?> _readLocalExerciseStat(String userId, String exerciseId) async {
+    try {
+      final sessions = await _db.getStandaloneCompletedSessions(userId, limit: 10000, offset: 0);
+
+      int? bestReps;
+      double? bestWeight;
+      int? bestSetNumber;
+      DateTime? bestDate;
+
+      for (final s in sessions) {
+        final sets = await _db.getPerformedSets(s.id);
+        for (final ps in sets) {
+          // Resolve exerciseId via RoutineExercise -> exerciseId
+          // PerformedSet.assignedProgramRoutineExerciseId = RoutineExercises.id
+          final reId = ps.assignedProgramRoutineExerciseId;
+          if (reId.isEmpty) continue;
+
+          // Quick check: if we have exercise records, compare
+          final re = await (_db.select(_db.routineExercises)
+                ..where((tbl) => tbl.id.equals(reId)))
+              .getSingleOrNull();
+          if (re == null || re.exerciseId != exerciseId) continue;
+
+          if (bestDate == null || ps.createdAt.isAfter(bestDate)) {
+            bestDate = ps.createdAt;
+            bestReps = ps.repsCompleted;
+            bestWeight = ps.weightKg;
+            bestSetNumber = ps.setNumber;
+          }
+        }
+      }
+
+      if (bestDate == null) return null;
+
+      return StandaloneExerciseStat(
+        exerciseId: exerciseId,
+        lastSet: StandaloneExerciseLastSet(
+          reps: bestReps ?? 0,
+          weight: bestWeight ?? 0,
+          setNumber: bestSetNumber ?? 0,
+          createdAt: bestDate,
+        ),
+      );
+    } catch (e, st) {
+      AppLogger.error('Local exercise stat read failed', tag: 'StandaloneRepo', error: e, stackTrace: st);
+      return null;
+    }
   }
 
   // ============== HELPERS ==============

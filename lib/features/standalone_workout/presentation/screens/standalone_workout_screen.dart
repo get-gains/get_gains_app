@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../providers/router_provider.dart';
-import '../../../../services/database/app_database.dart';
 import '../../../../widgets/app_button.dart';
 import '../../../../widgets/app_card.dart';
 import '../../../../widgets/app_dialog.dart';
@@ -208,9 +207,6 @@ class _StandaloneWorkoutScreenState
 
     result.when(
       success: (_) async {
-        final db = ref.read(appDatabaseProvider);
-        await db.completeWorkoutSession(_session.id, notes: notes);
-
         if (mounted) {
           AppToast.success(context, 'Workout complete!');
           context.go(AppRoutes.home);

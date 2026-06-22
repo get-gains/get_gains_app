@@ -257,14 +257,21 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration {
     return MigrationStrategy(
       onCreate: (Migrator m) async {
-        AppLogger.info('Creating database tables (v1)', tag: 'Database');
+        AppLogger.info('Creating database tables (v2)', tag: 'Database');
         await m.createAll();
+      },
+      onUpgrade: (Migrator m, int from, int to) async {
+        if (from < 2) {
+          await customStatement(
+            'ALTER TABLE standalone_program_routines ADD COLUMN order_in_program INTEGER NOT NULL DEFAULT 0',
+          );
+        }
       },
       beforeOpen: (details) async {
         await customStatement('PRAGMA foreign_keys = ON');
@@ -409,6 +416,28 @@ class AppDatabase extends _$AppDatabase {
     return into(routineExercises).insertOnConflictUpdate(re);
   }
 
+  Future<int> updateRoutineExerciseById(
+    String id, {
+    int? sets,
+    int? repsMin,
+    int? repsMax,
+    int? restSeconds,
+    int? orderInRoutine,
+  }) {
+    return (update(routineExercises)..where((re) => re.id.equals(id))).write(
+      RoutineExercisesCompanion(
+        sets: sets != null ? Value(sets) : const Value.absent(),
+        repsMin: repsMin != null ? Value(repsMin) : const Value.absent(),
+        repsMax: repsMax != null ? Value(repsMax) : const Value.absent(),
+        restSeconds: restSeconds != null ? Value(restSeconds) : const Value.absent(),
+        orderInRoutine: orderInRoutine != null ? Value(orderInRoutine) : const Value.absent(),
+      ),
+    );
+  }
+
+  Future<int> deleteRoutineExerciseById(String id) {
+    return (delete(routineExercises)..where((re) => re.id.equals(id))).go();
+  }
   Future<void> replaceAllRoutineExercises(
     List<RoutineExercisesCompanion> list,
   ) async {
@@ -527,6 +556,36 @@ class AppDatabase extends _$AppDatabase {
 
   Future<int> deleteWorkoutSession(String id) {
     return (delete(workoutSessions)..where((ws) => ws.id.equals(id))).go();
+  }
+
+  Future<WorkoutSession?> getActiveStandaloneSession(String userId) {
+    return (select(workoutSessions)
+          ..where(
+            (ws) =>
+                ws.userId.equals(userId) &
+                ws.standaloneProgramRoutineId.isNotNull() &
+                ws.completedAt.isNull(),
+          )
+          ..orderBy([(ws) => OrderingTerm.desc(ws.startedAt)])
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  Future<List<WorkoutSession>> getStandaloneCompletedSessions(
+    String userId, {
+    int limit = 20,
+    int offset = 0,
+  }) {
+    return (select(workoutSessions)
+          ..where(
+            (ws) =>
+                ws.userId.equals(userId) &
+                ws.standaloneProgramRoutineId.isNotNull() &
+                ws.completedAt.isNotNull(),
+          )
+          ..orderBy([(ws) => OrderingTerm.desc(ws.completedAt)])
+          ..limit(limit, offset: offset))
+        .get();
   }
 
   // ============== Performed Set Operations ==============
@@ -658,6 +717,25 @@ class AppDatabase extends _$AppDatabase {
   Future<int> deleteStandaloneProgramRoutine(String id) {
     return (delete(standaloneProgramRoutines)..where((pr) => pr.id.equals(id)))
         .go();
+  }
+
+  Future<bool> updateStandaloneProgramRoutineOrder(
+    String id,
+    int orderInProgram,
+  ) {
+    return customStatement(
+      'UPDATE standalone_program_routines SET order_in_program = ? WHERE id = ?',
+      [orderInProgram, id],
+    ).then((_) => true);
+  }
+
+  Future<int> getStandaloneProgramRoutineOrder(String id) async {
+    final result = await customSelect(
+      'SELECT order_in_program FROM standalone_program_routines WHERE id = ?',
+      variables: [Variable.withString(id)],
+      readsFrom: {standaloneProgramRoutines},
+    ).getSingleOrNull();
+    return result?.readInt('order_in_program') ?? 0;
   }
 
   // ============== Standalone AssignedProgram Operations ==============
