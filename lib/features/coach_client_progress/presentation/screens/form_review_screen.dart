@@ -358,18 +358,18 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
     );
     sendToUnity(
       UnityMessageContract.gameObjectName,
+      UnityMessageContract.methodSetRecordingAngleHint,
+      _cameraAngle,
+    );
+    sendToUnity(
+      UnityMessageContract.gameObjectName,
       UnityMessageContract.methodSetSkeletonColor,
-      '#00FFFF',
+      '#FFA500',
     );
     sendToUnity(
       UnityMessageContract.gameObjectName,
       UnityMessageContract.methodPlayPose,
       '',
-    );
-    sendToUnity(
-      UnityMessageContract.gameObjectName,
-      UnityMessageContract.methodSetPoseDebugOptions,
-      UnityMessageContract.defaultPoseDebugOptionsPayload(),
     );
   }
 

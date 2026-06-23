@@ -365,6 +365,107 @@ class StandaloneProgramBuilderNotifier
 
   // ── Helpers ────────────────────────────────────────────
 
+  Future<bool> createAndAddRoutine({
+    required String name,
+    required String description,
+    required int orderInProgram,
+  }) async {
+    final current = state;
+    if (current is! StandaloneProgramBuilderLoaded) return false;
+
+    final createResult = await _repo.createRoutine(
+      name: name,
+      description: description,
+    );
+
+    return createResult.when(
+      success: (routineId) async {
+        final addResult = await _repo.addProgramRoutine(
+          current.program.id,
+          AddProgramRoutineRequest(
+            routineId: routineId,
+            orderInProgram: orderInProgram,
+          ),
+        );
+        return addResult.when(
+          success: (program) {
+            state = current.withProgram(program);
+            return true;
+          },
+          failure: (error) {
+            AppLogger.error(
+              'Add routine after create failed: ${error.message}',
+              tag: 'StandaloneProgramBuilder',
+            );
+            return false;
+          },
+        );
+      },
+      failure: (error) {
+        AppLogger.error(
+          'Create routine failed: ${error.message}',
+          tag: 'StandaloneProgramBuilder',
+        );
+        return false;
+      },
+    );
+  }
+
+  Future<bool> createAndAddExercise({
+    required String routineId,
+    required String name,
+    required String description,
+    required int sets,
+    required int repsMin,
+    required int repsMax,
+    required int restSeconds,
+    required int orderInRoutine,
+  }) async {
+    final current = state;
+    if (current is! StandaloneProgramBuilderLoaded) return false;
+
+    final createExerciseResult = await _repo.createExercise(
+      name: name,
+      description: description,
+    );
+
+    return createExerciseResult.when(
+      success: (exerciseId) async {
+        final addResult = await _repo.addRoutineExercise(
+          routineId,
+          AddRoutineExerciseRequest(
+            exerciseId: exerciseId,
+            sets: sets,
+            repsMin: repsMin,
+            repsMax: repsMax,
+            restSeconds: restSeconds,
+            orderInRoutine: orderInRoutine,
+          ),
+        );
+        return addResult.when(
+          success: (_) {
+            _refreshTree(current);
+            return true;
+          },
+          failure: (error) {
+            AppLogger.error(
+              'Add exercise after create failed: ${error.message}',
+              tag: 'StandaloneProgramBuilder',
+            );
+            return false;
+          },
+        );
+      },
+      failure: (error) {
+        AppLogger.error(
+          'Create exercise failed: ${error.message}',
+          tag: 'StandaloneProgramBuilder',
+        );
+        return false;
+      },
+    );
+  }
+
   Future<void> _refreshTree(StandaloneProgramBuilderLoaded current) async {
     final result = await _repo.getProgram(current.program.id);
 

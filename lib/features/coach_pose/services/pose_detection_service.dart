@@ -23,9 +23,12 @@ part 'pose_detection_service.g.dart';
 /// NOTE: Uses [PoseDetectionMode.single] intentionally. The `stream` mode
 /// enables GPU acceleration (MediaPipe GPU delegate) which deadlocks with
 /// CameraX on many Android devices (especially Mali GPUs). `single` mode
-/// uses CPU-only TFLite inference — slower per frame (~50-100ms) but reliable.
-/// Coach form recording captures raw frames during recording and processes
-/// them in batch after stop (no live MLKit), so FPS equals camera output.
+/// uses CPU-only TFLite inference.
+///
+/// Uses [PoseDetectionModel.accurate] — the heavier but more precise model
+/// that produces better Z-depth estimates. Since recording extracts raw frames
+/// via ffmpeg and processes them in batch after stop (not live), the slower
+/// per-frame cost (~100-300ms) is acceptable and worth the improved 3D mapping.
 class PoseDetectionService {
   PoseDetectionService() {
     _initDetector();
@@ -40,13 +43,13 @@ class PoseDetectionService {
 
   void _initDetector() {
     AppLogger.info(
-      'Initializing PoseDetector (mode=single, model=base)',
+      'Initializing PoseDetector (mode=single, model=accurate)',
       tag: 'PoseDetection',
     );
     _poseDetector = PoseDetector(
       options: PoseDetectorOptions(
         mode: PoseDetectionMode.single,
-        model: PoseDetectionModel.base,
+        model: PoseDetectionModel.accurate,
       ),
     );
     _isWarmedUp = false;

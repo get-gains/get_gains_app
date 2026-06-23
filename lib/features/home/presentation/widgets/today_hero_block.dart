@@ -121,7 +121,12 @@ class TodayHeroBlock extends ConsumerWidget {
                         extra: details.routine,
                       );
                     } else if (isStandaloneFlow) {
-                      context.push(AppRoutes.standalonePrograms);
+                      context.push(
+                        AppRoutes.standaloneProgramDetail.replaceFirst(
+                          ':id',
+                          details.assignedProgramId,
+                        ),
+                      );
                     }
                   },
           );

@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../providers/router_provider.dart';
-import '../../../../services/database/app_database.dart';
 import '../../../../widgets/app_button.dart';
 import '../../../../widgets/app_card.dart';
 import '../../../../widgets/app_dialog.dart';
@@ -208,12 +207,6 @@ class _StandaloneWorkoutScreenState
 
     result.when(
       success: (_) async {
-        final db = ref.read(appDatabaseProvider);
-        final localSession = await db.getWorkoutSessionByRemoteId(_session.id);
-        if (localSession != null) {
-          await db.completeWorkoutSession(localSession.id, notes: notes);
-        }
-
         if (mounted) {
           AppToast.success(context, 'Workout complete!');
           context.go(AppRoutes.home);
@@ -276,27 +269,32 @@ class _StandaloneWorkoutScreenState
         icon: Icons.edit_note,
         iconColor: AppColors.primaryDark,
         title: 'Workout Notes',
-        contentWidget: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'How did it feel? Optional — totally fine to skip.',
-              style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.mutedForegroundDark,
-              ),
+        contentWidget: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 200),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'How did it feel? Optional — totally fine to skip.',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.mutedForegroundDark,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    hintText:
+                        'e.g. Felt strong on bench, lower back tight on squat…',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                hintText:
-                    'e.g. Felt strong on bench, lower back tight on squat…',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
+          ),
         ),
         actionsDirection: Axis.vertical,
         actions: [
@@ -304,7 +302,6 @@ class _StandaloneWorkoutScreenState
             label: 'Save & Finish',
             onPressed: () {
               final text = controller.text;
-              controller.dispose();
               Navigator.pop(ctx, text);
             },
             isPrimary: true,
@@ -313,7 +310,6 @@ class _StandaloneWorkoutScreenState
           AppDialogAction(
             label: 'Skip',
             onPressed: () {
-              controller.dispose();
               Navigator.pop(ctx, null);
             },
             expanded: true,

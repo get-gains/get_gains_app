@@ -62,7 +62,7 @@ class UnityMessageContract {
   /// Seek to a specific frame index. Message = index string, e.g. "42".
   static const String methodSeekPoseFrame = 'SeekPoseFrame';
 
-  /// Set the skeleton color. Message = hex string, e.g. "#00FFFF".
+  /// Set the skeleton color. Message = hex string, e.g. "#FFA500".
   static const String methodSetSkeletonColor = 'SetSkeletonColor';
 
   /// Set camera angle in Unity scene.
@@ -73,6 +73,18 @@ class UnityMessageContract {
   /// Default 3/4 diagonal camera angle sent from every Unity-embedded screen.
   static const String cameraAngleDiagonal = 'DIAGONAL';
 
+  /// Tell the pose retargeter the recorded camera angle (e.g. "ANGLE_45_RIGHT").
+  /// This stabilises body yaw when depth cues are ambiguous.
+  static const String methodSetRecordingAngleHint = 'SetRecordingAngleHint';
+
+  /// Enter side-by-side 3D comparison mode.
+  /// Message: JSON with { referenceFrames, clientFrames, fps, loop }
+  /// The left (coach) model is tinted green and the right (client) model orange.
+  static const String methodEnterComparisonMode = 'EnterComparisonMode';
+
+  /// Exit side-by-side 3D comparison mode and return to single-avatar playback.
+  static const String methodExitComparisonMode = 'ExitComparisonMode';
+
   /// Debug / tuning for humanoid pose vs landmarks. Message: JSON, e.g.
   /// `{"swapArmLandmarks":false,"swapLegLandmarks":false,"forceShowStickFigure":false,"invertArmDepthZ":true,"invertHeadDepthZ":true,"invertLegDepthZ":true}`
   static const String methodSetPoseDebugOptions = 'SetPoseDebugOptions';
@@ -81,9 +93,9 @@ class UnityMessageContract {
   static const bool defaultPoseDebugSwapArmLandmarks = false;
   static const bool defaultPoseDebugSwapLegLandmarks = false;
   static const bool defaultPoseDebugForceStickFigure = false;
-  static const bool defaultPoseDebugInvertArmDepthZ = true;
-  static const bool defaultPoseDebugInvertHeadDepthZ = true;
-  static const bool defaultPoseDebugInvertLegDepthZ = true;
+  static const bool defaultPoseDebugInvertArmDepthZ = false;
+  static const bool defaultPoseDebugInvertHeadDepthZ = false;
+  static const bool defaultPoseDebugInvertLegDepthZ = false;
 
   /// JSON payload built from [defaultPoseDebugSwapArmLandmarks], etc.
   static String defaultPoseDebugOptionsPayload() => jsonEncode({
@@ -100,6 +112,9 @@ class UnityMessageContract {
   /// Message type sent from Unity when the scene has finished loading.
   /// Flutter uses this to show the Unity view and enable send buttons.
   static const String unityEventSceneLoaded = 'scene_loaded';
+
+  /// Message type sent from Unity when EnterComparisonMode was processed.
+  static const String unityEventComparisonEntered = 'comparison_entered';
 
   /// Message type sent from Unity when pose frames finish loading.
   static const String unityEventPoseReady = 'pose_ready';

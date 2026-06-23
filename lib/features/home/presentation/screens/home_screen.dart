@@ -213,7 +213,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           // ── Launch dock (demoted quick actions) ────
                           LaunchDock(
                             dockKey: _quickActionsKey,
-                            isCoach: isCoach,
                           ),
 
                           // Bottom padding so content isn't behind nav bar

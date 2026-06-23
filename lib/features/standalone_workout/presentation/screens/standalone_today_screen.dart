@@ -10,7 +10,7 @@ import '../../../../widgets/app_button.dart';
 import '../../../../widgets/app_card.dart';
 import '../../../../widgets/app_empty_state.dart';
 import '../../../../widgets/app_toast.dart';
-import '../../../workout/data/models/models.dart';
+import '../../data/helpers/model_conversion.dart';
 import '../../data/models/models.dart';
 import '../../data/standalone_workout_repository.dart';
 import '../providers/standalone_program_provider.dart';
@@ -47,7 +47,7 @@ class _StandaloneTodayScreenState
 
     final result = await repo.startWorkoutSession(
       userId: userId,
-      programRoutineId: firstRoutine.id,
+      programRoutineId: firstRoutine.routineId,
     );
 
     result.when(
@@ -58,15 +58,7 @@ class _StandaloneTodayScreenState
             extra: <String, dynamic>{
               'session': session,
               'exercises': firstRoutine.exercises
-                  .map((e) => RoutineExerciseModel(
-                        id: e.id,
-                        exerciseId: e.exerciseId,
-                        sets: e.sets,
-                        repsMin: e.repsMin,
-                        repsMax: e.repsMax,
-                        restSeconds: e.restSeconds,
-                        orderInRoutine: e.orderInRoutine,
-                      ))
+                  .map((e) => e.toRoutineExerciseModel())
                   .toList(),
               'routineName': program.name,
             },

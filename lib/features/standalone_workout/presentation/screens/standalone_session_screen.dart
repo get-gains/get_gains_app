@@ -75,7 +75,6 @@ class _StandaloneSessionScreenState
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final sessionAsync = ref.watch(standaloneSessionProvider);
-    final repo = ref.read(standaloneWorkoutRepositoryProvider);
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,

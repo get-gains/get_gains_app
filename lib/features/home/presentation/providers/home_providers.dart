@@ -7,6 +7,8 @@ import '../../../../core/utils/logger.dart';
 import '../../../../core/utils/result.dart';
 import '../../../../providers/auth_state_provider.dart';
 import '../../../home/data/models/today_status_model.dart';
+import '../../../standalone_workout/data/helpers/model_conversion.dart';
+import '../../../standalone_workout/data/standalone_workout_repository.dart';
 import '../../../workout/data/models/models.dart';
 import '../../../workout/data/workout_repository.dart';
 
@@ -98,11 +100,76 @@ Future<TodayRoutineModel> activeToday(Ref ref) async {
 
   // Coach flow (subscribed + has coach)
   if (s.hasCoach && s.isSubscribed && s.coachToday != null) {
-    return s.coachToday!.toRoutineModel();
+    final model = s.coachToday!.toRoutineModel();
+
+    // Enrich with exercises from cached programs (server only returns exerciseCount)
+    if (model.today != null) {
+      final workoutRepo = ref.watch(workoutRepositoryProvider);
+      final programsResult = await workoutRepo.getPrograms();
+      final programs = programsResult.valueOrNull ?? [];
+      for (final p in programs) {
+        for (final r in p.routines) {
+          if (r.id == model.today!.programRoutineId && r.exercises.isNotEmpty) {
+            return TodayRoutineModel(
+              isRestDay: false,
+              completedToday: model.completedToday,
+              today: TodayRoutineDetails(
+                programRoutineId: model.today!.programRoutineId,
+                dayOfWeek: model.today!.dayOfWeek,
+                assignedProgramId: p.id,
+                programName: p.name,
+                routine: RoutineModel(
+                  id: r.id,
+                  name: r.name,
+                  description: r.description,
+                  estimatedDurationMinutes: r.estimatedDurationMinutes,
+                  exercises: r.exercises,
+                  muscleGroupsTargeted: r.muscleGroupsTargeted,
+                  daysOfWeek: r.daysOfWeek,
+                ),
+              ),
+            );
+          }
+        }
+      }
+    }
+
+    return model;
   }
 
-  // Standalone flow — show the active program info
+  // Standalone flow — load full program detail from local DB
   if (s.standalone.hasActiveProgram && s.standalone.program != null) {
+    final standaloneRepo = ref.watch(standaloneWorkoutRepositoryProvider);
+    final programId = s.standalone.program!.id;
+
+    final detailResult = await standaloneRepo.getProgram(programId);
+    final detail = detailResult.when(success: (d) => d, failure: (_) => null);
+
+    if (detail != null && detail.routines.isNotEmpty) {
+      final firstRoutine = detail.routines.first;
+      final exercises = firstRoutine.exercises
+          .map((e) => e.toRoutineExerciseModel())
+          .toList();
+
+      return TodayRoutineModel(
+        isRestDay: false,
+        today: TodayRoutineDetails(
+          programRoutineId: firstRoutine.id,
+          dayOfWeek: 'Today',
+          assignedProgramId: programId,
+          programName: detail.name,
+          routine: RoutineModel(
+            id: firstRoutine.id,
+            name: firstRoutine.routineName,
+            description: detail.description,
+            estimatedDurationMinutes: exercises.length * 3,
+            exercises: exercises,
+          ),
+        ),
+      );
+    }
+
+    // Fallback: minimal info if no local detail available
     return TodayRoutineModel(
       isRestDay: false,
       today: TodayRoutineDetails(
