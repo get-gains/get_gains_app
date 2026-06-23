@@ -804,6 +804,88 @@ class AuthRepository {
     );
   }
 
+  // ============== Email Verification Code ==============
+
+  /// Send email verification code
+  ///
+  /// Sends a 6-character verification code to the user's email via Brevo.
+  /// Used during registration to verify the user's email address.
+  ///
+  /// Server endpoint: POST /auth/send-verification-code
+  Future<Result<void, AppError>> sendEmailVerificationCode({
+    required String email,
+  }) async {
+    AppLogger.debug(
+      'Sending email verification code to: $email',
+      tag: 'AuthRepo',
+    );
+
+    final request = SendEmailVerificationCodeRequest(email: email);
+
+    final result = await _apiClient.post<Map<String, dynamic>>(
+      ApiConstants.sendVerificationCode,
+      data: request.toJson(),
+    );
+
+    return result.when(
+      success: (_) {
+        AppLogger.info(
+          'Email verification code sent successfully',
+          tag: 'AuthRepo',
+        );
+        return const Success(null);
+      },
+      failure: (error) {
+        AppLogger.error(
+          'Failed to send email verification code',
+          tag: 'AuthRepo',
+          error: error,
+        );
+        return Failure(_mapToAuthError(error));
+      },
+    );
+  }
+
+  /// Verify email verification code
+  ///
+  /// Validates the 6-character code and confirms the user's email in Supabase.
+  ///
+  /// Server endpoint: POST /auth/verify-email-code
+  Future<Result<void, AppError>> verifyEmailCode({
+    required String email,
+    required String code,
+  }) async {
+    AppLogger.debug(
+      'Verifying email code for: $email',
+      tag: 'AuthRepo',
+    );
+
+    final request = VerifyEmailCodeRequest(email: email, code: code);
+
+    final result = await _apiClient.post<Map<String, dynamic>>(
+      ApiConstants.verifyEmailCode,
+      data: request.toJson(),
+    );
+
+    return result.when(
+      success: (_) {
+        AppLogger.info(
+          'Email code verified successfully',
+          tag: 'AuthRepo',
+        );
+        return const Success(null);
+      },
+      failure: (error) {
+        AppLogger.error(
+          'Email code verification failed',
+          tag: 'AuthRepo',
+          error: error,
+        );
+        return Failure(_mapToAuthError(error));
+      },
+    );
+  }
+
   // ============== Utility Methods ==============
 
   /// Get cached user data (for offline access)

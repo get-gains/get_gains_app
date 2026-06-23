@@ -128,3 +128,32 @@ abstract class CheckEmailVerifiedRequest with _$CheckEmailVerifiedRequest {
   factory CheckEmailVerifiedRequest.fromJson(Map<String, dynamic> json) =>
       _$CheckEmailVerifiedRequestFromJson(json);
 }
+
+/// Send Email Verification Code Request Model
+///
+/// Used to send (or resend) an email verification code.
+@freezed
+abstract class SendEmailVerificationCodeRequest
+    with _$SendEmailVerificationCodeRequest {
+  const factory SendEmailVerificationCodeRequest({required String email}) =
+      _SendEmailVerificationCodeRequest;
+
+  factory SendEmailVerificationCodeRequest.fromJson(
+    Map<String, dynamic> json,
+  ) =>
+      _$SendEmailVerificationCodeRequestFromJson(json);
+}
+
+/// Verify Email Code Request Model
+///
+/// Used to verify an email verification code.
+@freezed
+abstract class VerifyEmailCodeRequest with _$VerifyEmailCodeRequest {
+  const factory VerifyEmailCodeRequest({
+    required String email,
+    required String code,
+  }) = _VerifyEmailCodeRequest;
+
+  factory VerifyEmailCodeRequest.fromJson(Map<String, dynamic> json) =>
+      _$VerifyEmailCodeRequestFromJson(json);
+}
