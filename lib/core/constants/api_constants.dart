@@ -31,6 +31,8 @@ class ApiConstants {
   static const String verifyOtp = '/auth/verify-otp';
   static const String resetPassword = '/auth/reset-password';
   static const String checkEmailVerified = '/auth/check-email-verified';
+  static const String sendVerificationCode = '/auth/send-verification-code';
+  static const String verifyEmailCode = '/auth/verify-email-code';
 
   // User Endpoints
   static const String userProfile = '/users/profile';
