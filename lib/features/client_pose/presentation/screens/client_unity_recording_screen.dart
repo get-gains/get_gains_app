@@ -115,7 +115,7 @@ class _ClientUnityRecordingScreenState
   bool get _setupPassed => _setupValidation?.allPassed ?? false;
 
   // ── Auto-start countdown ───────────────────────────────────────────────────
-  static const _autoStartSeconds = 3;
+  static const _autoStartSeconds = 10;
   Timer? _autoStartTimer;
   int _autoStartSecondsLeft = 0;
   bool get _isAutoStarting => _autoStartSecondsLeft > 0;
@@ -961,6 +961,15 @@ class _ClientUnityRecordingScreenState
           ],
         ),
 
+        // Full-screen auto-start countdown overlay
+        if (_isAutoStarting)
+          Positioned.fill(
+            child: _AutoStartCountdownOverlay(
+              seconds: _autoStartSecondsLeft,
+              onCancel: _cancelAutoStartCountdown,
+            ),
+          ),
+
         // Pre-brief instructional overlay (first-time only)
         if (showPreBrief)
           _buildPreBriefOverlay(
@@ -1370,36 +1379,12 @@ class _ClientUnityRecordingScreenState
               isDark: isDark,
             ),
             const SizedBox(height: 8),
-            if (_isAutoStarting)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Starting in $_autoStartSecondsLeft…',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: isDark
-                          ? AppColors.primaryDark
-                          : AppColors.primaryLight,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  TextButton(
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    onPressed: _cancelAutoStartCountdown,
-                    child: const Text('Cancel'),
-                  ),
-                ],
-              )
-            else
-              Text(
-                canRecord
-                    ? 'All checks passed — tap to record'
-                    : 'Complete all setup checks to begin',
+            Text(
+              _isAutoStarting
+                  ? 'Countdown in progress...'
+                  : canRecord
+                  ? 'All checks passed'
+                  : 'Complete all setup checks to begin',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: isDark
                       ? AppColors.mutedForegroundDark
@@ -2563,6 +2548,77 @@ class _RecordButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Full-screen countdown overlay shown before client recording auto-starts.
+///
+/// Mirrors the coach [FormRecordingScreen] countdown overlay with a large
+/// animated number, semi-transparent background, and cancel button.
+class _AutoStartCountdownOverlay extends StatelessWidget {
+  const _AutoStartCountdownOverlay({
+    required this.seconds,
+    required this.onCancel,
+  });
+
+  final int seconds;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.black.withValues(alpha: 0.5),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          TweenAnimationBuilder<double>(
+            key: ValueKey(seconds),
+            tween: Tween(begin: 1.2, end: 1.0),
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+            builder: (context, scale, child) =>
+                Transform.scale(scale: scale, child: child),
+            child: Text(
+              '$seconds',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 120,
+                fontWeight: FontWeight.bold,
+                height: 1,
+                shadows: [
+                  Shadow(
+                    color: Colors.black54,
+                    blurRadius: 20,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Get into position',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: Colors.white.withValues(alpha: 0.9),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 32),
+          TextButton.icon(
+            onPressed: onCancel,
+            icon: const Icon(Icons.close, size: 18),
+            label: const Text('Cancel'),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white70,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 10,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

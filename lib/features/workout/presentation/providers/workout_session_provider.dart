@@ -205,7 +205,9 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
     final activeResult = await _repository.getActiveSession(_userId!);
     if (!ref.mounted) return;
     final activeSession = activeResult.valueOrNull;
-    if (activeSession != null && activeSession.routineId == routineModelId) {
+    if (activeSession != null &&
+        (activeSession.assignedProgramRoutineId == routineModelId ||
+            activeSession.routineId == routineModelId)) {
       // Resume the existing session — all logged sets are already in the
       // model's performedSets (loaded from Drift by getActiveSession).
       final resolvedRoutine =

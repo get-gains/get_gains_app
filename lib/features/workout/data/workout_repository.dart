@@ -569,13 +569,14 @@ class WorkoutRepository {
           'id': id,
           'workoutSessionId': workoutSessionModelId,
           'assignedProgramRoutineExerciseId': routineExerciseModelId,
-          'setNumber': setNumber,
-          'repsCompleted': repsCompleted,
-          'weightKg': weightKg,
-          'rpe': rpe,
-          'notes': notes,
-          if (recordedFramesKey != null) 'recordedFramesKey': recordedFramesKey,
-          if (overallScore != null) 'overallScore': overallScore,
+          'set_number': setNumber,
+          'reps': repsCompleted,
+          'weight': weightKg ?? 0,
+          'overallScore':
+              overallScore != null ? (overallScore * 100).round() : 0,
+          if (recordedFramesKey != null)
+            'recordedFramesKey': recordedFramesKey,
+          'completedAt': now.toUtc().toIso8601String(),
         }),
       );
 
@@ -627,11 +628,8 @@ class WorkoutRepository {
         operation: 'update',
         payload: jsonEncode({
           'id': setId,
-          if (repsCompleted != null) 'repsCompleted': repsCompleted,
-          if (weightKg != null) 'weightKg': weightKg,
-          if (rpe != null) 'rpe': rpe,
-          if (notes != null) 'notes': notes,
-          if (isCompleted != null) 'isCompleted': isCompleted,
+          if (repsCompleted != null) 'reps': repsCompleted,
+          if (weightKg != null) 'weight': weightKg,
         }),
       );
 
