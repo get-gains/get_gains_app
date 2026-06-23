@@ -109,9 +109,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
     // Listen for state changes
     ref.listen<RegisterState>(registerProvider, (previous, next) {
       if (next is RegisterEmailVerificationPending) {
-        // Navigate to check email for email confirmation
+        // Navigate to email verification code entry
         context.go(
-          '${AppRoutes.checkEmail}?email=${Uri.encodeComponent(next.email)}',
+          '${AppRoutes.emailVerification}?email=${Uri.encodeComponent(next.email)}',
         );
       } else if (next is RegisterSuccess) {
         // Direct success (e.g., Google OAuth with auto-verified email)

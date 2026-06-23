@@ -85,15 +85,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   void _showLoginError(AppError error) {
     final message = errorMessageFor(error);
 
-    // Email not verified — offer to navigate to the verification screen
+    // Email not verified — offer to navigate to the code entry screen
     if (error.code == ApiErrorCode.authEmailNotVerified) {
       final email = _emailController.text.trim();
       AppToast.error(
         context,
         message,
-        actionLabel: 'Check Email',
+        actionLabel: 'Verify Email',
         action: () => context.go(
-          '${AppRoutes.checkEmail}?email=${Uri.encodeComponent(email)}',
+          '${AppRoutes.emailVerification}?email=${Uri.encodeComponent(email)}',
         ),
       );
       return;

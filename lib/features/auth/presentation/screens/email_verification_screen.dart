@@ -6,22 +6,24 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/formatters/text_formatters.dart';
 import '../../../../core/utils/app_error.dart';
 import '../../../../providers/router_provider.dart';
-import '../../../../core/formatters/text_formatters.dart';
 import '../../../../widgets/widgets.dart';
-import '../providers/otp_provider.dart';
+import '../providers/email_verification_provider.dart';
 
-class EnterOtpScreen extends ConsumerStatefulWidget {
-  const EnterOtpScreen({super.key, required this.email});
+class EmailVerificationScreen extends ConsumerStatefulWidget {
+  const EmailVerificationScreen({super.key, required this.email});
 
   final String email;
 
   @override
-  ConsumerState<EnterOtpScreen> createState() => _EnterOtpScreenState();
+  ConsumerState<EmailVerificationScreen> createState() =>
+      _EmailVerificationScreenState();
 }
 
-class _EnterOtpScreenState extends ConsumerState<EnterOtpScreen>
+class _EmailVerificationScreenState
+    extends ConsumerState<EmailVerificationScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -88,14 +90,16 @@ class _EnterOtpScreenState extends ConsumerState<EnterOtpScreen>
   Future<void> _onSubmit() async {
     if (!_isComplete) return;
 
-    await ref.read(otpProvider.notifier).verifyOtp(
+    await ref.read(emailVerificationProvider.notifier).verifyCode(
           email: widget.email,
           code: _code,
         );
   }
 
   Future<void> _onResend() async {
-    await ref.read(otpProvider.notifier).sendOtp(email: widget.email);
+    await ref
+        .read(emailVerificationProvider.notifier)
+        .sendVerificationCode(email: widget.email);
   }
 
   String _maskEmail(String email) {
@@ -113,19 +117,15 @@ class _EnterOtpScreenState extends ConsumerState<EnterOtpScreen>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final size = MediaQuery.of(context).size;
-    final state = ref.watch(otpProvider);
+    final state = ref.watch(emailVerificationProvider);
 
-    ref.listen(otpProvider, (_, next) {
-      if (next is OtpVerified) {
-        AppToast.success(context, 'Code verified!');
-        context.goNamed(
-          'reset-password',
-          queryParameters: {
-            'email': widget.email,
-            'token': next.resetToken,
-          },
-        );
-      } else if (next is OtpError) {
+    ref.listen<EmailVerificationState>(
+        emailVerificationProvider, (_, next) {
+      if (next is EmailVerificationVerified) {
+        AppToast.success(context, 'Email verified! You can now sign in.');
+        context.go(AppRoutes.login);
+      } else if (next is EmailVerificationError) {
+        _autoSubmitted = false;
         final message = next.error is ValidationError
             ? (next.error as ValidationError).message
             : next.error.message;
@@ -146,7 +146,8 @@ class _EnterOtpScreenState extends ConsumerState<EnterOtpScreen>
                   MediaQuery.of(context).padding.bottom,
             ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacing6),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: AppTheme.spacing6),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -168,18 +169,13 @@ class _EnterOtpScreenState extends ConsumerState<EnterOtpScreen>
                       width: 80,
                       height: 80,
                       decoration: BoxDecoration(
-                        color: (isDark
-                                ? AppColors.primaryDark
-                                : AppColors.primaryLight)
-                            .withOpacity(0.12),
+                        color: AppColors.success.withOpacity(0.12),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         Icons.mark_email_read_rounded,
                         size: 40,
-                        color: isDark
-                            ? AppColors.primaryDark
-                            : AppColors.primaryLight,
+                        color: AppColors.success,
                       ),
                     ),
                   ),
@@ -189,7 +185,7 @@ class _EnterOtpScreenState extends ConsumerState<EnterOtpScreen>
                     child: FadeTransition(
                       opacity: _fadeAnimation,
                       child: Text(
-                        'Check your email',
+                        'Verify your email',
                         style: AppTextStyles.headlineLarge.copyWith(
                           color: isDark
                               ? AppColors.foregroundDark
@@ -236,9 +232,9 @@ class _EnterOtpScreenState extends ConsumerState<EnterOtpScreen>
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: List.generate(6, (index) {
-                            return SizedBox(
-                              width: 56,
-                              height: 56,
+                          return SizedBox(
+                            width: 56,
+                            height: 56,
                             child: TextField(
                               controller: _controllers[index],
                               focusNode: _focusNodes[index],
@@ -255,7 +251,8 @@ class _EnterOtpScreenState extends ConsumerState<EnterOtpScreen>
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0,
                               ),
-                              textCapitalization: TextCapitalization.characters,
+                              textCapitalization:
+                                  TextCapitalization.characters,
                               inputFormatters: [
                                 FilteringTextInputFormatter.allow(
                                   RegExp(r'[a-zA-Z0-9]'),
@@ -328,7 +325,8 @@ class _EnterOtpScreenState extends ConsumerState<EnterOtpScreen>
                       child: _buildResendRow(isDark, state),
                     ),
                   ),
-                  if (state is OtpVerifying || state is OtpSending) ...[
+                  if (state is EmailVerificationSending ||
+                      state is EmailVerificationVerifying) ...[
                     const SizedBox(height: AppTheme.spacing6),
                     const Center(child: CircularProgressIndicator()),
                   ],
@@ -341,8 +339,8 @@ class _EnterOtpScreenState extends ConsumerState<EnterOtpScreen>
     );
   }
 
-  Widget _buildResendRow(bool isDark, OtpState state) {
-    if (state is OtpResendCooldown) {
+  Widget _buildResendRow(bool isDark, EmailVerificationState state) {
+    if (state is EmailVerificationResendCooldown) {
       return Text(
         'Resend in ${state.secondsRemaining}s',
         style: AppTextStyles.bodySmall.copyWith(
@@ -354,7 +352,7 @@ class _EnterOtpScreenState extends ConsumerState<EnterOtpScreen>
       );
     }
 
-    if (state is OtpSending) {
+    if (state is EmailVerificationSending) {
       return const SizedBox.shrink();
     }
 
@@ -375,7 +373,7 @@ class _EnterOtpScreenState extends ConsumerState<EnterOtpScreen>
 
   Widget _buildBackButton(bool isDark) {
     return GestureDetector(
-      onTap: () => context.go(AppRoutes.forgotPassword),
+      onTap: () => context.go(AppRoutes.login),
       child: Container(
         width: 40,
         height: 40,
