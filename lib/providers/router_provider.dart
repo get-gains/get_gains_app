@@ -51,6 +51,7 @@ class AppRoutes {
   static const String login = '/login';
   static const String register = '/register';
   static const String checkEmail = '/check-email';
+  static const String emailVerification = '/email-verification';
   static const String completeProfile = '/complete-profile';
   static const String forgotPassword = '/forgot-password';
   static const String enterOtp = '/enter-otp';
@@ -210,6 +211,7 @@ GoRouter router(Ref ref) {
           location == AppRoutes.login ||
           location == AppRoutes.register ||
           location == AppRoutes.checkEmail ||
+          location == AppRoutes.emailVerification ||
           location == AppRoutes.forgotPassword ||
           location == AppRoutes.enterOtp ||
           location == AppRoutes.resetPassword ||
@@ -276,6 +278,13 @@ GoRouter router(Ref ref) {
         builder: (context, state) {
           final email = state.uri.queryParameters['email'];
           return CheckEmailScreen(email: email);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.emailVerification,
+        builder: (context, state) {
+          final email = state.uri.queryParameters['email'] ?? '';
+          return EmailVerificationScreen(email: email);
         },
       ),
       GoRoute(
