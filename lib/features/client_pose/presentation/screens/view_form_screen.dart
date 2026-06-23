@@ -476,11 +476,6 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
       UnityMessageContract.methodPlayPose,
       '',
     );
-    sendToUnity(
-      UnityMessageContract.gameObjectName,
-      UnityMessageContract.methodSetPoseDebugOptions,
-      UnityMessageContract.defaultPoseDebugOptionsPayload(),
-    );
   }
 
   void _openFullscreen() {

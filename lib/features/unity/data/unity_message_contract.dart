@@ -93,9 +93,9 @@ class UnityMessageContract {
   static const bool defaultPoseDebugSwapArmLandmarks = false;
   static const bool defaultPoseDebugSwapLegLandmarks = false;
   static const bool defaultPoseDebugForceStickFigure = false;
-  static const bool defaultPoseDebugInvertArmDepthZ = true;
-  static const bool defaultPoseDebugInvertHeadDepthZ = true;
-  static const bool defaultPoseDebugInvertLegDepthZ = true;
+  static const bool defaultPoseDebugInvertArmDepthZ = false;
+  static const bool defaultPoseDebugInvertHeadDepthZ = false;
+  static const bool defaultPoseDebugInvertLegDepthZ = false;
 
   /// JSON payload built from [defaultPoseDebugSwapArmLandmarks], etc.
   static String defaultPoseDebugOptionsPayload() => jsonEncode({
