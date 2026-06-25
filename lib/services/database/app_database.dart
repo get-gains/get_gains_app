@@ -139,6 +139,7 @@ class StandaloneProgramRoutines extends Table {
   TextColumn get programId => text()();
   TextColumn get routineId => text()();
   TextColumn get dayOfWeek => text()();
+  IntColumn get orderInProgram => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -267,7 +268,16 @@ class AppDatabase extends _$AppDatabase {
         await m.createAll();
       },
       onUpgrade: (Migrator m, int from, int to) async {
-        await m.createAll();
+        if (from >= 3) {
+          for (final entity in m.database.allSchemaEntities) {
+            if (entity is TableInfo) {
+              await m.deleteTable(entity.entityName);
+            }
+          }
+          await m.createAll();
+        } else {
+          await m.createAll();
+        }
         if (from < 2) {
           await customStatement(
             'ALTER TABLE standalone_program_routines ADD COLUMN order_in_program INTEGER NOT NULL DEFAULT 0',
