@@ -261,6 +261,36 @@ class CoachPoseRepository {
     );
   }
 
+  /// Update a form's camera angle.
+  Future<Result<ExerciseFormModel, AppError>> updateForm({
+    required String formId,
+    required String cameraAngle,
+  }) async {
+    final result = await _apiClient.put<Map<String, dynamic>>(
+      '/pose/forms/$formId',
+      data: {'cameraAngle': cameraAngle},
+    );
+
+    return result.when(
+      success: (data) {
+        try {
+          final form = ExerciseFormModel.fromJson(
+            data['form'] as Map<String, dynamic>,
+          );
+          return Success(form);
+        } catch (e) {
+          AppLogger.error(
+            'Failed to parse updated form',
+            tag: 'CoachPoseRepo',
+            error: e,
+          );
+          return Failure(UnknownError(message: 'Failed to parse form: $e'));
+        }
+      },
+      failure: (error) => Failure(error),
+    );
+  }
+
   /// Get a presigned download URL for a form's frames blob in S3.
   Future<Result<String, AppError>> getFormDownloadUrl(String formId) async {
     final result = await _apiClient.get<Map<String, dynamic>>(
