@@ -335,8 +335,6 @@ class StandaloneWorkoutRepository {
       }),
     );
 
-    final cached = await _cache.get<Map<String, dynamic>>(_ckProgram(programId), (json) => json);
-    if (cached != null) return Success(StandaloneProgramDetail.fromJson(cached));
     return getProgram(programId);
   }
 
