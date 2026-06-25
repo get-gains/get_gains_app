@@ -267,6 +267,7 @@ class AppDatabase extends _$AppDatabase {
         await m.createAll();
       },
       onUpgrade: (Migrator m, int from, int to) async {
+        await m.createAll();
         if (from < 2) {
           await customStatement(
             'ALTER TABLE standalone_program_routines ADD COLUMN order_in_program INTEGER NOT NULL DEFAULT 0',
