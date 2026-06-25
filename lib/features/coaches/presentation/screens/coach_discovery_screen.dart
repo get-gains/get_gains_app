@@ -23,6 +23,14 @@ class CoachDiscoveryScreen extends ConsumerStatefulWidget {
 class _CoachDiscoveryScreenState extends ConsumerState<CoachDiscoveryScreen> {
   final _searchController = TextEditingController();
   String? _activeSearch;
+  String? _activeSpecialty;
+
+  static const _specialties = [
+    ('Strength', Icons.fitness_center),
+    ('Bodybuilding', Icons.health_and_safety),
+    ('Resistance', Icons.autorenew),
+    ('Calisthenics', Icons.accessibility_new),
+  ];
 
   @override
   void initState() {
@@ -40,7 +48,10 @@ class _CoachDiscoveryScreenState extends ConsumerState<CoachDiscoveryScreen> {
 
   void _onSearch() {
     final query = _searchController.text.trim();
-    setState(() => _activeSearch = query.isEmpty ? null : query);
+    setState(() {
+      _activeSearch = query.isEmpty ? null : query;
+      _activeSpecialty = null;
+    });
     ref
         .read(coachDiscoveryProvider.notifier)
         .loadCoaches(search: query.isEmpty ? null : query);
@@ -48,8 +59,28 @@ class _CoachDiscoveryScreenState extends ConsumerState<CoachDiscoveryScreen> {
 
   void _clearSearch() {
     _searchController.clear();
-    setState(() => _activeSearch = null);
+    setState(() {
+      _activeSearch = null;
+      _activeSpecialty = null;
+    });
     ref.read(coachDiscoveryProvider.notifier).loadCoaches();
+  }
+
+  void _onSpecialtyFilter(String specialty) {
+    if (_activeSpecialty == specialty) {
+      setState(() => _activeSpecialty = null);
+      _searchController.clear();
+      ref.read(coachDiscoveryProvider.notifier).loadCoaches();
+    } else {
+      _searchController.text = specialty;
+      setState(() {
+        _activeSpecialty = specialty;
+        _activeSearch = specialty;
+      });
+      ref
+          .read(coachDiscoveryProvider.notifier)
+          .loadCoaches(specialty: specialty);
+    }
   }
 
   @override
@@ -82,6 +113,31 @@ class _CoachDiscoveryScreenState extends ConsumerState<CoachDiscoveryScreen> {
               hint: 'Search coaches by name or specialty...',
               onSubmitted: (_) => _onSearch(),
               onClear: _clearSearch,
+            ),
+          ),
+          // Quick specialty filter chips
+          Padding(
+            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 4),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _specialties.map((s) {
+                  final (label, icon) = s;
+                  final isSelected = _activeSpecialty == label;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: AppChip(
+                      label: label,
+                      leadingIcon: icon,
+                      selected: isSelected,
+                      variant: isSelected
+                          ? AppChipVariant.filled
+                          : AppChipVariant.tonal,
+                      onTap: () => _onSpecialtyFilter(label),
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
           ),
           // Results

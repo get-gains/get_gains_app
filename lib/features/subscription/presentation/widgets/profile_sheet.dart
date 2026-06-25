@@ -30,6 +30,7 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+    final profileAsync = ref.watch(profileProvider);
     final fitnessProfileAsync = ref.watch(userProfileProvider);
     final subscriptionState = ref.watch(subscriptionProvider);
     final isSubscribed = ref.watch(isSubscribedProvider);
@@ -38,7 +39,12 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final email = authState.email ?? '';
-    final userName = email.isNotEmpty ? email.split('@').first : 'User';
+    final user = profileAsync.asData?.value;
+    final userName = (user?.name.isNotEmpty == true)
+        ? user!.name
+        : email.isNotEmpty
+            ? email.split('@').first
+            : 'User';
     final fitnessProfile = fitnessProfileAsync.asData?.value;
     final avatarUrl = fitnessProfile?.avatarUrl;
 
@@ -104,6 +110,8 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
               const SizedBox(height: 4),
               Text(
                 email,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: isDark
                       ? AppColors.mutedForegroundDark
