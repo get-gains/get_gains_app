@@ -46,9 +46,11 @@ final class NetworkError extends AppError {
     super.transportCode,
     super.originalError,
     this.statusCode,
+    this.meta,
   });
 
   final int? statusCode;
+  final Map<String, dynamic>? meta;
 
   factory NetworkError.noConnection() => const NetworkError(
     message: 'No internet connection. Please check your network.',

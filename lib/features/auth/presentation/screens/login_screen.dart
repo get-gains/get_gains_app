@@ -1,5 +1,7 @@
 // lib/features/auth/presentation/screens/login_screen.dart
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -86,16 +88,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   void _showLoginError(AppError error) {
     final message = errorMessageFor(error);
 
-    // Email not verified — offer to navigate to the code entry screen
+    // Email not verified — navigate to code entry with code metadata
     if (error.code == ApiErrorCode.authEmailNotVerified) {
       final email = _emailController.text.trim();
-      AppToast.error(
-        context,
-        message,
-        actionLabel: 'Verify Email',
-        action: () => context.go(
-          '${AppRoutes.emailVerification}?email=${Uri.encodeComponent(email)}',
-        ),
+      final meta = error is NetworkError ? error.meta : null;
+      context.go(
+        '${AppRoutes.emailVerification}?email=${Uri.encodeComponent(email)}'
+        '${meta != null ? '&meta=${Uri.encodeComponent(jsonEncode(meta))}' : ''}',
       );
       return;
     }

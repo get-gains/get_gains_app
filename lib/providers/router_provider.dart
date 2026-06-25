@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
@@ -298,7 +300,14 @@ GoRouter router(Ref ref) {
         path: AppRoutes.emailVerification,
         builder: (context, state) {
           final email = state.uri.queryParameters['email'] ?? '';
-          return EmailVerificationScreen(email: email);
+          final metaRaw = state.uri.queryParameters['meta'];
+          Map<String, dynamic>? meta;
+          if (metaRaw != null && metaRaw.isNotEmpty) {
+            try {
+              meta = jsonDecode(metaRaw) as Map<String, dynamic>;
+            } catch (_) {}
+          }
+          return EmailVerificationScreen(email: email, codeMeta: meta);
         },
       ),
       GoRoute(
