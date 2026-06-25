@@ -23,6 +23,7 @@ class GuidanceRepository {
   static const String kResults = 'results';
   static const String kWorkoutSession = 'workout_session';
   static const String kSetLogger = 'set_logger';
+  static const String kCoachHome = 'coach_home';
 
   /// All known screen IDs for reset operations.
   static const List<String> _allScreenIds = [
@@ -33,6 +34,7 @@ class GuidanceRepository {
     kResults,
     kWorkoutSession,
     kSetLogger,
+    kCoachHome,
   ];
 
   /// Returns `true` if the tour for [screenId] has been completed.

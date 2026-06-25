@@ -7,22 +7,27 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../guidance/guidance.dart';
 import '../providers/coach_pulse_provider.dart';
 
 /// Hero block for coaches: shows client count and assignment stats with a
 /// primary CTA to navigate to the Coach Hub.
 ///
 /// When [isDeactivated] is true, shows a deactivation notice instead.
+///
+/// [pulseKey] attaches a [GlobalKey] for the coach spotlight tour.
 class CoachPulseBlock extends ConsumerWidget {
-  const CoachPulseBlock({super.key, this.isDeactivated = false});
+  const CoachPulseBlock({super.key, this.isDeactivated = false, this.pulseKey});
 
   final bool isDeactivated;
+  final GlobalKey? pulseKey;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pulseAsync = ref.watch(coachPulseProvider);
 
     return Padding(
+      key: pulseKey,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: AppCard.gradient(
         gradient: const LinearGradient(
@@ -54,6 +59,17 @@ class CoachPulseBlock extends ConsumerWidget {
                       fontSize: 16,
                     ),
                   ),
+                ),
+                InfoIconButton(
+                  iconSize: 20,
+                  color: Colors.white,
+                  content: kHomeHelp,
+                  onTapOverride: () {
+                    ref.read(tourProvider.notifier).startTour(
+                      'coach_home',
+                      kCoachHomeTourSteps,
+                    );
+                  },
                 ),
               ],
             ),

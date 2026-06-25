@@ -83,6 +83,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _onboardingShown = false;
   bool _tourTriggered = false;
+  bool _sheetOpen = false;
 
   // Tour GlobalKeys — re-attached to new blocks per plan §6
   final _todaysFocusKey = GlobalKey(debugLabel: 'home_todays_focus');
@@ -92,30 +93,64 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     debugLabel: 'home_quick_action_history',
   );
   final _recentActivityKey = GlobalKey(debugLabel: 'home_recent_activity');
+  final _coachPulseKey = GlobalKey(debugLabel: 'coach_pulse');
+  final _coachRoutinesKey = GlobalKey(debugLabel: 'coach_tool_routines');
+  final _coachExercisesKey = GlobalKey(debugLabel: 'coach_tool_exercises');
+  final _coachClientsKey = GlobalKey(debugLabel: 'coach_tool_clients');
+  final _coachSettingsKey = GlobalKey(debugLabel: 'coach_tool_settings');
 
   @override
   Widget build(BuildContext context) {
     ref.listen<bool>(needsOnboardingProvider, (previous, needsOnboarding) {
       if (needsOnboarding && !_onboardingShown) {
         _onboardingShown = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) showOnboardingSheet(context);
+        _sheetOpen = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (mounted) {
+            await showOnboardingSheet(context);
+            _sheetOpen = false;
+            if (mounted) _maybeStartTour();
+          }
         });
-      }
-      if (previous == true && !needsOnboarding) {
-        _maybeStartTour();
       }
     });
 
+    ref.listen<TourState>(tourProvider, (previous, next) {
+      if (previous is TourActive && previous.tourId == 'home') {
+        final coachStatus = ref.read(isCoachProvider).asData?.value;
+        if (coachStatus != null &&
+            coachStatus.isCoach &&
+            !coachStatus.isDeactivated) {
+          final repo = ref.read(guidanceRepositoryProvider);
+          if (!repo.isCompleted(GuidanceRepository.kCoachHome)) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                ref.read(tourProvider.notifier).startTour(
+                  'coach_home',
+                  kCoachHomeTourSteps,
+                );
+              }
+            });
+          }
+        }
+      }
+    });
+
+    final profileAsync = ref.watch(userProfileProvider);
     final needsOnboarding = ref.watch(needsOnboardingProvider);
     if (needsOnboarding && !_onboardingShown) {
       _onboardingShown = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) showOnboardingSheet(context);
+      _sheetOpen = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (mounted) {
+          await showOnboardingSheet(context);
+          _sheetOpen = false;
+          if (mounted) _maybeStartTour();
+        }
       });
     }
 
-    if (!needsOnboarding && !_tourTriggered) {
+    if (profileAsync.hasValue && !needsOnboarding && !_tourTriggered && !_sheetOpen) {
       _maybeStartTour();
     }
 
@@ -134,6 +169,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         'home_quick_action_start': _quickActionsKey,
         'home_quick_action_history': _quickActionsHistoryKey,
         'home_recent_activity': _recentActivityKey,
+        'coach_pulse': _coachPulseKey,
+        'coach_tool_routines': _coachRoutinesKey,
+        'coach_tool_exercises': _coachExercisesKey,
+        'coach_tool_clients': _coachClientsKey,
+        'coach_tool_settings': _coachSettingsKey,
       },
       child: Scaffold(
         body: Stack(
@@ -156,10 +196,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                           // ── Role-based hero block ──────────────────
                           if (isCoach) ...[
-                            CoachPulseBlock(isDeactivated: isDeactivated),
+                            CoachPulseBlock(
+                              pulseKey: _coachPulseKey,
+                              isDeactivated: isDeactivated,
+                            ),
                             const SizedBox(height: 16),
                             if (!isDeactivated) ...[
-                              const CoachToolsBlock(),
+                              CoachToolsBlock(
+                                routinesKey: _coachRoutinesKey,
+                                exercisesKey: _coachExercisesKey,
+                                clientsKey: _coachClientsKey,
+                                settingsKey: _coachSettingsKey,
+                              ),
                               const SizedBox(height: 16),
                             ],
                             // Coach's own workout (collapsed today block)

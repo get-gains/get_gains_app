@@ -105,6 +105,45 @@ const kHomeTourSteps = [
   ),
 ];
 
+/// Coach home spotlight tour (5 steps).
+const kCoachHomeTourSteps = [
+  TourStepModel(
+    targetKey: 'coach_pulse',
+    title: 'Coach Pulse',
+    body:
+        'See your client stats at a glance: total clients, those with an assigned program, and those who still need one.',
+    order: 0,
+  ),
+  TourStepModel(
+    targetKey: 'coach_tool_routines',
+    title: 'Routines',
+    body:
+        'Create and manage workout routines for your clients. Build day-by-day programs with exercises, sets, and reps.',
+    order: 1,
+  ),
+  TourStepModel(
+    targetKey: 'coach_tool_exercises',
+    title: 'Exercises',
+    body:
+        'Browse and manage your custom exercise library. Add exercises with form references for your clients to follow.',
+    order: 2,
+  ),
+  TourStepModel(
+    targetKey: 'coach_tool_clients',
+    title: 'Clients',
+    body:
+        'View and manage your client roster. Assign programs, track progress, and review client form submissions.',
+    order: 3,
+  ),
+  TourStepModel(
+    targetKey: 'coach_tool_settings',
+    title: 'Coach Settings',
+    body:
+        'Configure your coach profile, manage your subscription, and adjust your coaching preferences.',
+    order: 4,
+  ),
+];
+
 // ============================================================================
 // 2. HELP CONTENT MODELS
 // ============================================================================
