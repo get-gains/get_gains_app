@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/errors/api_error_codes.dart';
@@ -231,11 +232,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           },
           child: ClipRRect(
             borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-            child: Image.asset(
-              'assets/images/logo.jpg',
+            child: SvgPicture.asset(
+              'assets/images/logo.svg',
               width: 150,
               height: 150,
-              fit: BoxFit.cover,
             ),
           ),
         ),
