@@ -148,7 +148,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 60),
+                  const SizedBox(height: 20),
 
                   // Logo & Branding
                   FadeTransition(
@@ -156,7 +156,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     child: _buildHeader(isDark),
                   ),
 
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 28),
 
                   // Login Form
                   SlideTransition(
@@ -167,7 +167,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     ),
                   ),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 20),
 
                   // Divider with "OR"
                   SlideTransition(
@@ -178,7 +178,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     ),
                   ),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 20),
 
                   // Social Login
                   SlideTransition(
@@ -189,7 +189,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     ),
                   ),
 
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 24),
 
                   // Register Link
                   SlideTransition(
@@ -200,7 +200,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     ),
                   ),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 12),
                 ],
               ),
             ),
@@ -237,9 +237,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           ),
         ),
 
-        const SizedBox(height: 24),
-
-        const SizedBox(height: 8),
+        const SizedBox(height: 16),
 
         // Tagline
         Text(
@@ -283,7 +281,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             },
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
 
           // Password Field
           AppTextField.password(
@@ -301,7 +299,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             onSubmitted: (_) => _handleEmailPasswordLogin(),
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
 
           // Forgot Password Link
           Align(
@@ -328,7 +326,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             ),
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
           // Login Button
           AppButton.primary(
