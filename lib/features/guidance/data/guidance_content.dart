@@ -206,6 +206,38 @@ const kViewFormHelp = HelpContentModel(
   ],
 );
 
+/// Camera angle help content for view form screen.
+const kViewFormAngleHelp = HelpContentModel(
+  id: 'view_form_angles',
+  title: 'Camera Angles',
+  sections: [
+    HelpSection(
+      heading: 'Front',
+      body: 'Camera facing directly forward. Best for exercises performed '
+          'straight-on like squats and overhead presses.',
+      iconName: 'videocam',
+    ),
+    HelpSection(
+      heading: 'Side Left / Side Right',
+      body: 'Camera at 90° from the side. Ideal for exercises where '
+          'lateral movement matters like lunges and lateral raises.',
+      iconName: 'switch_left',
+    ),
+    HelpSection(
+      heading: '45° Left / 45° Right',
+      body: 'Camera at a 45° diagonal, facing toward the side of the coach. '
+          'Great for most compound lifts where both front and side views are helpful.',
+      iconName: 'rotate_right',
+    ),
+    HelpSection(
+      heading: 'Rear',
+      body: 'Camera from behind. Useful for exercises where back posture '
+          'is the focus, like deadlifts and rows.',
+      iconName: 'arrow_back',
+    ),
+  ],
+);
+
 /// Recording help content (pre-brief + info icon).
 const kRecordingHelp = HelpContentModel(
   id: 'recording',

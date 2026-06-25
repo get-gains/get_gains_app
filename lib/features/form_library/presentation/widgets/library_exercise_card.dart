@@ -111,45 +111,17 @@ class LibraryExerciseCard extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isDark
-                              ? AppColors.surface2Dark
-                              : AppColors.surface2Light,
-                        ),
-                        child: Center(
-                          child: Text(
-                            exercise.coachName.isNotEmpty
-                                ? exercise.coachName[0].toUpperCase()
-                                : 'C',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: primary,
-                            ),
-                          ),
-                        ),
+                  if (exercise.coachName.isNotEmpty)
+                    Text(
+                      exercise.coachName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: isDark
+                            ? AppColors.mutedForegroundDark
+                            : AppColors.mutedForegroundLight,
                       ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          exercise.coachName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: isDark
-                                ? AppColors.mutedForegroundDark
-                                : AppColors.mutedForegroundLight,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
                   const SizedBox(height: 6),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
