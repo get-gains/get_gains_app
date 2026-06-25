@@ -23,9 +23,17 @@ class LandingScreen extends ConsumerWidget {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          SvgPicture.asset(
-            'assets/images/landing_page.svg',
-            fit: BoxFit.cover,
+          Opacity(
+            opacity: 0.5,
+            child: SvgPicture.asset(
+              'assets/images/landing_page.svg',
+              fit: BoxFit.cover,
+            ),
+          ),
+          Container(
+            color:
+                (isDark ? AppColors.backgroundDark : AppColors.backgroundLight)
+                    .withOpacity(0.75),
           ),
           SafeArea(
             child: Padding(
@@ -33,10 +41,7 @@ class LandingScreen extends ConsumerWidget {
               child: Column(
                 children: [
                   const Spacer(flex: 2),
-                  SvgPicture.asset(
-                    'assets/images/logo.svg',
-                    width: 200,
-                  ),
+                  SvgPicture.asset('assets/images/logo.svg', width: 200),
                   const SizedBox(height: 16),
                   Text(
                     subtitle,

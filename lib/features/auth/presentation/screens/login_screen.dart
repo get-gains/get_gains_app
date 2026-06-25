@@ -230,13 +230,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               context.push(AppRoutes.unityTest);
             }
           },
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-            child: SvgPicture.asset(
-              'assets/images/logo.svg',
-              width: 150,
-              height: 150,
-            ),
+          child: SvgPicture.asset(
+            'assets/images/logo.svg',
+            width: 150,
+            height: 150,
           ),
         ),
 

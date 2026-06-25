@@ -79,13 +79,10 @@ class ShareStatsCard extends StatelessWidget {
   Widget _buildLogo() {
     return Row(
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: SvgPicture.asset(
-            'assets/images/logo.svg',
-            width: 64,
-            height: 64,
-          ),
+        SvgPicture.asset(
+          'assets/images/logo.svg',
+          width: 64,
+          height: 64,
         ),
         const SizedBox(width: 16),
         Text(
