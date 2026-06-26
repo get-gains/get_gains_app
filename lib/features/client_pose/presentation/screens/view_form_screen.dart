@@ -10,6 +10,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../services/database/app_database.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../coach_pose/data/models/exercise_form_model.dart';
 import '../../../coach_pose/data/models/landmark_models.dart';
 import '../../../form_library/presentation/widgets/ad_gate_dialog.dart';
 import '../../../form_library/presentation/widgets/rating_bottom_sheet.dart';
@@ -76,7 +77,7 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
           ? AppColors.backgroundDark
           : AppColors.backgroundLight,
       appBar: AppBar(
-        title: const Text('Reference Form'),
+        title: Text(widget.isFromLibrary ? 'Compare Form' : 'Reference Form'),
         centerTitle: true,
         actions: [InfoIconButton(content: kViewFormHelp)],
       ),
@@ -108,6 +109,9 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
           _hasForms = forms.isNotEmpty;
           _exerciseName = exerciseName;
           _coachName = coachName;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() {});
+          });
 
           if (forms.isEmpty) {
             return AppEmptyState(
@@ -221,7 +225,7 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
     if (!mounted) return;
 
     final result = await context.push<bool>(
-      AppRoutes.clientCompareForm.replaceAll(':id', widget.exerciseId),
+      AppRoutes.clientUnityRecord.replaceAll(':id', widget.exerciseId),
     );
 
     if (!mounted) return;
@@ -491,12 +495,7 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
   @override
   Widget build(BuildContext context) {
     final cameraAngle = _cameraAngle;
-    final coachName = widget.form['coachName'] as String? ?? 'Coach';
-    final durationMs = widget.form['durationMs'] as int? ?? 0;
-    final frameRate = widget.form['frameRate'] as int? ?? 0;
-    final totalFrames = widget.form['totalFrames'] as int? ?? 0;
-    final version = widget.form['version'] as int? ?? 1;
-    final durationSec = (durationMs / 1000).toStringAsFixed(1);
+    final coachName = widget.form['coachName'] as String? ?? '';
     final hasFrames = widget.landmarkFrames.isNotEmpty;
 
     return Padding(
@@ -716,48 +715,29 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
                             : AppColors.primaryLight,
                       ),
                       const SizedBox(width: 8),
-                      Flexible(
+                      Expanded(
                         child: Text(
-                          'Version $version',
+                          '${_formatAngleDisplay(cameraAngle)} angle',
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.bold),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: AppBadge(
-                            label: _formatAngle(cameraAngle),
-                            variant: AppBadgeVariant.primary,
-                          ),
-                        ),
+                      const SizedBox(width: 4),
+                      InfoIconButton(
+                        content: kViewFormAngleHelp,
+                        iconSize: 22,
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  _InfoRow(
-                    label: 'Coach',
-                    value: coachName,
-                    isDark: widget.isDark,
-                  ),
-                  _InfoRow(
-                    label: 'Duration',
-                    value: '${durationSec}s',
-                    isDark: widget.isDark,
-                  ),
-                  _InfoRow(
-                    label: 'Frame Rate',
-                    value: '$frameRate fps',
-                    isDark: widget.isDark,
-                  ),
-                  _InfoRow(
-                    label: 'Total Frames',
-                    value: '$totalFrames',
-                    isDark: widget.isDark,
-                  ),
+                  if (coachName.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    _InfoRow(
+                      label: 'Coach',
+                      value: coachName,
+                      isDark: widget.isDark,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -767,16 +747,22 @@ class _FormPlaybackCardState extends State<_FormPlaybackCard> {
     );
   }
 
-  String _formatAngle(String angle) {
-    return angle
-        .replaceAll('_', ' ')
-        .split(' ')
-        .map(
-          (w) => w.isEmpty
-              ? w
-              : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}',
-        )
-        .join(' ');
+  String _formatAngleDisplay(String angle) {
+    try {
+      return CameraAngle.values
+          .firstWhere((a) => a.serverValue == angle)
+          .displayName;
+    } catch (_) {
+      return angle
+          .replaceAll('_', ' ')
+          .split(' ')
+          .map(
+            (w) => w.isEmpty
+                ? w
+                : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}',
+          )
+          .join(' ');
+    }
   }
 }
 

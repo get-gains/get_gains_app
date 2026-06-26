@@ -306,6 +306,11 @@ class _FormsTab extends ConsumerWidget {
                     .replaceFirst(':formId', form.id),
               );
             },
+            onEditAngle: (newAngle) {
+              ref
+                  .read(exerciseDetailProvider(exerciseId).notifier)
+                  .updateFormAngle(form.id, newAngle);
+            },
             onDelete: () async {
               final confirmed = await showDialog<bool>(
                 context: context,

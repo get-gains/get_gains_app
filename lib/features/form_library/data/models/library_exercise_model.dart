@@ -10,7 +10,7 @@ abstract class LibraryExerciseModel with _$LibraryExerciseModel {
     required String name,
     required String description,
     @Default([]) List<String> targetMuscles,
-    @Default('') String coachName,
+    @JsonKey(name: 'coach_name') @Default('') String coachName,
     String? coachAvatarUrl,
     @Default(0) int thumbsUpCount,
     @Default(false) bool isRatedByUser,

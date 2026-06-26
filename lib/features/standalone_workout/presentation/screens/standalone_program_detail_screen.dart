@@ -272,6 +272,7 @@ class _StandaloneProgramDetailScreenState
             success: (_) {
               ref.invalidate(
                   standaloneProgramDetailProvider(widget.programId));
+              ref.invalidate(standaloneProgramListProvider);
               AppToast.success(context, 'Routine added');
             },
             failure: (error) {
@@ -325,6 +326,7 @@ class _StandaloneProgramDetailScreenState
             success: (_) {
               ref.invalidate(
                   standaloneProgramDetailProvider(widget.programId));
+              ref.invalidate(standaloneProgramListProvider);
               AppToast.success(context, 'Exercise added');
             },
             failure: (error) {
@@ -371,6 +373,7 @@ class _StandaloneProgramDetailScreenState
       result.when(
         success: (_) {
           ref.invalidate(standaloneProgramDetailProvider(widget.programId));
+          ref.invalidate(standaloneProgramListProvider);
           AppToast.success(context, 'Routine deleted');
         },
         failure: (error) {

@@ -393,6 +393,11 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
         feedback.play(RecordingFeedbackEvent.success);
         ref.invalidate(exerciseDetailProvider(widget.exerciseId));
         _showSuccess(context, isDark);
+        final formId = next.uploadedForm?.id;
+        final router = GoRouter.of(context);
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (mounted) router.pop(formId);
+        });
       }
       // When countdown finishes and recording starts:
       // stop the image stream and start video recording.
@@ -590,26 +595,45 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
                   color: Colors.red.withValues(alpha: 0.8),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Row(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'REC · ${(state.recordingDurationMs / 1000).toStringAsFixed(1)}s / ${kMaxRecordingDurationSeconds}s',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      state.phase == RecordingPhase.recording
-                          ? 'REC · Recording… (analyzed when you stop)'
-                          : 'REC · ${state.frameCount} frames',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: 140,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: (state.recordingDurationMs / 1000) /
+                              kMaxRecordingDurationSeconds,
+                          backgroundColor: Colors.red.withValues(alpha: 0.4),
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
+                          minHeight: 4,
+                        ),
                       ),
                     ),
                   ],
@@ -806,26 +830,7 @@ class _CompleteOverlay extends StatefulWidget {
 }
 
 class _CompleteOverlayState extends State<_CompleteOverlay> {
-  Timer? _autoPopTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _autoPopTimer = Timer(const Duration(milliseconds: 1500), () {
-      if (mounted) {
-        context.pop(widget.form?.id);
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _autoPopTimer?.cancel();
-    super.dispose();
-  }
-
   void _dismiss() {
-    _autoPopTimer?.cancel();
     context.pop(widget.form?.id);
   }
 

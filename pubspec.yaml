@@ -20,7 +20,7 @@ platforms:
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.4.0
 environment:
   sdk: ^3.9.0
 
@@ -73,6 +73,7 @@ dependencies:
   gal: ^2.3.0
   flutter_soloud: ^4.0.9
   cuid2: ^4.1.0
+  flutter_svg: ^2.0.17
 
 dev_dependencies:
   flutter_test:
@@ -90,6 +91,7 @@ dev_dependencies:
   riverpod_generator: ^3.0.3
   riverpod_lint: ^3.0.3
   drift_dev: ^2.29.0
+  flutter_launcher_icons: ^0.14.3
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -103,7 +105,8 @@ flutter:
 
   # Assets including environment configuration
   assets:
-    - assets/images/logo.jpg
+    - assets/images/logo.svg
+    - assets/images/landing_page.svg
     - assets/sounds/
     - .env
 

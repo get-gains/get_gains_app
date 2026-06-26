@@ -31,7 +31,7 @@ class CoachHubScreen extends ConsumerWidget {
               floating: true,
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () => context.pop(),
+                onPressed: () => context.go(AppRoutes.home),
               ),
               title: Text(
                 'Coach Tools',

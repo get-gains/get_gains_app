@@ -384,11 +384,16 @@ class ApiClient {
             );
           }
 
+          final firstError =
+              (data['errors'] as List).first as Map<String, dynamic>;
+          final meta = firstError['meta'] as Map<String, dynamic>?;
+
           // Return the server's error message with the typed code
           return NetworkError(
             message: errorMessage,
             code: apiCode,
             statusCode: statusCode,
+            meta: meta,
           );
         }
       }

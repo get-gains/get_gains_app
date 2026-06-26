@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -13,9 +15,14 @@ import '../../../../widgets/widgets.dart';
 import '../providers/email_verification_provider.dart';
 
 class EmailVerificationScreen extends ConsumerStatefulWidget {
-  const EmailVerificationScreen({super.key, required this.email});
+  const EmailVerificationScreen({
+    super.key,
+    required this.email,
+    this.codeMeta,
+  });
 
   final String email;
+  final Map<String, dynamic>? codeMeta;
 
   @override
   ConsumerState<EmailVerificationScreen> createState() =>
@@ -34,6 +41,15 @@ class _EmailVerificationScreenState
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
 
   bool _autoSubmitted = false;
+  Timer? _expiryTimer;
+  Duration _timeUntilExpiry = Duration.zero;
+
+  bool get _hasValidCode =>
+      widget.codeMeta?['canResend'] == false &&
+      widget.codeMeta?['codeExpiresAt'] != null;
+
+  bool get _needsCodeSent =>
+      widget.codeMeta == null || widget.codeMeta?['canResend'] == true;
 
   @override
   void initState() {
@@ -57,10 +73,40 @@ class _EmailVerificationScreenState
         );
 
     _animationController.forward();
+
+    if (_hasValidCode) {
+      _startExpiryTimer();
+    } else if (_needsCodeSent) {
+      Future.microtask(() => _onResend());
+    }
+  }
+
+  void _startExpiryTimer() {
+    final expiresAt = widget.codeMeta?['codeExpiresAt'] as String?;
+    if (expiresAt == null) return;
+
+    final expiry = DateTime.tryParse(expiresAt);
+    if (expiry == null) return;
+
+    _updateTimeUntilExpiry(expiry);
+    _expiryTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _updateTimeUntilExpiry(expiry);
+    });
+  }
+
+  void _updateTimeUntilExpiry(DateTime expiry) {
+    final remaining = expiry.difference(DateTime.now());
+    if (remaining.isNegative) {
+      _expiryTimer?.cancel();
+      setState(() => _timeUntilExpiry = Duration.zero);
+    } else {
+      setState(() => _timeUntilExpiry = remaining);
+    }
   }
 
   @override
   void dispose() {
+    _expiryTimer?.cancel();
     _animationController.dispose();
     for (final c in _controllers) {
       c.dispose();
@@ -111,6 +157,12 @@ class _EmailVerificationScreenState
         ? '${name[0]}${'*' * (name.length - 2)}${name[name.length - 1]}'
         : name;
     return '$masked@$domain';
+  }
+
+  String _formatDuration(Duration d) {
+    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
   }
 
   @override
@@ -207,9 +259,14 @@ class _EmailVerificationScreenState
                                 : AppColors.mutedForegroundLight,
                           ),
                           children: [
-                            const TextSpan(
-                              text: 'We sent a 6-character code to ',
-                            ),
+                            if (_hasValidCode)
+                              const TextSpan(
+                                text: 'Check your email. A code was sent to ',
+                              )
+                            else
+                              const TextSpan(
+                                text: 'We sent a 6-character code to ',
+                              ),
                             TextSpan(
                               text: _maskEmail(widget.email),
                               style: AppTextStyles.bodyMedium.copyWith(
@@ -229,91 +286,114 @@ class _EmailVerificationScreenState
                     position: _slideAnimation,
                     child: FadeTransition(
                       opacity: _fadeAnimation,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: List.generate(6, (index) {
-                          return SizedBox(
-                            width: 56,
-                            height: 56,
-                            child: TextField(
-                              controller: _controllers[index],
-                              focusNode: _focusNodes[index],
-                              textAlign: TextAlign.center,
-                              maxLength: 1,
-                              keyboardType: TextInputType.visiblePassword,
-                              textInputAction: index == 5
-                                  ? TextInputAction.done
-                                  : TextInputAction.next,
-                              style: AppTextStyles.headlineMedium.copyWith(
-                                color: isDark
-                                    ? AppColors.foregroundDark
-                                    : AppColors.foregroundLight,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0,
-                              ),
-                              textCapitalization:
-                                  TextCapitalization.characters,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.allow(
-                                  RegExp(r'[a-zA-Z0-9]'),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          const gap = AppTheme.spacing3;
+                          const count = 6;
+                          final boxSize = ((constraints.maxWidth -
+                                      (count - 1) * gap) /
+                                  count)
+                              .clamp(44.0, 56.0);
+
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(count, (index) {
+                              return Padding(
+                                padding: EdgeInsets.only(
+                                  left: index > 0 ? gap : 0,
                                 ),
-                                UpperCaseTextFormatter(),
-                              ],
-                              cursorColor: isDark
-                                  ? AppColors.primaryDark
-                                  : AppColors.primaryLight,
-                              decoration: InputDecoration(
-                                counterText: '',
-                                filled: true,
-                                fillColor: isDark
-                                    ? AppColors.surface1Dark.withOpacity(0.5)
-                                    : AppColors.surface1Light,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(
-                                    AppTheme.radiusMd,
-                                  ),
-                                  borderSide: BorderSide(
-                                    color: _controllers[index].text.isNotEmpty
-                                        ? (isDark
-                                            ? AppColors.primaryDark
-                                            : AppColors.primaryLight)
-                                        : (isDark
-                                            ? AppColors.borderDark
-                                            : AppColors.borderLight),
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(
-                                    AppTheme.radiusMd,
-                                  ),
-                                  borderSide: BorderSide(
-                                    color: _controllers[index].text.isNotEmpty
-                                        ? (isDark
-                                            ? AppColors.primaryDark
-                                            : AppColors.primaryLight)
-                                        : (isDark
-                                            ? AppColors.borderDark
-                                                .withOpacity(0.5)
-                                            : AppColors.borderLight),
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(
-                                    AppTheme.radiusMd,
-                                  ),
-                                  borderSide: BorderSide(
-                                    color: isDark
+                                child: SizedBox(
+                                  width: boxSize,
+                                  height: 56,
+                                  child: TextField(
+                                    controller: _controllers[index],
+                                    focusNode: _focusNodes[index],
+                                    textAlign: TextAlign.center,
+                                    maxLength: 1,
+                                    keyboardType:
+                                        TextInputType.visiblePassword,
+                                    textInputAction: index == 5
+                                        ? TextInputAction.done
+                                        : TextInputAction.next,
+                                    style:
+                                        AppTextStyles.headlineMedium.copyWith(
+                                      color: isDark
+                                          ? AppColors.foregroundDark
+                                          : AppColors.foregroundLight,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0,
+                                    ),
+                                    textCapitalization:
+                                        TextCapitalization.characters,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.allow(
+                                        RegExp(r'[a-zA-Z0-9]'),
+                                      ),
+                                      UpperCaseTextFormatter(),
+                                    ],
+                                    cursorColor: isDark
                                         ? AppColors.primaryDark
                                         : AppColors.primaryLight,
-                                    width: 2,
+                                    decoration: InputDecoration(
+                                      counterText: '',
+                                      filled: true,
+                                      fillColor: isDark
+                                          ? AppColors.surface1Dark
+                                              .withOpacity(0.5)
+                                          : AppColors.surface1Light,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          AppTheme.radiusMd,
+                                        ),
+                                        borderSide: BorderSide(
+                                          color: _controllers[index]
+                                                  .text
+                                                  .isNotEmpty
+                                              ? (isDark
+                                                  ? AppColors.primaryDark
+                                                  : AppColors.primaryLight)
+                                              : (isDark
+                                                  ? AppColors.borderDark
+                                                  : AppColors.borderLight),
+                                        ),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          AppTheme.radiusMd,
+                                        ),
+                                        borderSide: BorderSide(
+                                          color: _controllers[index]
+                                                  .text
+                                                  .isNotEmpty
+                                              ? (isDark
+                                                  ? AppColors.primaryDark
+                                                  : AppColors.primaryLight)
+                                              : (isDark
+                                                  ? AppColors.borderDark
+                                                      .withOpacity(0.5)
+                                                  : AppColors.borderLight),
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          AppTheme.radiusMd,
+                                        ),
+                                        borderSide: BorderSide(
+                                          color: isDark
+                                              ? AppColors.primaryDark
+                                              : AppColors.primaryLight,
+                                          width: 2,
+                                        ),
+                                      ),
+                                    ),
+                                    onChanged: (value) =>
+                                        _onChanged(value, index),
                                   ),
                                 ),
-                              ),
-                              onChanged: (value) =>
-                                  _onChanged(value, index),
-                            ),
+                              );
+                            }),
                           );
-                        }),
+                        },
                       ),
                     ),
                   ),
@@ -322,7 +402,7 @@ class _EmailVerificationScreenState
                     position: _slideAnimation,
                     child: FadeTransition(
                       opacity: _fadeAnimation,
-                      child: _buildResendRow(isDark, state),
+                      child: _buildInfoRow(isDark, state),
                     ),
                   ),
                   if (state is EmailVerificationSending ||
@@ -339,7 +419,7 @@ class _EmailVerificationScreenState
     );
   }
 
-  Widget _buildResendRow(bool isDark, EmailVerificationState state) {
+  Widget _buildInfoRow(bool isDark, EmailVerificationState state) {
     if (state is EmailVerificationResendCooldown) {
       return Text(
         'Resend in ${state.secondsRemaining}s',
@@ -354,6 +434,24 @@ class _EmailVerificationScreenState
 
     if (state is EmailVerificationSending) {
       return const SizedBox.shrink();
+    }
+
+    if (_hasValidCode) {
+      final expiryText = _timeUntilExpiry.inSeconds > 0
+          ? 'Code expires in ${_formatDuration(_timeUntilExpiry)}'
+          : 'Code has expired — request a new one.';
+
+      return Text(
+        expiryText,
+        style: AppTextStyles.bodySmall.copyWith(
+          color: _timeUntilExpiry.inSeconds > 0
+              ? (isDark
+                  ? AppColors.mutedForegroundDark
+                  : AppColors.mutedForegroundLight)
+              : AppColors.error,
+        ),
+        textAlign: TextAlign.center,
+      );
     }
 
     return Align(

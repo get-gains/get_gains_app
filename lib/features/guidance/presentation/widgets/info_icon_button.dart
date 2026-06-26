@@ -21,6 +21,7 @@ class InfoIconButton extends StatelessWidget {
     required this.content,
     this.onTapOverride,
     this.iconSize = 24.0,
+    this.color,
   });
 
   /// Help content to display in the bottom sheet.
@@ -33,10 +34,13 @@ class InfoIconButton extends StatelessWidget {
   /// Size of the help icon.
   final double iconSize;
 
+  /// Optional color override for the icon.
+  final Color? color;
+
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      icon: Icon(Icons.help_outline, size: iconSize),
+      icon: Icon(Icons.help_outline, size: iconSize, color: color),
       tooltip: 'Help',
       onPressed: () {
         if (onTapOverride != null) {

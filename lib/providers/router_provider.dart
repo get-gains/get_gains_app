@@ -1,8 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../core/utils/logger.dart';
+import '../core/theme/app_colors.dart';
 import '../features/auth/auth.dart';
 import '../features/client_pose/client_pose.dart';
 import '../features/coach_onboarding/coach_onboarding.dart';
@@ -35,6 +39,7 @@ import '../features/programs/screens/create_program_screen.dart';
 
 import '../features/exercises/presentation/screens/create_exercise_screen.dart' as shared_exercises;
 import '../features/form_library/presentation/screens/form_library_screen.dart';
+import '../features/landing/landing.dart';
 import '../features/notifications/notifications.dart';
 
 import 'deep_link_provider.dart';
@@ -48,6 +53,7 @@ class AppRoutes {
   AppRoutes._();
 
   static const String splash = '/';
+  static const String landing = '/landing';
   static const String login = '/login';
   static const String register = '/register';
   static const String checkEmail = '/check-email';
@@ -209,6 +215,7 @@ GoRouter router(Ref ref) {
       // TODO: Remove unityTest from public routes when auth is required for Unity screen
       final isPublicAuthRoute =
           location == AppRoutes.login ||
+          location == AppRoutes.landing ||
           location == AppRoutes.register ||
           location == AppRoutes.checkEmail ||
           location == AppRoutes.emailVerification ||
@@ -230,8 +237,12 @@ GoRouter router(Ref ref) {
         return AppRoutes.splash;
       }
 
-      // Unauthenticated on splash, go to login
+      // Unauthenticated on splash — landing page first, then login
       if (!isAuthenticated && location == AppRoutes.splash) {
+        final prefs = ref.read(userPreferencesServiceProvider);
+        if (!prefs.hasSeenLanding()) {
+          return AppRoutes.landing;
+        }
         return AppRoutes.login;
       }
 
@@ -260,8 +271,13 @@ GoRouter router(Ref ref) {
       // Splash/Loading
       GoRoute(
         path: AppRoutes.splash,
-        builder: (context, state) =>
-            const _PlaceholderScreen(title: 'Loading...'),
+        builder: (context, state) => const _SplashScreen(),
+      ),
+
+      // Landing (shown once for first-time users)
+      GoRoute(
+        path: AppRoutes.landing,
+        builder: (context, state) => const LandingScreen(),
       ),
 
       // Auth Routes (Public)
@@ -284,7 +300,14 @@ GoRouter router(Ref ref) {
         path: AppRoutes.emailVerification,
         builder: (context, state) {
           final email = state.uri.queryParameters['email'] ?? '';
-          return EmailVerificationScreen(email: email);
+          final metaRaw = state.uri.queryParameters['meta'];
+          Map<String, dynamic>? meta;
+          if (metaRaw != null && metaRaw.isNotEmpty) {
+            try {
+              meta = jsonDecode(metaRaw) as Map<String, dynamic>;
+            } catch (_) {}
+          }
+          return EmailVerificationScreen(email: email, codeMeta: meta);
         },
       ),
       GoRoute(
@@ -844,6 +867,34 @@ class _GoRouterRefreshStream extends ChangeNotifier {
   }
 
   final Ref _ref;
+}
+
+/// Splash/loading screen shown while auth state is determined
+class _SplashScreen extends StatelessWidget {
+  const _SplashScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Scaffold(
+      backgroundColor: isDark
+          ? AppColors.backgroundDark
+          : AppColors.backgroundLight,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SvgPicture.asset(
+              'assets/images/logo.svg',
+              width: 150,
+            ),
+            const SizedBox(height: 32),
+            const CircularProgressIndicator(),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// Placeholder screen - replace with actual screens

@@ -11,6 +11,7 @@ import '../../../../widgets/app_empty_state.dart';
 import '../../../../widgets/app_toast.dart';
 import '../../data/models/models.dart';
 import '../providers/standalone_program_builder_provider.dart';
+import '../providers/standalone_program_provider.dart';
 
 /// Standalone Program Builder Screen
 ///
@@ -781,6 +782,7 @@ class _StandaloneProgramBuilderScreenState
                   label: 'Finish',
                   icon: Icons.check,
                   onPressed: () {
+                    ref.invalidate(standaloneProgramListProvider);
                     AppToast.success(context, 'Program built!');
                     context.pop();
                   },

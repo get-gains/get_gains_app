@@ -8,8 +8,21 @@ import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 
 /// 2×2 mini-grid of quick-access coach tool tiles.
+///
+/// Each tool tile accepts an optional [GlobalKey] for the coach spotlight tour.
 class CoachToolsBlock extends StatelessWidget {
-  const CoachToolsBlock({super.key});
+  const CoachToolsBlock({
+    super.key,
+    this.routinesKey,
+    this.exercisesKey,
+    this.clientsKey,
+    this.settingsKey,
+  });
+
+  final GlobalKey? routinesKey;
+  final GlobalKey? exercisesKey;
+  final GlobalKey? clientsKey;
+  final GlobalKey? settingsKey;
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +44,7 @@ class CoachToolsBlock extends StatelessWidget {
             children: [
               Expanded(
                 child: _ToolTile(
+                  key: routinesKey,
                   icon: Icons.assignment_outlined,
                   label: 'Routines',
                   color: const Color(0xFF3B82F6),
@@ -41,6 +55,7 @@ class CoachToolsBlock extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: _ToolTile(
+                  key: exercisesKey,
                   icon: Icons.fitness_center_outlined,
                   label: 'Exercises',
                   color: const Color(0xFF8B5CF6),
@@ -55,6 +70,7 @@ class CoachToolsBlock extends StatelessWidget {
             children: [
               Expanded(
                 child: _ToolTile(
+                  key: clientsKey,
                   icon: Icons.people_outlined,
                   label: 'Clients',
                   color: AppColors.coach,
@@ -65,6 +81,7 @@ class CoachToolsBlock extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: _ToolTile(
+                  key: settingsKey,
                   icon: Icons.settings_outlined,
                   label: 'Settings',
                   color: AppColors.gray500,
@@ -82,6 +99,7 @@ class CoachToolsBlock extends StatelessWidget {
 
 class _ToolTile extends StatelessWidget {
   const _ToolTile({
+    super.key,
     required this.icon,
     required this.label,
     required this.color,

@@ -105,6 +105,45 @@ const kHomeTourSteps = [
   ),
 ];
 
+/// Coach home spotlight tour (5 steps).
+const kCoachHomeTourSteps = [
+  TourStepModel(
+    targetKey: 'coach_pulse',
+    title: 'Coach Pulse',
+    body:
+        'See your client stats at a glance: total clients, those with an assigned program, and those who still need one.',
+    order: 0,
+  ),
+  TourStepModel(
+    targetKey: 'coach_tool_routines',
+    title: 'Routines',
+    body:
+        'Create and manage workout routines for your clients. Build day-by-day programs with exercises, sets, and reps.',
+    order: 1,
+  ),
+  TourStepModel(
+    targetKey: 'coach_tool_exercises',
+    title: 'Exercises',
+    body:
+        'Browse and manage your custom exercise library. Add exercises with form references for your clients to follow.',
+    order: 2,
+  ),
+  TourStepModel(
+    targetKey: 'coach_tool_clients',
+    title: 'Clients',
+    body:
+        'View and manage your client roster. Assign programs, track progress, and review client form submissions.',
+    order: 3,
+  ),
+  TourStepModel(
+    targetKey: 'coach_tool_settings',
+    title: 'Coach Settings',
+    body:
+        'Configure your coach profile, manage your subscription, and adjust your coaching preferences.',
+    order: 4,
+  ),
+];
+
 // ============================================================================
 // 2. HELP CONTENT MODELS
 // ============================================================================
@@ -163,6 +202,38 @@ const kViewFormHelp = HelpContentModel(
           "When recording, follow the same direction as the coach — don't mirror "
           'the movement. The comparison works best when directions match.',
       iconName: 'do_not_disturb_on',
+    ),
+  ],
+);
+
+/// Camera angle help content for view form screen.
+const kViewFormAngleHelp = HelpContentModel(
+  id: 'view_form_angles',
+  title: 'Camera Angles',
+  sections: [
+    HelpSection(
+      heading: 'Front',
+      body: 'Camera facing directly forward. Best for exercises performed '
+          'straight-on like squats and overhead presses.',
+      iconName: 'videocam',
+    ),
+    HelpSection(
+      heading: 'Side Left / Side Right',
+      body: 'Camera at 90° from the side. Ideal for exercises where '
+          'lateral movement matters like lunges and lateral raises.',
+      iconName: 'switch_left',
+    ),
+    HelpSection(
+      heading: '45° Left / 45° Right',
+      body: 'Camera at a 45° diagonal, facing toward the side of the coach. '
+          'Great for most compound lifts where both front and side views are helpful.',
+      iconName: 'rotate_right',
+    ),
+    HelpSection(
+      heading: 'Rear',
+      body: 'Camera from behind. Useful for exercises where back posture '
+          'is the focus, like deadlifts and rows.',
+      iconName: 'arrow_back',
     ),
   ],
 );

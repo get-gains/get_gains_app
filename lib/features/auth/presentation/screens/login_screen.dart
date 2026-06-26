@@ -1,7 +1,10 @@
 // lib/features/auth/presentation/screens/login_screen.dart
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/errors/api_error_codes.dart';
@@ -85,16 +88,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   void _showLoginError(AppError error) {
     final message = errorMessageFor(error);
 
-    // Email not verified — offer to navigate to the code entry screen
+    // Email not verified — navigate to code entry with code metadata
     if (error.code == ApiErrorCode.authEmailNotVerified) {
       final email = _emailController.text.trim();
-      AppToast.error(
-        context,
-        message,
-        actionLabel: 'Verify Email',
-        action: () => context.go(
-          '${AppRoutes.emailVerification}?email=${Uri.encodeComponent(email)}',
-        ),
+      final meta = error is NetworkError ? error.meta : null;
+      context.go(
+        '${AppRoutes.emailVerification}?email=${Uri.encodeComponent(email)}'
+        '${meta != null ? '&meta=${Uri.encodeComponent(jsonEncode(meta))}' : ''}',
       );
       return;
     }
@@ -147,7 +147,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 60),
+                  const SizedBox(height: 20),
 
                   // Logo & Branding
                   FadeTransition(
@@ -155,7 +155,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     child: _buildHeader(isDark),
                   ),
 
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 28),
 
                   // Login Form
                   SlideTransition(
@@ -166,7 +166,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     ),
                   ),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 20),
 
                   // Divider with "OR"
                   SlideTransition(
@@ -177,7 +177,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     ),
                   ),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 20),
 
                   // Social Login
                   SlideTransition(
@@ -188,7 +188,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     ),
                   ),
 
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 24),
 
                   // Register Link
                   SlideTransition(
@@ -199,7 +199,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     ),
                   ),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 12),
                 ],
               ),
             ),
@@ -229,20 +229,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               context.push(AppRoutes.unityTest);
             }
           },
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-            child: Image.asset(
-              'assets/images/logo.jpg',
-              width: 150,
-              height: 150,
-              fit: BoxFit.cover,
-            ),
+          child: SvgPicture.asset(
+            'assets/images/logo.svg',
+            width: 150,
+            height: 150,
           ),
         ),
 
-        const SizedBox(height: 24),
-
-        const SizedBox(height: 8),
+        const SizedBox(height: 16),
 
         // Tagline
         Text(
@@ -286,7 +280,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             },
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
 
           // Password Field
           AppTextField.password(
@@ -304,7 +298,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             onSubmitted: (_) => _handleEmailPasswordLogin(),
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
 
           // Forgot Password Link
           Align(
@@ -331,7 +325,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             ),
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
           // Login Button
           AppButton.primary(

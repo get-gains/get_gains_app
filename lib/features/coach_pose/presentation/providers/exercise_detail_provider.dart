@@ -105,6 +105,30 @@ class ExerciseDetailNotifier extends _$ExerciseDetailNotifier {
     );
   }
 
+  /// Update a form's camera angle.
+  Future<void> updateFormAngle(String formId, CameraAngle newAngle) async {
+    final repo = ref.read(coachPoseRepositoryProvider);
+    final result = await repo.updateForm(
+      formId: formId,
+      cameraAngle: newAngle.serverValue,
+    );
+
+    result.when(
+      success: (updatedForm) {
+        AppLogger.info(
+          'Form $formId angle updated to ${newAngle.displayName}',
+          tag: 'ExerciseDetail',
+        );
+        state = state.copyWith(
+          forms: state.forms.map((f) => f.id == formId ? updatedForm : f).toList(),
+        );
+      },
+      failure: (error) {
+        state = state.copyWith(errorMessage: error.message);
+      },
+    );
+  }
+
   /// Refresh all data.
   Future<void> refresh() async {
     await loadAll();
