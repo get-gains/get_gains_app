@@ -385,13 +385,6 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
     return Column(
       children: [
         const Divider(),
-        AppListTile(
-          leading: const Icon(Icons.settings_outlined),
-          title: 'Settings',
-          onTap: () {
-            Navigator.of(context).pop();
-          },
-        ),
         if (!isCoach)
           AppListTile(
             leading: const Icon(Icons.card_membership),
@@ -401,11 +394,6 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
               context.push(AppRoutes.redeemInvite);
             },
           ),
-        AppListTile(
-          leading: const Icon(Icons.help_outline),
-          title: 'Help & Support',
-          onTap: () {},
-        ),
         const Divider(),
         AppListTile(
           leading: Icon(Icons.logout, color: AppColors.error),

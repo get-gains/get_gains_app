@@ -77,7 +77,7 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
           ? AppColors.backgroundDark
           : AppColors.backgroundLight,
       appBar: AppBar(
-        title: const Text('Reference Form'),
+        title: Text(widget.isFromLibrary ? 'Compare Form' : 'Reference Form'),
         centerTitle: true,
         actions: [InfoIconButton(content: kViewFormHelp)],
       ),
@@ -109,6 +109,9 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
           _hasForms = forms.isNotEmpty;
           _exerciseName = exerciseName;
           _coachName = coachName;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() {});
+          });
 
           if (forms.isEmpty) {
             return AppEmptyState(
@@ -222,7 +225,7 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
     if (!mounted) return;
 
     final result = await context.push<bool>(
-      AppRoutes.clientCompareForm.replaceAll(':id', widget.exerciseId),
+      AppRoutes.clientUnityRecord.replaceAll(':id', widget.exerciseId),
     );
 
     if (!mounted) return;

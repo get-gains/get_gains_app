@@ -372,7 +372,7 @@ class _ClientAvailabilityBar extends ConsumerWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: List.generate(_dayValues.length, (i) {
-                  final isActive = activeDays.contains(_dayValues[i]);
+                  final isActive = activeDays.any((d) => d.name == _dayValues[i].name);
                   return _DayChip(
                     label: _dayLabels[i],
                     isActive: isActive,

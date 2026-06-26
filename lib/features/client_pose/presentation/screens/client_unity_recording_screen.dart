@@ -146,6 +146,12 @@ class _ClientUnityRecordingScreenState
   }
 
   Future<void> _handleCloseTap() async {
+    // Non-workout mode (form library): simple pop
+    if (!_isWorkoutMode) {
+      context.pop();
+      return;
+    }
+
     // Check if we have unlogged recording results
     final recordingState = ref.read(clientRecordingProvider(widget.exerciseId));
     final hasUnloggedRecording = recordingState is ClientRecordingComplete;
@@ -1743,6 +1749,14 @@ class _ClientUnityRecordingScreenState
                     color: scoreColor,
                   ),
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  _getScoreLabel(score),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scoreColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1887,6 +1901,15 @@ class _ClientUnityRecordingScreenState
         ],
       ),
     );
+  }
+
+  String _getScoreLabel(double score) {
+    if (score >= 0.9) return 'Excellent';
+    if (score >= 0.8) return 'Great';
+    if (score >= 0.7) return 'Good';
+    if (score >= 0.6) return 'Fair';
+    if (score >= 0.4) return 'Needs Work';
+    return 'Keep Practicing';
   }
 
   // ── Workout set logger ─────────────────────────────────────────────────
