@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -76,7 +75,16 @@ class RevenueCatService {
   /// Purchase a package. Returns [CustomerInfo] on success.
   /// Throws [PlatformException] on cancel/error.
   Future<CustomerInfo> purchase(Package package) async {
-    final result = await Purchases.purchasePackage(package);
+    final params = PurchaseParams.package(package);
+    final result = await Purchases.purchase(params);
+    return result.customerInfo;
+  }
+
+  /// Purchase a specific subscription option (e.g. a discounted Google Play
+  /// offer identified by tag). Returns [CustomerInfo] on success.
+  Future<CustomerInfo> purchaseSubscriptionOption(SubscriptionOption option) async {
+    final params = PurchaseParams.subscriptionOption(option);
+    final result = await Purchases.purchase(params);
     return result.customerInfo;
   }
 

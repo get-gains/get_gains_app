@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../services/feedback/recording_feedback_service.dart';
 import '../../data/models/exercise_form_model.dart';
 import '../../services/pose_detection_service.dart';
 import '../providers/exercise_detail_provider.dart';
@@ -350,12 +351,53 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
       previous,
       next,
     ) {
+      final feedback = ref.read(recordingFeedbackServiceProvider);
+
+      if (previous?.phase == RecordingPhase.setupGuidance &&
+          next.phase == RecordingPhase.countdown) {
+        feedback.play(RecordingFeedbackEvent.setupReady);
+      }
+
+      if (previous != null &&
+          previous.phase == RecordingPhase.countdown &&
+          next.phase == RecordingPhase.countdown &&
+          previous.countdownSeconds > next.countdownSeconds) {
+        feedback.play(RecordingFeedbackEvent.countdownTick);
+      }
+
+      if (previous?.phase == RecordingPhase.countdown &&
+          next.phase == RecordingPhase.setupGuidance) {
+        feedback.play(RecordingFeedbackEvent.countdownCancel);
+      }
+
+      if (previous?.phase == RecordingPhase.countdown &&
+          next.phase == RecordingPhase.recording) {
+        feedback.play(RecordingFeedbackEvent.recordingStart);
+      }
+
+      if (previous?.phase == RecordingPhase.recording &&
+          next.phase == RecordingPhase.processing) {
+        feedback.play(RecordingFeedbackEvent.recordingStop);
+      }
+
+      if (previous != null &&
+          previous.phase != RecordingPhase.error &&
+          next.phase == RecordingPhase.error) {
+        feedback.play(RecordingFeedbackEvent.error);
+      }
+
       final didCompleteUpload =
           previous?.phase != RecordingPhase.complete &&
           next.phase == RecordingPhase.complete;
       if (didCompleteUpload) {
+        feedback.play(RecordingFeedbackEvent.success);
         ref.invalidate(exerciseDetailProvider(widget.exerciseId));
         _showSuccess(context, isDark);
+        final formId = next.uploadedForm?.id;
+        final router = GoRouter.of(context);
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (mounted) router.pop(formId);
+        });
       }
       // When countdown finishes and recording starts:
       // stop the image stream and start video recording.
@@ -553,26 +595,45 @@ class _FormRecordingScreenState extends ConsumerState<FormRecordingScreen> {
                   color: Colors.red.withValues(alpha: 0.8),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Row(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'REC · ${(state.recordingDurationMs / 1000).toStringAsFixed(1)}s / ${kMaxRecordingDurationSeconds}s',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      state.phase == RecordingPhase.recording
-                          ? 'REC · Recording… (analyzed when you stop)'
-                          : 'REC · ${state.frameCount} frames',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: 140,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: (state.recordingDurationMs / 1000) /
+                              kMaxRecordingDurationSeconds,
+                          backgroundColor: Colors.red.withValues(alpha: 0.4),
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
+                          minHeight: 4,
+                        ),
                       ),
                     ),
                   ],
@@ -707,39 +768,49 @@ class _ProcessingOverlay extends StatelessWidget {
         (state.phase == RecordingPhase.processing
             ? 'Processing landmarks...'
             : 'Uploading form...');
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final percent = (state.processingProgress * 100).toStringAsFixed(0);
     return Container(
-      color: Colors.black87,
+      color: isDark ? Colors.black87 : Colors.white.withValues(alpha: 0.95),
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             SizedBox(
-              width: 120,
-              height: 120,
+              width: 72,
+              height: 72,
               child: CircularProgressIndicator(
                 value: state.processingProgress > 0
                     ? state.processingProgress
                     : null,
-                strokeWidth: 6,
-                color: AppColors.primaryDark,
+                strokeWidth: 4,
               ),
             ),
             const SizedBox(height: 24),
             Text(
               message,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(color: Colors.white),
-              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 12),
             Text(
               '$percent%',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.white,
+              style: TextStyle(
+                fontSize: 28,
                 fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white70 : Colors.black87,
                 fontFamily: 'JetBrains Mono',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                'This may take a moment.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey, height: 1.4),
               ),
             ),
           ],
@@ -749,10 +820,19 @@ class _ProcessingOverlay extends StatelessWidget {
   }
 }
 
-/// Overlay shown on successful completion.
-class _CompleteOverlay extends StatelessWidget {
+/// Overlay shown on successful completion. Auto-pops after 1.5s.
+class _CompleteOverlay extends StatefulWidget {
   const _CompleteOverlay({this.form});
   final ExerciseFormModel? form;
+
+  @override
+  State<_CompleteOverlay> createState() => _CompleteOverlayState();
+}
+
+class _CompleteOverlayState extends State<_CompleteOverlay> {
+  void _dismiss() {
+    context.pop(widget.form?.id);
+  }
 
   String _formatDate(DateTime? dt) {
     if (dt == null) return 'Just now';
@@ -780,10 +860,10 @@ class _CompleteOverlay extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            if (form != null) ...[
+            if (widget.form != null) ...[
               const SizedBox(height: 8),
               Text(
-                '${form!.cameraAngle.displayName} · ${_formatDate(form!.createdAt)}',
+                '${widget.form!.cameraAngle.displayName} · ${_formatDate(widget.form!.createdAt)}',
                 style: Theme.of(
                   context,
                 ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
@@ -791,7 +871,7 @@ class _CompleteOverlay extends StatelessWidget {
             ],
             const SizedBox(height: 32),
             ElevatedButton(
-              onPressed: () => context.pop(form?.id),
+              onPressed: _dismiss,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryDark,
                 foregroundColor: Colors.white,

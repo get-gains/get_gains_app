@@ -31,7 +31,7 @@ class CoachHubScreen extends ConsumerWidget {
               floating: true,
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () => context.pop(),
+                onPressed: () => context.go(AppRoutes.home),
               ),
               title: Text(
                 'Coach Tools',
@@ -92,6 +92,16 @@ class CoachHubScreen extends ConsumerWidget {
                     color: const Color(0xFFA855F7),
                     isDark: isDark,
                     onTap: () => context.push(AppRoutes.coachExercises),
+                  ),
+                  const SizedBox(height: 12),
+                  _HubTile(
+                    icon: Icons.settings_outlined,
+                    activeIcon: Icons.settings,
+                    title: 'Settings',
+                    subtitle: 'Capacity, intake & discoverability',
+                    color: AppColors.gray500,
+                    isDark: isDark,
+                    onTap: () => context.push(AppRoutes.coachSettings),
                   ),
                   const SizedBox(height: 32),
                 ]),

@@ -150,15 +150,7 @@ class _CoachProfileScreenState extends ConsumerState<CoachProfileScreen> {
                     ],
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  coach.email,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: isDark
-                        ? AppColors.mutedForegroundDark
-                        : AppColors.mutedForegroundLight,
-                  ),
-                ),
+
               ],
             ),
           ),

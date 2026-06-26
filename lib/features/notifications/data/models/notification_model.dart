@@ -22,6 +22,8 @@ enum NotificationType {
   rosterRemoved,
   @JsonValue('subscription_expiring')
   subscriptionExpiring,
+  @JsonValue('mission_raffle_won')
+  missionRaffleWon,
 }
 
 @freezed

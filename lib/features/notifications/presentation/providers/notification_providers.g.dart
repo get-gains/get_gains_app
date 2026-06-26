@@ -75,7 +75,7 @@ final class NotificationPollProvider
   }
 }
 
-String _$notificationPollHash() => r'8168d485ab7365c938e1c7863c40b16523b0c2c6';
+String _$notificationPollHash() => r'0ebb693999ddb923eedc6deefa6ff9ec7a7291aa';
 
 abstract class _$NotificationPoll extends $Notifier<int> {
   int build();

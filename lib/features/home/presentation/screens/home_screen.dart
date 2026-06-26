@@ -11,16 +11,29 @@ import '../../../../services/api/api_client.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../guidance/guidance.dart';
 import '../../../profile/profile.dart';
+import '../../../subscription/subscription.dart';
 import '../../../form_library/presentation/widgets/featured_forms_strip.dart';
 import '../providers/home_providers.dart';
 import '../widgets/widgets.dart';
 
-final isCoachProvider = FutureProvider.autoDispose<bool>((ref) async {
+class CoachStatus {
+  const CoachStatus({
+    required this.isCoach,
+    required this.isDeactivated,
+  });
+
+  final bool isCoach;
+  final bool isDeactivated;
+}
+
+final isCoachProvider = FutureProvider.autoDispose<CoachStatus>((ref) async {
+  const empty = CoachStatus(isCoach: false, isDeactivated: false);
+
   final authState = ref.watch(authStateProvider);
   final currentUserId = authState.userId;
 
   if (!authState.isAuthenticated || currentUserId == null) {
-    return false;
+    return empty;
   }
 
   final apiClient = ref.watch(apiClientProvider);
@@ -40,17 +53,18 @@ final isCoachProvider = FutureProvider.autoDispose<bool>((ref) async {
       }
 
       final user = data['user'];
-      if (user is! Map<String, dynamic>) return false;
+      if (user is! Map<String, dynamic>) return empty;
 
       final topLevelIsCoach = parseBool(data['isCoach'] ?? data['is_coach']);
-      if (topLevelIsCoach != null) return topLevelIsCoach;
+      final isCoach = topLevelIsCoach ??
+          parseBool(user['isCoach'] ?? user['is_coach']) ??
+          false;
 
-      final nestedIsCoach = parseBool(user['isCoach'] ?? user['is_coach']);
-      if (nestedIsCoach != null) return nestedIsCoach;
+      final isDeactivated = parseBool(data['coachDeactivated']) ?? false;
 
-      return false;
+      return CoachStatus(isCoach: isCoach, isDeactivated: isDeactivated);
     },
-    failure: (_) => false,
+    failure: (_) => empty,
   );
 });
 
@@ -69,6 +83,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _onboardingShown = false;
   bool _tourTriggered = false;
+  bool _sheetOpen = false;
 
   // Tour GlobalKeys — re-attached to new blocks per plan §6
   final _todaysFocusKey = GlobalKey(debugLabel: 'home_todays_focus');
@@ -78,35 +93,70 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     debugLabel: 'home_quick_action_history',
   );
   final _recentActivityKey = GlobalKey(debugLabel: 'home_recent_activity');
+  final _coachPulseKey = GlobalKey(debugLabel: 'coach_pulse');
+  final _coachRoutinesKey = GlobalKey(debugLabel: 'coach_tool_routines');
+  final _coachExercisesKey = GlobalKey(debugLabel: 'coach_tool_exercises');
+  final _coachClientsKey = GlobalKey(debugLabel: 'coach_tool_clients');
+  final _coachSettingsKey = GlobalKey(debugLabel: 'coach_tool_settings');
 
   @override
   Widget build(BuildContext context) {
     ref.listen<bool>(needsOnboardingProvider, (previous, needsOnboarding) {
       if (needsOnboarding && !_onboardingShown) {
         _onboardingShown = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) showOnboardingSheet(context);
+        _sheetOpen = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (mounted) {
+            await showOnboardingSheet(context);
+            _sheetOpen = false;
+            if (mounted) _maybeStartTour();
+          }
         });
-      }
-      if (previous == true && !needsOnboarding) {
-        _maybeStartTour();
       }
     });
 
+    ref.listen<TourState>(tourProvider, (previous, next) {
+      if (previous is TourActive && previous.tourId == 'home') {
+        final coachStatus = ref.read(isCoachProvider).asData?.value;
+        if (coachStatus != null &&
+            coachStatus.isCoach &&
+            !coachStatus.isDeactivated) {
+          final repo = ref.read(guidanceRepositoryProvider);
+          if (!repo.isCompleted(GuidanceRepository.kCoachHome)) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                ref.read(tourProvider.notifier).startTour(
+                  'coach_home',
+                  kCoachHomeTourSteps,
+                );
+              }
+            });
+          }
+        }
+      }
+    });
+
+    final profileAsync = ref.watch(userProfileProvider);
     final needsOnboarding = ref.watch(needsOnboardingProvider);
     if (needsOnboarding && !_onboardingShown) {
       _onboardingShown = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) showOnboardingSheet(context);
+      _sheetOpen = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (mounted) {
+          await showOnboardingSheet(context);
+          _sheetOpen = false;
+          if (mounted) _maybeStartTour();
+        }
       });
     }
 
-    if (!needsOnboarding && !_tourTriggered) {
+    if (profileAsync.hasValue && !needsOnboarding && !_tourTriggered && !_sheetOpen) {
       _maybeStartTour();
     }
 
-    final isCoachAsync = ref.watch(isCoachProvider);
-    final isCoach = isCoachAsync.asData?.value ?? false;
+    final coachStatus = ref.watch(isCoachProvider).asData?.value;
+    final isCoach = coachStatus?.isCoach ?? false;
+    final isDeactivated = coachStatus?.isDeactivated ?? false;
     final mediaQuery = MediaQuery.of(context);
     final screenSize = mediaQuery.size;
     final topInset = mediaQuery.padding.top;
@@ -119,6 +169,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         'home_quick_action_start': _quickActionsKey,
         'home_quick_action_history': _quickActionsHistoryKey,
         'home_recent_activity': _recentActivityKey,
+        'coach_pulse': _coachPulseKey,
+        'coach_tool_routines': _coachRoutinesKey,
+        'coach_tool_exercises': _coachExercisesKey,
+        'coach_tool_clients': _coachClientsKey,
+        'coach_tool_settings': _coachSettingsKey,
       },
       child: Scaffold(
         body: Stack(
@@ -141,10 +196,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                           // ── Role-based hero block ──────────────────
                           if (isCoach) ...[
-                            const CoachPulseBlock(),
+                            CoachPulseBlock(
+                              pulseKey: _coachPulseKey,
+                              isDeactivated: isDeactivated,
+                            ),
                             const SizedBox(height: 16),
-                            const CoachToolsBlock(),
-                            const SizedBox(height: 16),
+                            if (!isDeactivated) ...[
+                              CoachToolsBlock(
+                                routinesKey: _coachRoutinesKey,
+                                exercisesKey: _coachExercisesKey,
+                                clientsKey: _coachClientsKey,
+                                settingsKey: _coachSettingsKey,
+                              ),
+                              const SizedBox(height: 16),
+                            ],
                             // Coach's own workout (collapsed today block)
                             Padding(
                               padding: const EdgeInsets.symmetric(
@@ -196,7 +261,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           // ── Launch dock (demoted quick actions) ────
                           LaunchDock(
                             dockKey: _quickActionsKey,
-                            isCoach: isCoach,
                           ),
 
                           // Bottom padding so content isn't behind nav bar
@@ -217,22 +281,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ],
         ),
-        bottomNavigationBar: _BottomNavBar(
-          currentIndex: 0,
-          onTap: (index) {
-            switch (index) {
-              case 0:
-                break;
-              case 1:
-                context.push(AppRoutes.myProgram);
-                break;
-              case 2:
-                context.push(AppRoutes.progress);
-                break;
-              case 3:
-                context.push(AppRoutes.profile);
-                break;
-            }
+        bottomNavigationBar: Consumer(
+          builder: (context, ref, _) {
+            final isSubscribed =
+                ref.watch(isSubscribedProvider);
+            return _BottomNavBar(
+              currentIndex: 0,
+              onTap: (index) {
+                switch (index) {
+                  case 0:
+                    break;
+                  case 1:
+                    if (isSubscribed) {
+                      context.push(AppRoutes.myProgram);
+                    } else {
+                      context.push(AppRoutes.standalonePrograms);
+                    }
+                    break;
+                  case 2:
+                    context.push(AppRoutes.progress);
+                    break;
+                  case 3:
+                    context.push(AppRoutes.profile);
+                    break;
+                }
+              },
+            );
           },
         ),
       ),

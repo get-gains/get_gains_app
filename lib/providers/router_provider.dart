@@ -1,10 +1,15 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../core/utils/logger.dart';
+import '../core/theme/app_colors.dart';
 import '../features/auth/auth.dart';
 import '../features/client_pose/client_pose.dart';
+import '../features/coach_onboarding/coach_onboarding.dart';
 import '../features/coach_pose/coach_pose.dart';
 import '../features/coach_client_progress/coach_client_progress.dart';
 import '../features/coach_programs/coach_programs.dart';
@@ -13,6 +18,8 @@ import '../features/coaches/coaches.dart';
 import '../features/home/home.dart';
 import '../features/profile/profile.dart';
 import '../features/workout/workout.dart';
+import '../features/workout/presentation/screens/workout_calendar_screen.dart';
+import '../features/workout/presentation/screens/workout_session_detail_screen.dart';
 import '../features/standalone_workout/standalone_workout.dart';
 import '../features/unity/unity.dart';
 import '../features/gains_coins/presentation/screens/coin_history_screen.dart';
@@ -29,10 +36,10 @@ import '../features/programs/screens/program_screen.dart';
 import '../features/programs/screens/program_details_screen.dart';
 import '../features/programs/screens/calendar_screen.dart';
 import '../features/programs/screens/create_program_screen.dart';
-import '../features/self_program/presentation/screens/self_program_builder_screen.dart';
-import '../features/self_program/presentation/screens/self_program_list_screen.dart';
+
 import '../features/exercises/presentation/screens/create_exercise_screen.dart' as shared_exercises;
 import '../features/form_library/presentation/screens/form_library_screen.dart';
+import '../features/landing/landing.dart';
 import '../features/notifications/notifications.dart';
 
 import 'deep_link_provider.dart';
@@ -46,9 +53,11 @@ class AppRoutes {
   AppRoutes._();
 
   static const String splash = '/';
+  static const String landing = '/landing';
   static const String login = '/login';
   static const String register = '/register';
   static const String checkEmail = '/check-email';
+  static const String emailVerification = '/email-verification';
   static const String completeProfile = '/complete-profile';
   static const String forgotPassword = '/forgot-password';
   static const String enterOtp = '/enter-otp';
@@ -73,19 +82,22 @@ class AppRoutes {
   static const String myProgram = '/my-program';
   static const String myProgramDetail = '/my-program/:programId';
 
-  // Self Program routes (free tier)
-  static const String selfPrograms = '/self-programs';
-  static const String selfProgramBuilder = '/self-programs/builder';
-
   // Shared exercise creation (available to all authenticated users)
   static const String exerciseCreate = '/exercises/create';
 
   // Coach Hub
   static const String coachHub = '/coach/hub';
 
+  // Coach Onboarding
+  static const String redeemInvite = '/coach/redeem-invite';
+  static const String coachProfileSetup = '/coach/profile-setup';
+
   // Workout History & Progress
   static const String workoutHistory = '/workout/history';
   static const String progress = '/progress';
+  static const String workoutCalendar = '/progress/calendar';
+  static const String workoutSessionDetail = '/workout/session/:id';
+  static const String monthlySessions = '/progress/monthly/:month';
 
   // Coach Pose routes
   static const String coachExercises = '/coach/exercises';
@@ -140,8 +152,12 @@ class AppRoutes {
   static const String standaloneCreateProgram = '/standalone/programs/create';
   static const String standaloneProgramDetail = '/standalone/programs/:id';
   static const String standaloneEditProgram = '/standalone/programs/:id/edit';
-  static const String standaloneToday = '/standalone/today';
+  static const String standaloneSession = '/standalone/session/:id';
   static const String standaloneSessionHistory = '/standalone/sessions';
+  static const String standaloneStats = '/standalone/stats';
+  static const String standaloneProgramBuilder = '/standalone/programs/builder';
+  static const String standaloneToday = '/standalone/today';
+  static const String standaloneWorkout = '/standalone/workout';
 
   // Gains Coins routes
   static const String coinReward = '/coins/reward';
@@ -199,8 +215,10 @@ GoRouter router(Ref ref) {
       // TODO: Remove unityTest from public routes when auth is required for Unity screen
       final isPublicAuthRoute =
           location == AppRoutes.login ||
+          location == AppRoutes.landing ||
           location == AppRoutes.register ||
           location == AppRoutes.checkEmail ||
+          location == AppRoutes.emailVerification ||
           location == AppRoutes.forgotPassword ||
           location == AppRoutes.enterOtp ||
           location == AppRoutes.resetPassword ||
@@ -219,8 +237,12 @@ GoRouter router(Ref ref) {
         return AppRoutes.splash;
       }
 
-      // Unauthenticated on splash, go to login
+      // Unauthenticated on splash — landing page first, then login
       if (!isAuthenticated && location == AppRoutes.splash) {
+        final prefs = ref.read(userPreferencesServiceProvider);
+        if (!prefs.hasSeenLanding()) {
+          return AppRoutes.landing;
+        }
         return AppRoutes.login;
       }
 
@@ -249,8 +271,13 @@ GoRouter router(Ref ref) {
       // Splash/Loading
       GoRoute(
         path: AppRoutes.splash,
-        builder: (context, state) =>
-            const _PlaceholderScreen(title: 'Loading...'),
+        builder: (context, state) => const _SplashScreen(),
+      ),
+
+      // Landing (shown once for first-time users)
+      GoRoute(
+        path: AppRoutes.landing,
+        builder: (context, state) => const LandingScreen(),
       ),
 
       // Auth Routes (Public)
@@ -267,6 +294,20 @@ GoRouter router(Ref ref) {
         builder: (context, state) {
           final email = state.uri.queryParameters['email'];
           return CheckEmailScreen(email: email);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.emailVerification,
+        builder: (context, state) {
+          final email = state.uri.queryParameters['email'] ?? '';
+          final metaRaw = state.uri.queryParameters['meta'];
+          Map<String, dynamic>? meta;
+          if (metaRaw != null && metaRaw.isNotEmpty) {
+            try {
+              meta = jsonDecode(metaRaw) as Map<String, dynamic>;
+            } catch (_) {}
+          }
+          return EmailVerificationScreen(email: email, codeMeta: meta);
         },
       ),
       GoRoute(
@@ -358,20 +399,9 @@ GoRouter router(Ref ref) {
         },
       ),
       GoRoute(
-        path: AppRoutes.selfPrograms,
-        builder: (context, state) => const SelfProgramListScreen(),
-      ),
-      GoRoute(
         path: AppRoutes.exerciseCreate,
         builder: (context, state) =>
             const shared_exercises.CreateExerciseScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.selfProgramBuilder,
-        builder: (context, state) {
-          final programId = state.uri.queryParameters['programId'];
-          return SelfProgramBuilderScreen(programId: programId);
-        },
       ),
       GoRoute(
         path: AppRoutes.workoutSession,
@@ -419,6 +449,24 @@ GoRouter router(Ref ref) {
         builder: (context, state) => const CoachHubScreen(),
       ),
 
+      // Coach Onboarding
+      GoRoute(
+        path: AppRoutes.redeemInvite,
+        builder: (context, state) => const RedeemInviteScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.coachProfileSetup,
+        builder: (context, state) {
+          final invitationCode = state.extra as String?;
+          if (invitationCode == null) {
+            return const _PlaceholderScreen(
+              title: 'Invalid invitation code',
+            );
+          }
+          return CoachProfileSetupScreen(invitationCode: invitationCode);
+        },
+      ),
+
       // Workout History & Progress
       GoRoute(
         path: AppRoutes.workoutHistory,
@@ -427,6 +475,22 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: AppRoutes.progress,
         builder: (context, state) => const ProgressScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.workoutCalendar,
+        builder: (context, state) => const WorkoutCalendarScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.workoutSessionDetail,
+        builder: (context, state) => WorkoutSessionDetailScreen(
+          sessionId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.monthlySessions,
+        builder: (context, state) => MonthlySessionsScreen(
+          month: state.pathParameters['month']!,
+        ),
       ),
 
       // Coach Pose Routes
@@ -651,49 +715,35 @@ GoRouter router(Ref ref) {
 
       // Standalone Workout Routes
       GoRoute(
-        path: AppRoutes.standaloneExercises,
-        builder: (context, state) => const StandaloneExercisesScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.standaloneCreateExercise,
-        builder: (context, state) => const StandaloneExerciseFormScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.standaloneExerciseEdit,
-        builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          return StandaloneExerciseFormScreen(exerciseId: id);
-        },
-      ),
-      GoRoute(
-        path: AppRoutes.standaloneRoutines,
-        builder: (context, state) => const StandaloneRoutinesScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.standaloneCreateRoutine,
-        builder: (context, state) => const StandaloneRoutineFormScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.standaloneRoutineDetail,
-        builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          return StandaloneRoutineDetailScreen(routineId: id);
-        },
-      ),
-      GoRoute(
-        path: AppRoutes.standaloneEditRoutine,
-        builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          return StandaloneRoutineFormScreen(routineId: id);
-        },
-      ),
-      GoRoute(
         path: AppRoutes.standalonePrograms,
         builder: (context, state) => const StandaloneProgramsScreen(),
       ),
       GoRoute(
         path: AppRoutes.standaloneCreateProgram,
-        builder: (context, state) => const StandaloneProgramFormScreen(),
+        builder: (context, state) => const StandaloneCreateProgramScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.standaloneProgramBuilder,
+        builder: (context, state) {
+          final programId = state.uri.queryParameters['programId'];
+          return StandaloneProgramBuilderScreen(programId: programId);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.standaloneToday,
+        builder: (context, state) => const StandaloneTodayScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.standaloneWorkout,
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>;
+          return StandaloneWorkoutScreen(
+            session: extra['session'] as WorkoutSessionModel,
+            exercises:
+                (extra['exercises'] as List).cast<RoutineExerciseModel>(),
+            routineName: extra['routineName'] as String,
+          );
+        },
       ),
       GoRoute(
         path: AppRoutes.standaloneProgramDetail,
@@ -703,19 +753,19 @@ GoRouter router(Ref ref) {
         },
       ),
       GoRoute(
-        path: AppRoutes.standaloneEditProgram,
+        path: AppRoutes.standaloneSession,
         builder: (context, state) {
           final id = state.pathParameters['id']!;
-          return StandaloneProgramFormScreen(programId: id);
+          return StandaloneSessionScreen(sessionId: id);
         },
       ),
       GoRoute(
-        path: AppRoutes.standaloneToday,
-        builder: (context, state) => const StandaloneTodayScreen(),
+        path: AppRoutes.standaloneSessionHistory,
+        builder: (context, state) => const StandaloneStatsScreen(),
       ),
       GoRoute(
-        path: AppRoutes.standaloneSessionHistory,
-        builder: (context, state) => const StandaloneSessionHistoryScreen(),
+        path: AppRoutes.standaloneStats,
+        builder: (context, state) => const StandaloneStatsScreen(),
       ),
 
       // ── Gains Coins ──
@@ -817,6 +867,34 @@ class _GoRouterRefreshStream extends ChangeNotifier {
   }
 
   final Ref _ref;
+}
+
+/// Splash/loading screen shown while auth state is determined
+class _SplashScreen extends StatelessWidget {
+  const _SplashScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Scaffold(
+      backgroundColor: isDark
+          ? AppColors.backgroundDark
+          : AppColors.backgroundLight,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SvgPicture.asset(
+              'assets/images/logo.svg',
+              width: 150,
+            ),
+            const SizedBox(height: 32),
+            const CircularProgressIndicator(),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// Placeholder screen - replace with actual screens

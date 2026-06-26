@@ -7,6 +7,8 @@ import '../../../../core/utils/logger.dart';
 import '../../../../core/utils/result.dart';
 import '../../../../providers/auth_state_provider.dart';
 import '../../../home/data/models/today_status_model.dart';
+import '../../../standalone_workout/data/helpers/model_conversion.dart';
+import '../../../standalone_workout/data/standalone_workout_repository.dart';
 import '../../../workout/data/models/models.dart';
 import '../../../workout/data/workout_repository.dart';
 
@@ -36,16 +38,11 @@ Future<TodayStatusModel> todayStatus(Ref ref) async {
 
 /// Enum describing the client's current home-screen status.
 enum HomeStatus {
-  /// User has no subscribed coach → show "Find a Coach" CTA.
+  /// User has no subscribed coach (paid tier) → show "Find a Coach" CTA.
   noCoach,
 
-  /// User has a coach but no active subscription → show upgrade CTA.
-  noSubscription,
-
-  /// User had a coach + active subscription that has since expired,
-  /// AND the coach had already assigned a routine for today.
-  /// Show the routine card (read-only) + a "Renew" banner.
-  lapsedSubscription,
+  /// User has no coach + no standalone program → show "Build My Program" CTA.
+  buildProgram,
 
   /// User has a coach but no active program → show "Waiting for program".
   waitingForProgram,
@@ -59,39 +56,33 @@ enum HomeStatus {
 
 /// Derives [HomeStatus] from [todayStatusProvider].
 ///
-/// No 403 catching. All status information comes from the unified today response.
-///
-/// Priority for non-subscribed users:
-///   1. Lapsed subscriber with coach today → [HomeStatus.lapsedSubscription]
-///   2. Any standalone program today → [HomeStatus.restDay] / [HomeStatus.hasRoutine]
-///   3. Everything else → existing CTAs
+/// Priority:
+///   1. Subscribed user with coach → coach program flow
+///   2. Any user with a self-built standalone program → standalone flow
+///   3. Everything else → "Build My Program" CTA
 @riverpod
 Future<HomeStatus> homeStatus(Ref ref) async {
   final s = await ref.watch(todayStatusProvider.future);
 
-  // Non-subscribed path
-  if (!s.isSubscribed) {
-    // Lapsed subscriber: has a coach but subscription expired.
-    // The server may not populate coachToday for lapsed users (subscription-gated),
-    // so we check hasCoach alone — a user with a coach who isn't subscribed is
-    // always lapsed, never "noSubscription" (AccessGated paywall).
-    if (s.hasCoach) {
-      return HomeStatus.lapsedSubscription;
-    }
-    // Pure free user with no coach — fall back to standalone program.
-    if (s.standaloneToday == null) {
-      return HomeStatus.noCoach;
-    }
-    return s.standaloneToday!.isRestDay
-        ? HomeStatus.restDay
-        : HomeStatus.hasRoutine;
+  // Coach path: only when subscribed AND has an active coach
+  if (s.hasCoach && s.isSubscribed) {
+    if (s.coachToday == null) return HomeStatus.waitingForProgram;
+    if (s.coachToday!.isRestDay) return HomeStatus.restDay;
+    return HomeStatus.hasRoutine;
   }
 
-  // Subscribed path unchanged — coach program wins.
-  if (!s.hasCoach) return HomeStatus.noCoach;
-  if (s.coachToday == null) return HomeStatus.waitingForProgram;
-  if (s.coachToday!.isRestDay) return HomeStatus.restDay;
-  return HomeStatus.hasRoutine;
+  // Standalone path: any user with an active self-built program
+  if (s.standalone.hasActiveProgram) {
+    return HomeStatus.hasRoutine;
+  }
+
+  // Paid user with no coach → show coach discovery
+  if (s.isSubscribed && !s.hasCoach) {
+    return HomeStatus.noCoach;
+  }
+
+  // No standalone program available
+  return HomeStatus.buildProgram;
 }
 
 // ──────────────────────────────────────────────────────────
@@ -100,17 +91,106 @@ Future<HomeStatus> homeStatus(Ref ref) async {
 
 /// Resolves today's routine as [TodayRoutineModel].
 ///
-/// Prefers coach today when subscribed; falls back to standalone.
+/// Prefers coach today when subscribed; falls back to standalone for free-tier
+/// users. Returns a non-rest-day model when no program exists so the card
+/// falls through to the "Build My Program" CTA in [TodayHeroBlock].
 @riverpod
 Future<TodayRoutineModel> activeToday(Ref ref) async {
   final s = await ref.watch(todayStatusProvider.future);
-  if (s.isSubscribed && s.coachToday != null) {
-    return s.coachToday!.toRoutineModel();
+
+  // Coach flow (subscribed + has coach)
+  if (s.hasCoach && s.isSubscribed && s.coachToday != null) {
+    final model = s.coachToday!.toRoutineModel();
+
+    // Enrich with exercises from cached programs (server only returns exerciseCount)
+    if (model.today != null) {
+      final workoutRepo = ref.watch(workoutRepositoryProvider);
+      final programsResult = await workoutRepo.getPrograms();
+      final programs = programsResult.valueOrNull ?? [];
+      for (final p in programs) {
+        for (final r in p.routines) {
+          if (r.id == model.today!.programRoutineId && r.exercises.isNotEmpty) {
+            return TodayRoutineModel(
+              isRestDay: false,
+              completedToday: model.completedToday,
+              today: TodayRoutineDetails(
+                programRoutineId: model.today!.programRoutineId,
+                dayOfWeek: model.today!.dayOfWeek,
+                assignedProgramId: p.id,
+                programName: p.name,
+                routine: RoutineModel(
+                  id: r.id,
+                  name: r.name,
+                  description: r.description,
+                  estimatedDurationMinutes: r.estimatedDurationMinutes,
+                  exercises: r.exercises,
+                  muscleGroupsTargeted: r.muscleGroupsTargeted,
+                  daysOfWeek: r.daysOfWeek,
+                ),
+              ),
+            );
+          }
+        }
+      }
+    }
+
+    return model;
   }
-  if (s.standaloneToday != null) {
-    return s.standaloneToday!.toRoutineModel();
+
+  // Standalone flow — load full program detail from local DB
+  if (s.standalone.hasActiveProgram && s.standalone.program != null) {
+    final standaloneRepo = ref.watch(standaloneWorkoutRepositoryProvider);
+    final programId = s.standalone.program!.id;
+
+    final detailResult = await standaloneRepo.getProgram(programId);
+    final detail = detailResult.when(success: (d) => d, failure: (_) => null);
+
+    if (detail != null && detail.routines.isNotEmpty) {
+      final firstRoutine = detail.routines.first;
+      final exercises = firstRoutine.exercises
+          .map((e) => e.toRoutineExerciseModel())
+          .toList();
+
+      return TodayRoutineModel(
+        isRestDay: false,
+        today: TodayRoutineDetails(
+          programRoutineId: firstRoutine.id,
+          dayOfWeek: 'Today',
+          assignedProgramId: programId,
+          programName: detail.name,
+          routine: RoutineModel(
+            id: firstRoutine.id,
+            name: firstRoutine.routineName,
+            description: detail.description,
+            estimatedDurationMinutes: exercises.length * 3,
+            exercises: exercises,
+          ),
+        ),
+      );
+    }
+
+    // Fallback: minimal info if no local detail available
+    return TodayRoutineModel(
+      isRestDay: false,
+      today: TodayRoutineDetails(
+        programRoutineId: '',
+        dayOfWeek: '',
+        assignedProgramId: s.standalone.program!.id,
+        programName: s.standalone.program!.name,
+        routine: RoutineModel(
+          id: s.standalone.program!.id,
+          name: s.standalone.program!.name,
+          description: '',
+          estimatedDurationMinutes: 0,
+          exercises: const [],
+        ),
+      ),
+    );
   }
-  return const TodayRoutineModel(isRestDay: true);
+
+  // No program at all — return a non-rest-day model so the card
+  // falls through to the "Build My Program" CTA in TodayHeroBlock.
+  return const TodayRoutineModel(isRestDay: false);
 }
 
 // ──────────────────────────────────────────────────────────
@@ -147,18 +227,38 @@ Future<WeeklyStatsModel> weeklyStats(Ref ref) async {
 // Recent Activity
 // ──────────────────────────────────────────────────────────
 
-/// Fetches recent completed workout sessions (limit 5).
+/// Fetches recent completed workout sessions (limit 5) from the unified
+/// session history endpoint (`GET /api/sessions/history`). Falls back to
+/// the local database when the server is unreachable.
 @riverpod
 Future<List<WorkoutSessionSummary>> recentActivity(Ref ref) async {
   final repo = ref.watch(workoutRepositoryProvider);
-  final result = await repo.getSessionHistory(limit: 5, offset: 0);
+  final result = await repo.getUnifiedSessionHistory(
+    source: 'all',
+    limit: 5,
+    offset: 0,
+  );
 
-  if (result is Success<WorkoutHistoryResponse, AppError>) {
-    return result.value.sessions;
+  if (result is Success<UnifiedSessionHistoryResponse, AppError>) {
+    return result.value.sessions
+        .map(
+          (s) => WorkoutSessionSummary(
+            id: s.id,
+            userId: s.userId,
+            assignedProgramId: s.assignedProgramId,
+            routineId: s.routineId,
+            startedAt: s.startedAt,
+            completedAt: s.completedAt,
+            notes: s.notes,
+            totalSets: s.totalSets,
+            routineName: s.routineName,
+          ),
+        )
+        .toList();
   }
 
   AppLogger.warning(
-    'Session history unavailable — loading from local DB',
+    'Unified session history unavailable — loading from local DB',
     tag: 'HomeProviders',
   );
   final userId = ref.read(authStateProvider).userId;
@@ -173,4 +273,22 @@ Future<List<WorkoutSessionSummary>> recentActivity(Ref ref) async {
     }
   }
   return const [];
+}
+
+// ──────────────────────────────────────────────────────────
+// Monthly Insight
+// ──────────────────────────────────────────────────────────
+
+/// Fetches monthly training insight from `GET /api/stats/monthly-insight?month=YYYY-MM`.
+/// Includes avg volume/session, trend %, 6-month sparkline, and top exercise weight gains.
+@riverpod
+Future<MonthlyInsight> monthlyInsight(Ref ref) async {
+  final now = DateTime.now();
+  final month = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+  final repo = ref.watch(workoutRepositoryProvider);
+  final result = await repo.getMonthlyInsight(month);
+  return result.when(
+    success: (model) => model,
+    failure: (error) => throw error,
+  );
 }

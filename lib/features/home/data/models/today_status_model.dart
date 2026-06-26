@@ -12,9 +12,9 @@ part 'today_status_model.g.dart';
 @freezed
 abstract class TodaySubscriptionInfo with _$TodaySubscriptionInfo {
   const factory TodaySubscriptionInfo({
-    required String id,
-    required SubscriptionStatus status,
-    required int tierLevel,
+    @Default('') String id,
+    @Default(SubscriptionStatus.expired) SubscriptionStatus status,
+    @Default(0) int tierLevel,
     required DateTime currentPeriodEnd,
   }) = _TodaySubscriptionInfo;
 
@@ -36,11 +36,35 @@ abstract class TodayStatusModel with _$TodayStatusModel {
     required bool hasCoach,
     TodaySubscriptionInfo? subscription,
     TodayWorkoutDetails? coachToday,
-    TodayWorkoutDetails? standaloneToday,
+    @Default(StandaloneStatus()) StandaloneStatus standalone,
   }) = _TodayStatusModel;
 
   factory TodayStatusModel.fromJson(Map<String, dynamic> json) =>
       _$TodayStatusModelFromJson(json);
+}
+
+/// Standalone (free-tier) program status returned by GET /api/today.
+@freezed
+abstract class StandaloneStatus with _$StandaloneStatus {
+  const factory StandaloneStatus({
+    @Default(false) bool hasActiveProgram,
+    StandaloneProgramInfo? program,
+  }) = _StandaloneStatus;
+
+  factory StandaloneStatus.fromJson(Map<String, dynamic> json) =>
+      _$StandaloneStatusFromJson(json);
+}
+
+/// Lightweight standalone program info.
+@freezed
+abstract class StandaloneProgramInfo with _$StandaloneProgramInfo {
+  const factory StandaloneProgramInfo({
+    required String id,
+    required String name,
+  }) = _StandaloneProgramInfo;
+
+  factory StandaloneProgramInfo.fromJson(Map<String, dynamic> json) =>
+      _$StandaloneProgramInfoFromJson(json);
 }
 
 /// Today's workout details — shared shape for coach and standalone responses.

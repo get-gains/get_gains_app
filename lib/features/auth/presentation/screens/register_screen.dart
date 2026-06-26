@@ -109,9 +109,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
     // Listen for state changes
     ref.listen<RegisterState>(registerProvider, (previous, next) {
       if (next is RegisterEmailVerificationPending) {
-        // Navigate to check email for email confirmation
+        // Navigate to email verification code entry
         context.go(
-          '${AppRoutes.checkEmail}?email=${Uri.encodeComponent(next.email)}',
+          '${AppRoutes.emailVerification}?email=${Uri.encodeComponent(next.email)}',
         );
       } else if (next is RegisterSuccess) {
         // Direct success (e.g., Google OAuth with auto-verified email)
@@ -525,10 +525,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
   }
 
   Widget _buildGoogleSignUp(bool isDark, bool isLoading) {
-    return _GoogleSignInButton(
+    return AppButton.outline(
+      label: 'Continue with Google',
+      icon: Icons.g_mobiledata_rounded,
       onPressed: isLoading ? null : _handleGoogleSignUp,
-      isLoading: isLoading,
-      isDark: isDark,
+      isFullWidth: true,
+      size: AppButtonSize.lg,
     );
   }
 
@@ -731,107 +733,6 @@ class _BackButton extends StatelessWidget {
             color: isDark
                 ? AppColors.foregroundDark
                 : AppColors.foregroundLight,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GoogleSignInButton extends StatefulWidget {
-  const _GoogleSignInButton({
-    required this.onPressed,
-    required this.isLoading,
-    required this.isDark,
-  });
-
-  final VoidCallback? onPressed;
-  final bool isLoading;
-  final bool isDark;
-
-  @override
-  State<_GoogleSignInButton> createState() => _GoogleSignInButtonState();
-}
-
-class _GoogleSignInButtonState extends State<_GoogleSignInButton> {
-  bool _isHovered = false;
-  bool _isPressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTapDown: (_) => setState(() => _isPressed = true),
-        onTapUp: (_) => setState(() => _isPressed = false),
-        onTapCancel: () => setState(() => _isPressed = false),
-        onTap: widget.onPressed,
-        child: AnimatedScale(
-          scale: _isPressed ? 0.98 : 1.0,
-          duration: AppTheme.durationFast,
-          child: AnimatedContainer(
-            duration: AppTheme.durationFast,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(
-              color: widget.isDark
-                  ? (_isHovered
-                        ? AppColors.surface2Dark
-                        : AppColors.surface1Dark)
-                  : (_isHovered ? AppColors.gray100 : AppColors.white),
-              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              border: Border.all(
-                color: widget.isDark
-                    ? AppColors.borderDark
-                    : AppColors.borderLight,
-                width: 1.5,
-              ),
-              boxShadow: _isHovered
-                  ? [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Google Logo
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  padding: const EdgeInsets.all(2),
-                  child: Image.network(
-                    'https://www.google.com/favicon.ico',
-                    errorBuilder: (_, __, ___) => Icon(
-                      Icons.g_mobiledata_rounded,
-                      size: 20,
-                      color: widget.isDark
-                          ? AppColors.foregroundDark
-                          : AppColors.foregroundLight,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  'Continue with Google',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: widget.isDark
-                        ? AppColors.foregroundDark
-                        : AppColors.foregroundLight,
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ),

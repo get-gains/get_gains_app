@@ -7,18 +7,27 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../guidance/guidance.dart';
 import '../providers/coach_pulse_provider.dart';
 
 /// Hero block for coaches: shows client count and assignment stats with a
 /// primary CTA to navigate to the Coach Hub.
+///
+/// When [isDeactivated] is true, shows a deactivation notice instead.
+///
+/// [pulseKey] attaches a [GlobalKey] for the coach spotlight tour.
 class CoachPulseBlock extends ConsumerWidget {
-  const CoachPulseBlock({super.key});
+  const CoachPulseBlock({super.key, this.isDeactivated = false, this.pulseKey});
+
+  final bool isDeactivated;
+  final GlobalKey? pulseKey;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pulseAsync = ref.watch(coachPulseProvider);
 
     return Padding(
+      key: pulseKey,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: AppCard.gradient(
         gradient: const LinearGradient(
@@ -51,55 +60,71 @@ class CoachPulseBlock extends ConsumerWidget {
                     ),
                   ),
                 ),
+                InfoIconButton(
+                  iconSize: 20,
+                  color: Colors.white,
+                  content: kHomeHelp,
+                  onTapOverride: () {
+                    ref.read(tourProvider.notifier).startTour(
+                      'coach_home',
+                      kCoachHomeTourSteps,
+                    );
+                  },
+                ),
               ],
             ),
             const SizedBox(height: 16),
-            pulseAsync.when(
-              data: (stats) => Row(
-                children: [
-                  _StatTile(
-                    label: 'Clients',
-                    value: '${stats.totalClients}',
-                  ),
-                  const SizedBox(width: 12),
-                  _StatTile(
-                    label: 'With Program',
-                    value: '${stats.clientsAssigned}',
-                  ),
-                  const SizedBox(width: 12),
-                  _StatTile(
-                    label: 'Need Program',
-                    value: '${stats.clientsUnassigned}',
-                    highlight: stats.clientsUnassigned > 0,
-                  ),
-                ],
-              ),
-              loading: () => const SizedBox(
-                height: 40,
-                child: Center(
-                  child: CircularProgressIndicator(color: Colors.white),
+            if (isDeactivated)
+              const _DeactivatedNotice()
+            else
+              pulseAsync.when(
+                data: (stats) => Row(
+                  children: [
+                    _StatTile(
+                      label: 'Clients',
+                      value: '${stats.totalClients}',
+                    ),
+                    const SizedBox(width: 12),
+                    _StatTile(
+                      label: 'With Program',
+                      value: '${stats.clientsAssigned}',
+                    ),
+                    const SizedBox(width: 12),
+                    _StatTile(
+                      label: 'Need Program',
+                      value: '${stats.clientsUnassigned}',
+                      highlight: stats.clientsUnassigned > 0,
+                    ),
+                  ],
                 ),
-              ),
-              error: (_, __) => const Text(
-                'Could not load coach stats',
-                style: TextStyle(color: Colors.white70),
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  side: const BorderSide(color: Colors.white54),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                loading: () => const SizedBox(
+                  height: 40,
+                  child: Center(
+                    child: CircularProgressIndicator(color: Colors.white),
                   ),
                 ),
-                onPressed: () => context.push(AppRoutes.coachHub),
-                child: const Text('Open Coach Hub'),
+                error: (_, __) => const Text(
+                  'Could not load coach stats',
+                  style: TextStyle(color: Colors.white70),
+                ),
               ),
-            ),
+            if (!isDeactivated) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.white54),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () => context.push(AppRoutes.coachHub),
+                  child: const Text('Open Coach Hub'),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -144,6 +169,43 @@ class _StatTile extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _DeactivatedNotice extends StatelessWidget {
+  const _DeactivatedNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Column(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.white70, size: 28),
+          SizedBox(height: 8),
+          Text(
+            'Your coach account has been deactivated.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'Contact support for assistance.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+        ],
       ),
     );
   }

@@ -45,13 +45,15 @@ abstract class ExerciseHistoryEntry with _$ExerciseHistoryEntry {
 }
 
 /// A set within an exercise history entry.
+///
+/// JSON keys are snake_case to match the server's Prisma-sourced response.
 @freezed
 abstract class ExerciseHistorySet with _$ExerciseHistorySet {
   const factory ExerciseHistorySet({
-    required int setNumber,
-    @Default(0) int repsCompleted,
-    double? weightKg,
-    int? rpe,
+    @JsonKey(name: 'set_number') required int setNumber,
+    @JsonKey(name: 'reps') @Default(0) int repsCompleted,
+    @JsonKey(name: 'weight') double? weightKg,
+    @JsonKey(name: 'overall_score') int? overallScore,
   }) = _ExerciseHistorySet;
 
   factory ExerciseHistorySet.fromJson(Map<String, dynamic> json) =>

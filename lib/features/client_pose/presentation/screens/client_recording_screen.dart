@@ -53,10 +53,14 @@ class _ClientRecordingScreenState extends ConsumerState<ClientRecordingScreen> {
   }
 
   Future<void> _init() async {
-    // Load reference form first
-    ref
-        .read(clientRecordingProvider(widget.exerciseId).notifier)
-        .loadReferenceForm();
+    // Load reference form data — defer to avoid modifying provider during build
+    Future.microtask(() {
+      if (mounted) {
+        ref
+            .read(clientRecordingProvider(widget.exerciseId).notifier)
+            .loadReferenceForm();
+      }
+    });
 
     // Init camera
     await _initCamera();

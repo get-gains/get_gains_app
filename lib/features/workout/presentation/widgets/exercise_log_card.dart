@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../client_pose/data/client_pose_repository.dart';
+import '../../../client_pose/presentation/widgets/pose_view_widget.dart';
+import '../../../coach_pose/data/models/landmark_models.dart';
 import '../../data/models/models.dart';
 import '../providers/exercise_log_provider.dart';
 import 'set_input_row.dart';
@@ -96,6 +99,14 @@ class _ExerciseLogCardState extends ConsumerState<ExerciseLogCard> {
             repsMax: widget.routineExercise.repsMax,
             restSeconds: widget.routineExercise.restSeconds,
             notes: widget.routineExercise.notes,
+          ),
+
+          const SizedBox(height: 12),
+
+          // Coach form preview (collapsible inline card)
+          _FormPreviewCard(
+            exerciseId: widget.routineExercise.exerciseId,
+            exerciseName: exercise?.name ?? 'Exercise',
           ),
 
           const SizedBox(height: 24),
@@ -471,5 +482,227 @@ class _SetProgressIndicator extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+/// Inline coach form preview card — collapsible card that loads and displays
+/// the coach's reference skeleton for visual comparison during a workout.
+class _FormPreviewCard extends ConsumerStatefulWidget {
+  const _FormPreviewCard({
+    required this.exerciseId,
+    required this.exerciseName,
+  });
+
+  final String exerciseId;
+  final String exerciseName;
+
+  @override
+  ConsumerState<_FormPreviewCard> createState() => _FormPreviewCardState();
+}
+
+class _FormPreviewCardState extends ConsumerState<_FormPreviewCard> {
+  List<LandmarkFrame>? _landmarkFrames;
+  bool _isLoading = false;
+  bool _isExpanded = false;
+  String? _cameraAngle;
+  String? _formError;
+
+  Future<void> _loadAndExpand() async {
+    if (_isLoading) return;
+
+    if (_landmarkFrames != null) {
+      setState(() => _isExpanded = !_isExpanded);
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _isExpanded = true;
+    });
+
+    try {
+      final repo = ref.read(clientPoseRepositoryProvider);
+      final result = await repo.downloadExerciseForm(widget.exerciseId);
+
+      if (!mounted) return;
+
+      result.when(
+        success: (data) {
+          final forms = data['forms'] as List?;
+          final formsBlobs =
+              data['formsBlobs'] as Map<String, dynamic>? ?? {};
+
+          if (forms == null || forms.isEmpty) {
+            setState(() {
+              _formError = 'No reference form available';
+              _isLoading = false;
+            });
+            return;
+          }
+
+          final firstForm = forms.first as Map<String, dynamic>;
+          final formId = firstForm['id'] as String?;
+          _cameraAngle = firstForm['camera_angle'] as String?;
+
+          if (formId != null && formsBlobs.containsKey(formId)) {
+            final blob = formsBlobs[formId] as Map<String, dynamic>;
+            final rawFrames = blob['landmarkFrames'] as List<dynamic>?;
+
+            final frames = rawFrames?.map((f) {
+              return LandmarkFrame.fromJson(f as Map<String, dynamic>);
+            }).toList();
+
+            setState(() {
+              _landmarkFrames = frames;
+              _isLoading = false;
+            });
+          } else {
+            setState(() {
+              _formError = 'No form data available';
+              _isLoading = false;
+            });
+          }
+        },
+        failure: (error) {
+          if (!mounted) return;
+          setState(() {
+            _formError = error.message;
+            _isLoading = false;
+          });
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _formError = 'Failed to load form';
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return AppCard.elevated(
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: _loadAndExpand,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.auto_awesome,
+                    size: 18,
+                    color: isDark
+                        ? AppColors.primaryDark
+                        : AppColors.primaryLight,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Coach Form Preview',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (_cameraAngle != null)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Text(
+                        _formatAngleLabel(_cameraAngle!),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight,
+                        ),
+                      ),
+                    ),
+                  if (_isLoading)
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else
+                    Icon(
+                      _isExpanded
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      size: 20,
+                      color: isDark ? Colors.white54 : Colors.black54,
+                    ),
+                ],
+              ),
+            ),
+          ),
+          if (_isExpanded) ...[
+            const Divider(height: 1),
+            if (_formError != null)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: AppColors.warning),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _formError!,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.warning,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else if (_landmarkFrames != null && _landmarkFrames!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox(
+                    height: 160,
+                    child: PoseViewWidget(
+                      landmarkFrames: _landmarkFrames!,
+                      mode: PoseViewMode.raw2D,
+                      color: Colors.cyanAccent,
+                      backgroundColor: const Color(0xFF0F0F1A),
+                      showControls: false,
+                      mirrorX: true,
+                    ),
+                  ),
+                ),
+              )
+            else if (!_isLoading)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'Loading preview...',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _formatAngleLabel(String angle) {
+    return angle
+        .replaceAll('_', ' ')
+        .split(' ')
+        .map((w) => w.isEmpty
+            ? w
+            : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}')
+        .join(' ');
   }
 }

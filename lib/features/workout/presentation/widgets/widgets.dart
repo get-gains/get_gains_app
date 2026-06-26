@@ -5,4 +5,6 @@ library;
 
 export 'exercise_log_card.dart';
 export 'exercise_tab_bar.dart';
+export 'month_grid.dart';
 export 'set_input_row.dart';
+export 'total_volume_per_month_card.dart';

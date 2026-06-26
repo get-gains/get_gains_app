@@ -2,11 +2,15 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/auth_state_provider.dart';
+import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
+import '../../../gains_coins/presentation/providers/missions_provider.dart';
+import '../../../home/presentation/screens/home_screen.dart' show isCoachProvider;
 import '../../../profile/profile.dart';
 import '../providers/subscription_provider.dart';
 import 'plan_card.dart';
@@ -26,13 +30,21 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+    final profileAsync = ref.watch(profileProvider);
     final fitnessProfileAsync = ref.watch(userProfileProvider);
     final subscriptionState = ref.watch(subscriptionProvider);
     final isSubscribed = ref.watch(isSubscribedProvider);
+    final coachStatus = ref.watch(isCoachProvider).asData?.value;
+    final isCoach = coachStatus != null && coachStatus.isCoach;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final email = authState.email ?? '';
-    final userName = email.isNotEmpty ? email.split('@').first : 'User';
+    final user = profileAsync.asData?.value;
+    final userName = (user?.name.isNotEmpty == true)
+        ? user!.name
+        : email.isNotEmpty
+            ? email.split('@').first
+            : 'User';
     final fitnessProfile = fitnessProfileAsync.asData?.value;
     final avatarUrl = fitnessProfile?.avatarUrl;
 
@@ -67,7 +79,7 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
               const SizedBox(height: 16),
             ],
 
-            _buildMenuItems(context, isDark),
+            _buildMenuItems(context, isDark, isCoach),
           ],
         ),
       ),
@@ -98,6 +110,8 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
               const SizedBox(height: 4),
               Text(
                 email,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: isDark
                       ? AppColors.mutedForegroundDark
@@ -113,6 +127,53 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
 
   List<Package> _getPackages(SubscriptionLoaded state) {
     return state.currentOffering?.availablePackages ?? [];
+  }
+
+  Widget _buildCouponCta(BuildContext context) {
+    final offerTagAsync = ref.watch(activeCouponOfferTagProvider);
+
+    return offerTagAsync.when(
+      data: (offerTag) {
+        if (offerTag == null) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: AppCard(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Mission reward available',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'You earned a 20% off Premium coupon. Redeem it now.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.textSecondaryLight,
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  AppButton.primary(
+                    label: 'Redeem 20% Off',
+                    icon: Icons.local_offer,
+                    isFullWidth: true,
+                    onPressed: () => ref
+                        .read(subscriptionProvider.notifier)
+                        .purchaseDiscountedOption(offerTag),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+    );
   }
 
   Widget _buildFreeUserSection(
@@ -183,6 +244,8 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
           ),
         ),
         const SizedBox(height: 16),
+
+        _buildCouponCta(context),
 
         if (hasPackages) ...[
           AppButton.primary(
@@ -318,22 +381,19 @@ class _ProfileSheetState extends ConsumerState<ProfileSheet> {
     );
   }
 
-  Widget _buildMenuItems(BuildContext context, bool isDark) {
+  Widget _buildMenuItems(BuildContext context, bool isDark, bool isCoach) {
     return Column(
       children: [
         const Divider(),
-        AppListTile(
-          leading: const Icon(Icons.settings_outlined),
-          title: 'Settings',
-          onTap: () {
-            Navigator.of(context).pop();
-          },
-        ),
-        AppListTile(
-          leading: const Icon(Icons.help_outline),
-          title: 'Help & Support',
-          onTap: () {},
-        ),
+        if (!isCoach)
+          AppListTile(
+            leading: const Icon(Icons.card_membership),
+            title: 'Redeem Coach Invite',
+            onTap: () {
+              Navigator.of(context).pop();
+              context.push(AppRoutes.redeemInvite);
+            },
+          ),
         const Divider(),
         AppListTile(
           leading: Icon(Icons.logout, color: AppColors.error),

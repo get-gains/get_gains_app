@@ -9,20 +9,18 @@ import '../../../../providers/router_provider.dart';
 /// Horizontal-scrolling pill row of compact navigation shortcuts.
 ///
 /// Client: Shop, Wardrobe, Leaderboard, History, Missions, Library.
-/// Coach: Shop, Leaderboard, History, Missions, Library (no Wardrobe).
+/// Coach: Shop, Wardrobe, Leaderboard, History, Missions, Library.
 ///
 /// @param dockKey [GlobalKey] forwarded for tour anchoring.
-/// @param isCoach When true, omits the Wardrobe pill.
 class LaunchDock extends StatelessWidget {
-  const LaunchDock({super.key, this.dockKey, required this.isCoach});
+  const LaunchDock({super.key, this.dockKey});
 
   final GlobalKey? dockKey;
-  final bool isCoach;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final items = _items(context, isCoach);
+    final items = _items(context);
 
     Widget dock = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -57,7 +55,7 @@ class LaunchDock extends StatelessWidget {
     return dock;
   }
 
-  List<_DockItem> _items(BuildContext context, bool isCoach) {
+  List<_DockItem> _items(BuildContext context) {
     return [
       _DockItem(
         icon: Icons.storefront_rounded,
@@ -65,13 +63,12 @@ class LaunchDock extends StatelessWidget {
         color: const Color(0xFFFFD700),
         onTap: () => context.push(AppRoutes.shop),
       ),
-      if (!isCoach)
-        _DockItem(
-          icon: Icons.checkroom_rounded,
-          label: 'Wardrobe',
-          color: const Color(0xFF8B5CF6),
-          onTap: () => context.push(AppRoutes.inventory),
-        ),
+      _DockItem(
+        icon: Icons.checkroom_rounded,
+        label: 'Wardrobe',
+        color: const Color(0xFF8B5CF6),
+        onTap: () => context.push(AppRoutes.inventory),
+      ),
       _DockItem(
         icon: Icons.leaderboard_rounded,
         label: 'Leaderboard',

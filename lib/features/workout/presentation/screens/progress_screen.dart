@@ -10,6 +10,7 @@ import '../../../../widgets/widgets.dart';
 import '../../../home/presentation/providers/home_providers.dart';
 import '../../../home/presentation/widgets/widgets.dart';
 import '../../data/models/models.dart';
+import '../widgets/total_volume_per_month_card.dart';
 
 /// Progress / Stats Screen (M-CL9)
 ///
@@ -32,6 +33,7 @@ class ProgressScreen extends ConsumerWidget {
           onRefresh: () async {
             ref.invalidate(unifiedWeeklyStatsProvider);
             ref.invalidate(recentActivityProvider);
+            ref.invalidate(monthlyInsightProvider);
             await ref.read(unifiedWeeklyStatsProvider.future);
           },
           child: CustomScrollView(
@@ -68,6 +70,7 @@ class ProgressScreen extends ConsumerWidget {
                         totalMinutes: stats.totalMinutes,
                         streakDays: stats.streakDays,
                         completedWeekdays: stats.completedWeekdays,
+                        onTap: () => context.push(AppRoutes.workoutCalendar),
                       ),
                       loading: () => const _StatsLoadingSkeleton(),
                       error: (error, _) => AppCard(
@@ -112,6 +115,20 @@ class ProgressScreen extends ConsumerWidget {
                       error: (_, __) => const SizedBox.shrink(),
                     ),
                     const SizedBox(height: 24),
+
+                    // ── Total Volume per Month ───────────────────
+                    TotalVolumePerMonthCard(
+                      onTap: () {
+                        final month =
+                            '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}';
+                        context.push(
+                          AppRoutes.monthlySessions.replaceFirst(
+                            ':month',
+                            month,
+                          ),
+                        );
+                      },
+                    ),
 
                     // ── Recent Workouts ─────────────────────────
                     _SectionHeader(

@@ -111,89 +111,44 @@ class LibraryExerciseCard extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isDark
-                              ? AppColors.surface2Dark
-                              : AppColors.surface2Light,
-                        ),
-                        child: Center(
-                          child: Text(
-                            exercise.coachName.isNotEmpty
-                                ? exercise.coachName[0].toUpperCase()
-                                : 'C',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: primary,
-                            ),
-                          ),
-                        ),
+                  if (exercise.coachName.isNotEmpty)
+                    Text(
+                      exercise.coachName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: isDark
+                            ? AppColors.mutedForegroundDark
+                            : AppColors.mutedForegroundLight,
                       ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          exercise.coachName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: isDark
-                                ? AppColors.mutedForegroundDark
-                                : AppColors.mutedForegroundLight,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
                   const SizedBox(height: 6),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       if (exercise.targetMuscles.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: primary.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            exercise.targetMuscles.first,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: primary,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 10,
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              exercise.targetMuscles.join(', '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: primary,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 10,
+                              ),
                             ),
                           ),
                         ),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.thumb_up_rounded,
-                            size: 14,
-                            color: isDark
-                                ? AppColors.accentDark
-                                : AppColors.accentLight,
-                          ),
-                          const SizedBox(width: 3),
-                          Text(
-                            exercise.thumbsUpCount.toString(),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: isDark
-                                  ? AppColors.accentDark
-                                  : AppColors.accentLight,
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
                 ],

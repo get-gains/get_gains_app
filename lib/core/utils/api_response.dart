@@ -17,6 +17,7 @@ abstract class ApiError with _$ApiError {
     String? field,
     String? code,
     required String message,
+    Map<String, dynamic>? meta,
   }) = _ApiError;
 
   factory ApiError.fromJson(Map<String, dynamic> json) =>

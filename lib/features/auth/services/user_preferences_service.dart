@@ -23,6 +23,7 @@ class UserPrefsKeys {
   static const String pendingGoogleProfile = 'pending_google_profile';
   static const String lastLoginMethod = 'last_login_method';
   static const String rememberEmail = 'remember_email';
+  static const String hasSeenLanding = 'has_seen_landing';
 }
 
 /// Login methods for tracking
@@ -230,6 +231,18 @@ class UserPreferencesService {
   /// Check if user logged in with Google
   bool isGoogleUser() {
     return _box.get(UserPrefsKeys.isGoogleUser) as bool? ?? false;
+  }
+
+  // ============== Landing Page ==============
+
+  /// Mark that the user has seen the landing page
+  Future<void> setHasSeenLanding() async {
+    await _box.put(UserPrefsKeys.hasSeenLanding, true);
+  }
+
+  /// Check if the user has seen the landing page
+  bool hasSeenLanding() {
+    return _box.get(UserPrefsKeys.hasSeenLanding) as bool? ?? false;
   }
 
   /// Save remembered email for login

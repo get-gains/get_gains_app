@@ -1,160 +1,137 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
-import '../../../coach_programs/data/models/program_model.dart'
-    show DayOfWeek, DayOfWeekX;
-import '../../../workout/data/models/routine_model.dart';
-
-export '../../../coach_programs/data/models/program_model.dart'
-    show DayOfWeek, DayOfWeekX;
-
 part 'standalone_program_model.freezed.dart';
 part 'standalone_program_model.g.dart';
 
-// ──────────────────────────────────────────────────────────
-// Personal Program Models (standalone – user-owned)
-// ──────────────────────────────────────────────────────────
+Map<String, dynamic> _normalizeStandaloneProgramRoutineJson(
+  Map<String, dynamic> json,
+) {
+  final normalized = Map<String, dynamic>.from(json);
 
-/// Program summary for list views.
-///
-/// Returned by `GET /api/standalone/programs` (paginated).
+  if (normalized['routine'] is Map<String, dynamic>) {
+    final routine = normalized['routine'] as Map<String, dynamic>;
+    normalized['routineName'] ??= routine['name'];
+    normalized['routineDescription'] ??= routine['description'] ?? '';
+  }
+
+  if (normalized['exercises'] is List) {
+    normalized['exercises'] = (normalized['exercises'] as List)
+        .map(
+          (e) =>
+              _normalizeStandaloneRoutineExerciseJson(e as Map<String, dynamic>),
+        )
+        .toList();
+  }
+
+  return normalized;
+}
+
+Map<String, dynamic> _normalizeStandaloneRoutineExerciseJson(
+  Map<String, dynamic> json,
+) {
+  final normalized = Map<String, dynamic>.from(json);
+
+  if (normalized['exercise'] is Map<String, dynamic>) {
+    final exercise = normalized['exercise'] as Map<String, dynamic>;
+    normalized['exerciseName'] ??= exercise['name'];
+  }
+
+  return normalized;
+}
+
+Map<String, dynamic> _normalizeStandaloneProgramDetailJson(
+  Map<String, dynamic> json,
+) {
+  final normalized = Map<String, dynamic>.from(json);
+
+  if (normalized['routines'] is List) {
+    normalized['routines'] = (normalized['routines'] as List)
+        .map(
+          (e) =>
+              _normalizeStandaloneProgramRoutineJson(e as Map<String, dynamic>),
+        )
+        .toList();
+  }
+
+  return normalized;
+}
+
 @freezed
-abstract class StandaloneProgramSummaryModel
-    with _$StandaloneProgramSummaryModel {
-  const factory StandaloneProgramSummaryModel({
+abstract class StandaloneProgram with _$StandaloneProgram {
+  const factory StandaloneProgram({
     required String id,
     required String name,
     required String description,
+    @JsonKey(name: 'is_active') @Default(false) bool isActive,
+    @JsonKey(name: 'routine_count') @Default(0) int routineCount,
+    @JsonKey(name: 'created_at') DateTime? createdAt,
+    @JsonKey(name: 'updated_at') DateTime? updatedAt,
+  }) = _StandaloneProgram;
 
-    /// Number of routine day-slots in this program.
-    @Default(0) int routineCount,
-
-    /// User who owns this program.
-    String? userId,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-  }) = _StandaloneProgramSummaryModel;
-
-  factory StandaloneProgramSummaryModel.fromJson(Map<String, dynamic> json) =>
-      _$StandaloneProgramSummaryModelFromJson(json);
+  factory StandaloneProgram.fromJson(Map<String, dynamic> json) =>
+      _$StandaloneProgramFromJson(json);
 }
 
-/// Full program detail with nested routine/exercise tree.
-///
-/// Returned by `GET /api/standalone/programs/:programId`.
 @freezed
-abstract class StandaloneProgramDetailModel
-    with _$StandaloneProgramDetailModel {
-  const factory StandaloneProgramDetailModel({
+abstract class StandaloneProgramDetail with _$StandaloneProgramDetail {
+  const factory StandaloneProgramDetail({
     required String id,
     required String name,
     required String description,
-    String? userId,
-    @Default([]) List<StandaloneProgramRoutineSlotModel> routines,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-  }) = _StandaloneProgramDetailModel;
+    @JsonKey(name: 'is_active') @Default(false) bool isActive,
+    @Default([]) List<StandaloneProgramRoutine> routines,
+    @JsonKey(name: 'created_at') DateTime? createdAt,
+  }) = _StandaloneProgramDetail;
 
-  factory StandaloneProgramDetailModel.fromJson(Map<String, dynamic> json) =>
-      _$StandaloneProgramDetailModelFromJson(json);
+  factory StandaloneProgramDetail.fromJson(Map<String, dynamic> json) =>
+      _$StandaloneProgramDetailFromJson(
+        _normalizeStandaloneProgramDetailJson(json),
+      );
 }
 
-/// Extension for program detail helpers.
-extension StandaloneProgramDetailModelX on StandaloneProgramDetailModel {
-  /// Total number of day-slots in this program.
-  int get totalDays => routines.length;
-}
-
-// ──────────────────────────────────────────────────────────
-// ProgramRoutine Junction
-// ──────────────────────────────────────────────────────────
-
-/// A day-slot linking a [RoutineModel] to a program on a specific day.
-///
-/// Returned inside [StandaloneProgramDetailModel.routines].
 @freezed
-abstract class StandaloneProgramRoutineSlotModel
-    with _$StandaloneProgramRoutineSlotModel {
-  const factory StandaloneProgramRoutineSlotModel({
+abstract class StandaloneProgramRoutine with _$StandaloneProgramRoutine {
+  const factory StandaloneProgramRoutine({
     required String id,
-    required DayOfWeek dayOfWeek,
-    @RoutineModelConverter() required RoutineModel routine,
-  }) = _StandaloneProgramRoutineSlotModel;
+    @JsonKey(name: 'routine_id') required String routineId,
+    required String routineName,
+    @Default('') String routineDescription,
+    @JsonKey(name: 'order_in_program') required int orderInProgram,
+    @Default([]) List<StandaloneRoutineExercise> exercises,
+  }) = _StandaloneProgramRoutine;
 
-  factory StandaloneProgramRoutineSlotModel.fromJson(
-    Map<String, dynamic> json,
-  ) => _$StandaloneProgramRoutineSlotModelFromJson(json);
+  factory StandaloneProgramRoutine.fromJson(Map<String, dynamic> json) =>
+      _$StandaloneProgramRoutineFromJson(
+        _normalizeStandaloneProgramRoutineJson(json),
+      );
 }
 
-/// Raw ProgramRoutine record returned by assign/update operations.
 @freezed
-abstract class StandaloneProgramRoutineModel
-    with _$StandaloneProgramRoutineModel {
-  const factory StandaloneProgramRoutineModel({
+abstract class StandaloneRoutineExercise with _$StandaloneRoutineExercise {
+  const factory StandaloneRoutineExercise({
     required String id,
-    required String programId,
-    required String routineId,
-    required DayOfWeek dayOfWeek,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-  }) = _StandaloneProgramRoutineModel;
+    @JsonKey(name: 'exercise_id') required String exerciseId,
+    required String exerciseName,
+    required int sets,
+    @JsonKey(name: 'reps_min') required int repsMin,
+    @JsonKey(name: 'reps_max') required int repsMax,
+    @JsonKey(name: 'rest_seconds') required int restSeconds,
+    @JsonKey(name: 'order_in_routine') required int orderInRoutine,
+    double? lastWeight,
+    int? lastReps,
+  }) = _StandaloneRoutineExercise;
 
-  factory StandaloneProgramRoutineModel.fromJson(Map<String, dynamic> json) =>
-      _$StandaloneProgramRoutineModelFromJson(json);
+  factory StandaloneRoutineExercise.fromJson(Map<String, dynamic> json) =>
+      _$StandaloneRoutineExerciseFromJson(
+        _normalizeStandaloneRoutineExerciseJson(json),
+      );
 }
 
-// ──────────────────────────────────────────────────────────
-// Self-Assignment / Active Program
-// ──────────────────────────────────────────────────────────
-
-/// Assigned (active/inactive) program for the user.
-///
-/// Returned by `POST /activate`, `POST /deactivate`, `GET /active`.
-@freezed
-abstract class StandaloneAssignedProgramModel
-    with _$StandaloneAssignedProgramModel {
-  const factory StandaloneAssignedProgramModel({
-    required String id,
-    required String userId,
-    required String programId,
-    required DateTime startDate,
-    DateTime? endDate,
-    @Default(true) bool isActive,
-
-    /// Minimal program info (name/description) nested.
-    StandaloneAssignmentProgramInfo? program,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-  }) = _StandaloneAssignedProgramModel;
-
-  factory StandaloneAssignedProgramModel.fromJson(Map<String, dynamic> json) =>
-      _$StandaloneAssignedProgramModelFromJson(json);
-}
-
-/// Minimal program info inside an assignment response.
-@freezed
-abstract class StandaloneAssignmentProgramInfo
-    with _$StandaloneAssignmentProgramInfo {
-  const factory StandaloneAssignmentProgramInfo({
-    required String id,
-    required String name,
-    String? description,
-    int? routineCount,
-  }) = _StandaloneAssignmentProgramInfo;
-
-  factory StandaloneAssignmentProgramInfo.fromJson(Map<String, dynamic> json) =>
-      _$StandaloneAssignmentProgramInfoFromJson(json);
-}
-
-// ──────────────────────────────────────────────────────────
-// Paginated List Response
-// ──────────────────────────────────────────────────────────
-
-/// Paginated response for standalone program list.
 @freezed
 abstract class StandaloneProgramListResponse
     with _$StandaloneProgramListResponse {
   const factory StandaloneProgramListResponse({
-    required List<StandaloneProgramSummaryModel> programs,
+    required List<StandaloneProgram> programs,
     required int total,
     required int limit,
     required int offset,

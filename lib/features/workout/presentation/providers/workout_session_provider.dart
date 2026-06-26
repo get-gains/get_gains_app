@@ -4,9 +4,12 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../core/utils/app_error.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../../providers/auth_state_provider.dart';
-import '../../../../services/sync/workout_sync_service.dart';
+import '../../../../services/outbox/outbox_service.dart';
+import '../../../client_pose/data/client_pose_repository.dart';
+import '../../../gains_coins/data/coins_repository.dart';
 import '../../data/models/models.dart';
 import '../../data/workout_repository.dart';
+import 'calendar_provider.dart';
 
 part 'workout_session_provider.g.dart';
 
@@ -192,13 +195,19 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
     await _repository.syncPrograms();
     if (!ref.mounted) return;
 
+    // Pre-cache reference forms for all exercises across all programs
+    // so pose analysis works offline once the user starts a workout.
+    _preCacheForms(ref);
+
     // Check for an existing active session for the same routine first.
     // This prevents creating orphan sessions when the user leaves and
     // returns to the same workout.
     final activeResult = await _repository.getActiveSession(_userId!);
     if (!ref.mounted) return;
     final activeSession = activeResult.valueOrNull;
-    if (activeSession != null && activeSession.routineId == routineModelId) {
+    if (activeSession != null &&
+        (activeSession.assignedProgramRoutineId == routineModelId ||
+            activeSession.routineId == routineModelId)) {
       // Resume the existing session — all logged sets are already in the
       // model's performedSets (loaded from Drift by getActiveSession).
       final resolvedRoutine =
@@ -388,16 +397,8 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
 
     state = const WorkoutSessionLoading();
 
-    final localId = await _repository.resolveLocalWorkoutSessionId(
-      currentState.session.id,
-    );
-    if (localId == null) {
-      state = currentState;
-      return;
-    }
-
     final result = await _repository.completeWorkoutSession(
-      sessionId: localId,
+      sessionId: currentState.session.id,
       notes: notes,
     );
 
@@ -405,21 +406,23 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
 
     result.when(
       success: (session) async {
-        // Drain pending sync so the server has all sets and the coin reward
+        // Drain outbox so the server has all sets and the coin reward
         // is reflected when the completion screen reads the balance.
         try {
           await ref
-              .read(workoutSyncServiceProvider)
-              .syncAll()
+              .read(outboxServiceProvider)
+              .drain()
               .timeout(const Duration(seconds: 6));
+          // Refresh coin balance after outbox drain
+          ref.read(coinsRepositoryProvider).syncBalance();
         } catch (_) {
-          // Offline — coins land on next sync cycle.
+          // Best-effort — user can still see local data
         }
         if (!ref.mounted) return;
         state = WorkoutSessionCompleted(session, routine: currentState.routine);
+        ref.invalidate(monthlyWorkoutDaysProvider);
       },
       failure: (error) {
-        // Restore previous state on error
         state = currentState;
       },
     );
@@ -524,6 +527,25 @@ class WorkoutSessionNotifier extends _$WorkoutSessionNotifier {
 
     // All exercises completed
     return routine.exercises.length;
+  }
+
+  /// Pre-cache reference pose forms for all exercises across the user's
+  /// assigned programs so "Analyze Form" works offline during a workout.
+  ///
+  /// Fire-and-forget — never blocks the session start flow.
+  void _preCacheForms(Ref ref) {
+    final poseRepo = ref.read(clientPoseRepositoryProvider);
+    _repository.getPrograms().then((result) {
+      final programs = result.valueOrNull;
+      if (programs == null) return;
+      for (final p in programs) {
+        for (final r in p.routines) {
+          for (final e in r.exercises) {
+            poseRepo.preCacheExerciseForms([e.exerciseId]);
+          }
+        }
+      }
+    });
   }
 }
 

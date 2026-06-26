@@ -3,19 +3,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_text_styles.dart';
+import '../../../../providers/auth_state_provider.dart';
 import '../../../../providers/router_provider.dart';
-import '../../../../widgets/widgets.dart';
+import '../../../../widgets/app_badge.dart';
+import '../../../../widgets/app_button.dart';
+import '../../../../widgets/app_card.dart';
+import '../../../../widgets/app_empty_state.dart';
+import '../../../../widgets/app_toast.dart';
+import '../../data/helpers/model_conversion.dart';
 import '../../data/models/models.dart';
+import '../../data/standalone_workout_repository.dart';
 import '../providers/standalone_program_provider.dart';
-import 'standalone_assign_routine_sheet.dart';
 
-/// Standalone Program Detail Screen
-///
-/// Displays a single program's routine day-slots in a sorted list.
-/// Supports assign routine, remove routine, activate/deactivate,
-/// pull-to-refresh, and navigation to edit.
 class StandaloneProgramDetailScreen extends ConsumerStatefulWidget {
-  const StandaloneProgramDetailScreen({super.key, required this.programId});
+  const StandaloneProgramDetailScreen({
+    super.key,
+    required this.programId,
+  });
 
   final String programId;
 
@@ -27,525 +32,675 @@ class StandaloneProgramDetailScreen extends ConsumerStatefulWidget {
 class _StandaloneProgramDetailScreenState
     extends ConsumerState<StandaloneProgramDetailScreen> {
   @override
-  void initState() {
-    super.initState();
-    Future.microtask(
-      () => ref
-          .read(standaloneProgramDetailProvider(widget.programId).notifier)
-          .load(),
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final state = ref.watch(standaloneProgramDetailProvider(widget.programId));
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final programAsync = ref.watch(
+      standaloneProgramDetailProvider(widget.programId),
+    );
 
     return Scaffold(
+      backgroundColor:
+          isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
       appBar: AppBar(
-        title: _buildTitle(state),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
-        ),
+        title: const Text('Program'),
         actions: [
-          if (state is StandaloneProgramDetailLoaded)
-            IconButton(
-              icon: const Icon(Icons.edit_outlined),
-              tooltip: 'Edit Program',
-              onPressed: () => context.push(
-                AppRoutes.standaloneEditProgram.replaceFirst(
-                  ':id',
-                  widget.programId,
-                ),
-              ),
+          IconButton(
+            icon: const Icon(Icons.edit),
+            onPressed: () => context.push(
+              '${AppRoutes.standaloneProgramBuilder}?programId=${widget.programId}',
             ),
+            tooltip: 'Edit Program',
+          ),
         ],
       ),
-      body: _buildBody(state, isDark),
-      floatingActionButton: state is StandaloneProgramDetailLoaded
-          ? FloatingActionButton.extended(
-              onPressed: () => _showAssignRoutineSheet(state.program),
-              backgroundColor: isDark
-                  ? AppColors.primaryDark
-                  : AppColors.primaryLight,
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.add),
-              label: const Text('Add Routine'),
-            )
-          : null,
-    );
-  }
-
-  Widget _buildTitle(StandaloneProgramDetailState state) {
-    if (state is StandaloneProgramDetailLoaded) {
-      return Text(state.program.name);
-    }
-    return const Text('Program');
-  }
-
-  Widget _buildBody(StandaloneProgramDetailState state, bool isDark) {
-    return switch (state) {
-      StandaloneProgramDetailInitial() || StandaloneProgramDetailLoading() =>
-        const Center(child: CircularProgressIndicator()),
-      StandaloneProgramDetailError(:final error) => Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 48,
-              color: isDark ? AppColors.error : AppColors.errorLight,
-            ),
-            const SizedBox(height: 12),
-            Text(error.message, textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            AppButton(
-              label: 'Retry',
-              onPressed: () => ref
-                  .read(
-                    standaloneProgramDetailProvider(widget.programId).notifier,
-                  )
-                  .load(),
-            ),
-          ],
+      body: programAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) => AppEmptyState(
+          icon: Icons.error_outline,
+          title: 'Error',
+          description: error.toString(),
+          actionLabel: 'Retry',
+          onAction: () =>
+              ref.invalidate(standaloneProgramDetailProvider(widget.programId)),
         ),
-      ),
-      StandaloneProgramDetailLoaded(:final program) => _buildDetail(
-        program,
-        isDark,
-      ),
-    };
-  }
+        data: (program) {
+          final routines = program.routines;
 
-  Widget _buildDetail(StandaloneProgramDetailModel program, bool isDark) {
-    final theme = Theme.of(context);
-    final routinesByDay = {
-      for (final slot in program.routines) slot.dayOfWeek: slot,
-    };
-
-    return RefreshIndicator(
-      onRefresh: () => ref
-          .read(standaloneProgramDetailProvider(widget.programId).notifier)
-          .load(),
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-        children: [
-          // Program description
-          if (program.description.isNotEmpty) ...[
-            Text(
-              program.description,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: isDark
-                    ? AppColors.mutedForegroundDark
-                    : AppColors.mutedForegroundLight,
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-
-          // Stats row
-          Row(
+          return ListView(
+            padding: const EdgeInsets.all(16),
             children: [
-              AppBadge(
-                label: '${DayOfWeek.values.length} days/week',
-                variant: AppBadgeVariant.primary,
-              ),
-              const SizedBox(width: 8),
-              AppBadge(
-                label: '${program.routines.length} assigned',
-                variant: AppBadgeVariant.info,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Activate / Deactivate button
-          _ActivateButton(programId: widget.programId, isDark: isDark),
-          const SizedBox(height: 20),
-
-          // Day-slot list
-          ...DayOfWeek.values.map((day) {
-            final slot = routinesByDay[day];
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: slot != null
-                  ? _DaySlotCard(
-                      slot: slot,
-                      isDark: isDark,
-                      programId: widget.programId,
-                      onRemove: () => _confirmRemoveRoutine(slot),
-                    )
-                  : _RestDayCard(
-                      day: day,
-                      isDark: isDark,
-                      onAssign: () =>
-                          _showAssignRoutineSheet(program, preferredDay: day),
+              // Program header
+              AppCard.elevated(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      program.name,
+                      style:
+                          Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                fontFamily: AppTextStyles.fontFamilySans,
+                                fontWeight: FontWeight.bold,
+                              ),
                     ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showAssignRoutineSheet(
-    StandaloneProgramDetailModel program, {
-    DayOfWeek? preferredDay,
-  }) async {
-    final result = await showStandaloneAssignRoutineSheet(
-      context: context,
-      programId: widget.programId,
-      assignedDays: program.routines.map((r) => r.dayOfWeek).toList(),
-      initialDay: preferredDay,
-    );
-
-    if (result == true && mounted) {
-      ref
-          .read(standaloneProgramDetailProvider(widget.programId).notifier)
-          .load();
-      // Also refresh the programs list to update routine counts
-      ref.read(standaloneProgramsProvider.notifier).loadPrograms();
-    }
-  }
-
-  Future<void> _confirmRemoveRoutine(
-    StandaloneProgramRoutineSlotModel slot,
-  ) async {
-    final confirmed = await showAppConfirmSheet(
-      context: context,
-      title: 'Remove Routine',
-      message:
-          'Remove "${slot.routine.name}" from ${slot.dayOfWeek.displayName}? The routine itself will not be deleted.',
-      confirmLabel: 'Remove',
-      isDestructive: true,
-      icon: Icons.remove_circle_outline,
-    );
-
-    if (confirmed == true && mounted) {
-      final success = await ref
-          .read(standaloneProgramDetailProvider(widget.programId).notifier)
-          .removeProgramRoutine(slot.id);
-      if (mounted) {
-        if (success) {
-          AppToast.success(context, 'Routine removed from program');
-          ref.read(standaloneProgramsProvider.notifier).loadPrograms();
-        } else {
-          AppToast.error(context, 'Failed to remove routine');
-        }
-      }
-    }
-  }
-}
-
-// ──────────────────────────────────────────────────────────
-// Activate / Deactivate Button
-// ──────────────────────────────────────────────────────────
-
-class _ActivateButton extends ConsumerStatefulWidget {
-  const _ActivateButton({required this.programId, required this.isDark});
-
-  final String programId;
-  final bool isDark;
-
-  @override
-  ConsumerState<_ActivateButton> createState() => _ActivateButtonState();
-}
-
-class _ActivateButtonState extends ConsumerState<_ActivateButton> {
-  bool _isLoading = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final activeProgram = ref.watch(standaloneActiveProgramProvider);
-
-    return activeProgram.when(
-      data: (assignment) {
-        final isActive =
-            assignment != null && assignment.programId == widget.programId;
-
-        if (isActive) {
-          return AppButton.outline(
-            label: 'Deactivate Program',
-            onPressed: _isLoading ? null : _deactivate,
-            isLoading: _isLoading,
-            isFullWidth: true,
-          );
-        } else {
-          return AppButton.primary(
-            label: 'Activate Program',
-            onPressed: _isLoading ? null : _activate,
-            isLoading: _isLoading,
-            isFullWidth: true,
-          );
-        }
-      },
-      loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
-    );
-  }
-
-  Future<void> _activate() async {
-    setState(() => _isLoading = true);
-    try {
-      final success = await ref
-          .read(standaloneProgramDetailProvider(widget.programId).notifier)
-          .activateProgram();
-      if (mounted) {
-        if (success) {
-          AppToast.success(context, 'Program activated');
-          ref.invalidate(standaloneActiveProgramProvider);
-        } else {
-          AppToast.error(context, 'Failed to activate program');
-        }
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _deactivate() async {
-    final confirmed = await showAppConfirmSheet(
-      context: context,
-      title: 'Deactivate Program',
-      message:
-          'This will deactivate the program. Your session history will be preserved.',
-      confirmLabel: 'Deactivate',
-      isDestructive: true,
-      icon: Icons.pause_circle_outline,
-    );
-
-    if (confirmed != true) return;
-
-    setState(() => _isLoading = true);
-    try {
-      final success = await ref
-          .read(standaloneProgramDetailProvider(widget.programId).notifier)
-          .deactivateProgram();
-      if (mounted) {
-        if (success) {
-          AppToast.success(context, 'Program deactivated');
-          ref.invalidate(standaloneActiveProgramProvider);
-        } else {
-          AppToast.error(context, 'Failed to deactivate program');
-        }
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-}
-
-// ──────────────────────────────────────────────────────────
-// Day Slot Card
-// ──────────────────────────────────────────────────────────
-
-class _DaySlotCard extends StatelessWidget {
-  const _DaySlotCard({
-    required this.slot,
-    required this.isDark,
-    required this.programId,
-    required this.onRemove,
-  });
-
-  final StandaloneProgramRoutineSlotModel slot;
-  final bool isDark;
-  final String programId;
-  final VoidCallback onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final routine = slot.routine;
-
-    return AppCard.elevated(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Day header
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? AppColors.primaryDark.withValues(alpha: 0.2)
-                      : AppColors.primaryLight.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  slot.dayOfWeek.displayName,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: isDark
-                        ? AppColors.primaryDark
-                        : AppColors.primaryLight,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.remove_circle_outline, size: 20),
-                color: isDark ? AppColors.error : AppColors.errorLight,
-                tooltip: 'Remove from program',
-                onPressed: onRemove,
-                visualDensity: VisualDensity.compact,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // Routine name — tap to navigate to routine detail
-          InkWell(
-            onTap: () => context.push(
-              AppRoutes.standaloneRoutineDetail.replaceFirst(':id', routine.id),
-            ),
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    if (program.description.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        program.description,
+                        style:
+                            Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight,
+                                ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    Row(
                       children: [
-                        Text(routine.name, style: theme.textTheme.titleMedium),
-                        if (routine.description.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            routine.description,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: isDark
-                                  ? AppColors.mutedForegroundDark
-                                  : AppColors.mutedForegroundLight,
+                        AppBadge(
+                          label: '${routines.length} routines',
+                          variant: AppBadgeVariant.info,
+                        ),
+                        const SizedBox(width: 8),
+                        if (program.isActive)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.success.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            child: const Text(
+                              'Active',
+                              style: TextStyle(
+                                color: AppColors.success,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
-                        ],
                       ],
                     ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Routines header
+              Row(
+                children: [
+                  Text(
+                    'Routines',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontFamily: AppTextStyles.fontFamilySans,
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
-                  Icon(
-                    Icons.chevron_right,
-                    color: isDark
-                        ? AppColors.mutedForegroundDark
-                        : AppColors.mutedForegroundLight,
+                  const Spacer(),
+                  TextButton.icon(
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add Routine'),
+                    onPressed: () => _showAddRoutineDialog(program),
                   ),
                 ],
               ),
-            ),
-          ),
 
-          // Exercise summary (first 3 exercises)
-          if (routine.exercises.isNotEmpty) ...[
-            const Divider(height: 16),
-            ...routine.exercises
-                .take(3)
-                .map(
-                  (re) => Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.circle,
-                          size: 6,
-                          color: isDark
-                              ? AppColors.mutedForegroundDark
-                              : AppColors.mutedForegroundLight,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            re.exercise?.name ?? 'Exercise',
-                            style: theme.textTheme.bodySmall,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Text(
-                          '${re.sets}×${re.repsMin}-${re.repsMax}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: isDark
-                                ? AppColors.mutedForegroundDark
-                                : AppColors.mutedForegroundLight,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            if (routine.exercises.length > 3)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '+${routine.exercises.length - 3} more exercises',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: isDark
-                        ? AppColors.primaryDark
-                        : AppColors.primaryLight,
-                  ),
-                ),
-              ),
-          ],
+              const SizedBox(height: 8),
+
+              if (routines.isEmpty)
+                AppEmptyState(
+                  icon: Icons.fitness_center,
+                  title: 'No Routines',
+                  description:
+                      'Add routines to your program to get started.',
+                  actionLabel: 'Add Routine',
+                  onAction: () => _showAddRoutineDialog(program),
+                )
+              else
+                ...routines.asMap().entries.map((entry) {
+                  final routine = entry.value;
+                  return _RoutineBlock(
+                    routine: routine,
+                    isDark: isDark,
+                    programId: program.id,
+                    onPerform: () => _performWorkout(program, routine),
+                    onAddExercise: () =>
+                        _showAddExerciseDialog(program, routine.routineId),
+                    onDeleteRoutine: () =>
+                        _deleteRoutine(program, routine.id),
+                  );
+                }),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _performWorkout(
+    StandaloneProgramDetail program,
+    StandaloneProgramRoutine routine,
+  ) async {
+    final userId = ref.read(authStateProvider).userId;
+    if (userId == null || userId.isEmpty) {
+      AppToast.error(context, 'User not authenticated');
+      return;
+    }
+
+    final repo = ref.read(standaloneWorkoutRepositoryProvider);
+
+    final activeResult = await repo.resumeActiveSession();
+    activeResult.when(
+      success: (resumeData) {
+        if (resumeData != null && mounted) {
+          context.push(
+            AppRoutes.standaloneWorkout,
+            extra: <String, dynamic>{
+              'session': resumeData.session,
+              'exercises': resumeData.exercises,
+              'routineName': resumeData.routineName,
+            },
+          );
+          return;
+        }
+
+        _startNewSession(repo, userId, routine);
+      },
+      failure: (_) {
+        _startNewSession(repo, userId, routine);
+      },
+    );
+  }
+
+  Future<void> _startNewSession(
+    StandaloneWorkoutRepository repo,
+    String userId,
+    StandaloneProgramRoutine routine,
+  ) async {
+    final result = await repo.startWorkoutSession(
+      userId: userId,
+      programRoutineId: routine.id,
+    );
+
+    result.when(
+      success: (session) {
+        if (mounted) {
+          context.push(
+            AppRoutes.standaloneWorkout,
+            extra: <String, dynamic>{
+              'session': session,
+              'exercises': routine.exercises
+                  .map((e) => e.toRoutineExerciseModel())
+                  .toList(),
+              'routineName': routine.routineName,
+            },
+          );
+        }
+      },
+      failure: (error) {
+        if (mounted) {
+          AppToast.error(context, 'Failed to start workout: ${error.message}');
+        }
+      },
+    );
+  }
+
+  Future<void> _showAddRoutineDialog(StandaloneProgramDetail program) async {
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (ctx) => const _AddRoutineDialog(),
+    );
+
+    if (result != null && mounted) {
+      final repo = ref.read(standaloneWorkoutRepositoryProvider);
+      final createResult = await repo.createRoutine(
+        name: result['name']!,
+        description: result['description']!,
+      );
+      createResult.when(
+        success: (routineId) async {
+          final addResult = await repo.addProgramRoutine(
+            widget.programId,
+            AddProgramRoutineRequest(
+              routineId: routineId,
+              orderInProgram: program.routines.length + 1,
+            ),
+          );
+          addResult.when(
+            success: (_) {
+              ref.invalidate(
+                  standaloneProgramDetailProvider(widget.programId));
+              ref.invalidate(standaloneProgramListProvider);
+              AppToast.success(context, 'Routine added');
+            },
+            failure: (error) {
+              AppToast.error(
+                  context, 'Failed to add routine: ${error.message}');
+            },
+          );
+        },
+        failure: (error) {
+          AppToast.error(
+              context, 'Failed to create routine: ${error.message}');
+        },
+      );
+    }
+  }
+
+  Future<void> _showAddExerciseDialog(
+    StandaloneProgramDetail program,
+    String routineId,
+  ) async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => const _AddExerciseDialog(),
+    );
+
+    if (result != null && mounted) {
+      final repo = ref.read(standaloneWorkoutRepositoryProvider);
+      final routineExercises = program.routines
+          .firstWhere((r) => r.routineId == routineId)
+          .exercises;
+
+      final createExerciseResult = await repo.createExercise(
+        name: result['name'] as String,
+        description: result['name'] as String,
+      );
+      createExerciseResult.when(
+        success: (exerciseId) async {
+          final addResult = await repo.addRoutineExercise(
+            routineId,
+            AddRoutineExerciseRequest(
+              exerciseId: exerciseId,
+              sets: result['sets'] as int,
+              repsMin: result['repsMin'] as int,
+              repsMax: result['repsMax'] as int,
+              restSeconds: result['rest'] as int,
+              orderInRoutine: routineExercises.length + 1,
+            ),
+          );
+
+          addResult.when(
+            success: (_) {
+              ref.invalidate(
+                  standaloneProgramDetailProvider(widget.programId));
+              ref.invalidate(standaloneProgramListProvider);
+              AppToast.success(context, 'Exercise added');
+            },
+            failure: (error) {
+              AppToast.error(
+                  context, 'Failed to add exercise: ${error.message}');
+            },
+          );
+        },
+        failure: (error) {
+          AppToast.error(
+              context, 'Failed to create exercise: ${error.message}');
+        },
+      );
+    }
+  }
+
+  Future<void> _deleteRoutine(
+    StandaloneProgramDetail program,
+    String routineId,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Routine?'),
+        content:
+            const Text('This will also remove all exercises in this routine.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Delete'),
+          ),
         ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final repo = ref.read(standaloneWorkoutRepositoryProvider);
+      final result = await repo.deleteProgramRoutine(program.id, routineId);
+      result.when(
+        success: (_) {
+          ref.invalidate(standaloneProgramDetailProvider(widget.programId));
+          ref.invalidate(standaloneProgramListProvider);
+          AppToast.success(context, 'Routine deleted');
+        },
+        failure: (error) {
+          AppToast.error(context, 'Failed to delete routine: ${error.message}');
+        },
+      );
+    }
+  }
+}
+
+class _RoutineBlock extends StatelessWidget {
+  const _RoutineBlock({
+    required this.routine,
+    required this.isDark,
+    required this.programId,
+    required this.onPerform,
+    required this.onAddExercise,
+    required this.onDeleteRoutine,
+  });
+
+  final StandaloneProgramRoutine routine;
+  final bool isDark;
+  final String programId;
+  final VoidCallback onPerform;
+  final VoidCallback onAddExercise;
+  final VoidCallback onDeleteRoutine;
+
+  @override
+  Widget build(BuildContext context) {
+    final primaryColor =
+        isDark ? AppColors.primaryDark : AppColors.primaryLight;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: AppCard.elevated(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: primaryColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.fitness_center,
+                    color: primaryColor,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        routine.routineName,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(
+                              fontFamily: AppTextStyles.fontFamilySans,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      if (routine.routineDescription.isNotEmpty)
+                        Text(
+                          routine.routineDescription,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : AppColors.textSecondaryLight,
+                              ),
+                        ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline,
+                      color: AppColors.error, size: 20),
+                  onPressed: onDeleteRoutine,
+                  tooltip: 'Delete Routine',
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // Exercise list
+            if (routine.exercises.isNotEmpty)
+              ...routine.exercises.map((e) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6, left: 44),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          e.exerciseName,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                      Text(
+                        '${e.sets}x${e.repsMin}-${e.repsMax}',
+                        style:
+                            Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: isDark
+                                      ? AppColors.mutedForegroundDark
+                                      : AppColors.mutedForegroundLight,
+                                ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: AppButton.outline(
+                    label: 'Add Exercise',
+                    icon: Icons.add,
+                    onPressed: onAddExercise,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: AppButton.primary(
+                    label: 'Perform Workout',
+                    icon: Icons.play_arrow,
+                    onPressed: onPerform,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _RestDayCard extends StatelessWidget {
-  const _RestDayCard({
-    required this.day,
-    required this.isDark,
-    required this.onAssign,
-  });
+class _AddRoutineDialog extends StatefulWidget {
+  const _AddRoutineDialog();
 
-  final DayOfWeek day;
-  final bool isDark;
-  final VoidCallback onAssign;
+  @override
+  State<_AddRoutineDialog> createState() => _AddRoutineDialogState();
+}
+
+class _AddRoutineDialogState extends State<_AddRoutineDialog> {
+  final _nameController = TextEditingController();
+  final _descController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    final desc = _descController.text.trim();
+    if (name.isNotEmpty) {
+      Navigator.pop(context, {'name': name, 'description': desc});
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return AppCard.elevated(
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.surface1Dark : AppColors.mutedLight,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              day.displayName,
-              style: theme.textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w600,
+    return AlertDialog(
+      title: const Text('New Routine'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _nameController,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Routine Name',
+                hintText: 'e.g. Push Day, Leg Day',
+                border: OutlineInputBorder(),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Rest Day',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: isDark
-                    ? AppColors.mutedForegroundDark
-                    : AppColors.mutedForegroundLight,
+            const SizedBox(height: 12),
+            TextField(
+              controller: _descController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Description (optional)',
+                border: OutlineInputBorder(),
               ),
             ),
-          ),
-          TextButton.icon(
-            onPressed: onAssign,
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Assign'),
-          ),
-        ],
+          ],
+        ),
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Create'),
+        ),
+      ],
+    );
+  }
+}
+
+class _AddExerciseDialog extends StatefulWidget {
+  const _AddExerciseDialog();
+
+  @override
+  State<_AddExerciseDialog> createState() => _AddExerciseDialogState();
+}
+
+class _AddExerciseDialogState extends State<_AddExerciseDialog> {
+  final _nameController = TextEditingController();
+  final _setsController = TextEditingController(text: '3');
+  final _repsController = TextEditingController(text: '8-12');
+  final _restController = TextEditingController(text: '60');
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _setsController.dispose();
+    _repsController.dispose();
+    _restController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    final sets = int.tryParse(_setsController.text) ?? 3;
+
+    final repsParts = _repsController.text.trim().split('-');
+    final repsMin = int.tryParse(repsParts[0]) ?? 8;
+    final repsMax = repsParts.length > 1
+        ? (int.tryParse(repsParts[1]) ?? repsMin)
+        : repsMin;
+
+    final rest = int.tryParse(_restController.text) ?? 60;
+
+    if (name.isNotEmpty) {
+      Navigator.pop(context, {
+        'name': name,
+        'sets': sets,
+        'repsMin': repsMin,
+        'repsMax': repsMax,
+        'rest': rest,
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add Exercise'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _nameController,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Exercise Name',
+                hintText: 'e.g. Bench Press',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _setsController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Sets',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _repsController,
+                    decoration: const InputDecoration(
+                      labelText: 'Reps',
+                      hintText: '8-12',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _restController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Rest (seconds)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Add'),
+        ),
+      ],
     );
   }
 }

@@ -7,12 +7,11 @@ import '../../../core/utils/app_error.dart';
 import '../../../core/utils/logger.dart';
 import '../../../core/utils/result.dart';
 import '../../../services/api/api_client.dart';
-import '../../../services/database/app_database.dart';
+import '../../../services/cache/cache_service.dart';
 import 'models/leaderboard_entry_model.dart';
 
 part 'leaderboard_repository.g.dart';
 
-/// Coach info for the leaderboard coach picker.
 class LeaderboardCoach {
   const LeaderboardCoach({
     required this.coachId,
@@ -39,7 +38,6 @@ class LeaderboardCoach {
   };
 }
 
-/// Class leaderboard response from the server.
 class ClassLeaderboardResponse {
   const ClassLeaderboardResponse({
     required this.coachId,
@@ -82,37 +80,24 @@ class ClassLeaderboardResponse {
   };
 }
 
-/// Leaderboard Repository
-///
-/// Handles class leaderboard and coach list data operations.
-/// Implements offline-first patterns:
-/// - CachedApiResponses (Drift) for offline leaderboard/coaches cache
-/// - API client for server sync
 class LeaderboardRepository {
-  LeaderboardRepository({
-    required AppDatabase database,
-    required ApiClient apiClient,
-  }) : _db = database,
-       _apiClient = apiClient;
+  LeaderboardRepository({required ApiClient apiClient, required CacheService cache})
+    : _apiClient = apiClient,
+      _cache = cache;
 
-  final AppDatabase _db;
   final ApiClient _apiClient;
+  final CacheService _cache;
 
-  // Cache keys
   static const _myCoachesCacheKey = 'leaderboard_my_coaches';
   static String _leaderboardCacheKey(String coachId) =>
       'leaderboard_class_$coachId';
 
   // ============== Coach List Operations ==============
 
-  /// Get subscribed coaches from local cache
   Future<Result<List<LeaderboardCoach>, AppError>> getCachedCoaches() async {
     try {
-      AppLogger.debug(
-        'Fetching cached coaches for leaderboard',
-        tag: 'LeaderboardRepo',
-      );
-      final cached = await _db.getCachedApiResponse(_myCoachesCacheKey);
+      AppLogger.debug('Fetching cached coaches for leaderboard', tag: 'LeaderboardRepo');
+      final cached = await _cache.getRaw(_myCoachesCacheKey);
       if (cached == null) {
         return const Success([]);
       }
@@ -124,18 +109,11 @@ class LeaderboardRepository {
 
       return Success(coaches);
     } catch (e) {
-      AppLogger.error(
-        'Failed to fetch cached coaches',
-        tag: 'LeaderboardRepo',
-        error: e,
-      );
-      return Failure(
-        DatabaseError(message: 'Failed to load cached coaches: $e'),
-      );
+      AppLogger.error('Failed to fetch cached coaches', tag: 'LeaderboardRepo', error: e);
+      return Failure(DatabaseError(message: 'Failed to load cached coaches: $e'));
     }
   }
 
-  /// Fetch coaches from server and update local cache
   Future<Result<List<LeaderboardCoach>, AppError>> syncCoaches() async {
     AppLogger.debug('Syncing coaches from server', tag: 'LeaderboardRepo');
 
@@ -150,25 +128,16 @@ class LeaderboardRepository {
               .map((c) => LeaderboardCoach.fromJson(c as Map<String, dynamic>))
               .toList();
 
-          // Cache the response
-          await _db.upsertCachedApiResponse(
-            key: _myCoachesCacheKey,
-            responseJson: jsonEncode({
-              'coaches': coaches.map((c) => c.toJson()).toList(),
-            }),
+          await _cache.put(
+            _myCoachesCacheKey,
+            jsonEncode({'coaches': coaches.map((c) => c.toJson()).toList()}),
+            version: DateTime.now().toIso8601String(),
           );
 
-          AppLogger.info(
-            'Synced ${coaches.length} coaches for leaderboard',
-            tag: 'LeaderboardRepo',
-          );
+          AppLogger.info('Synced ${coaches.length} coaches for leaderboard', tag: 'LeaderboardRepo');
           return Success(coaches);
         } catch (e) {
-          AppLogger.error(
-            'Failed to parse/cache coaches',
-            tag: 'LeaderboardRepo',
-            error: e,
-          );
+          AppLogger.error('Failed to parse/cache coaches', tag: 'LeaderboardRepo', error: e);
           return Failure(DatabaseError(message: 'Failed to parse coaches: $e'));
         }
       },
@@ -178,18 +147,12 @@ class LeaderboardRepository {
 
   // ============== Leaderboard Operations ==============
 
-  /// Get class leaderboard from local cache
   Future<Result<ClassLeaderboardResponse?, AppError>> getCachedLeaderboard(
     String coachId,
   ) async {
     try {
-      AppLogger.debug(
-        'Fetching cached leaderboard for coach $coachId',
-        tag: 'LeaderboardRepo',
-      );
-      final cached = await _db.getCachedApiResponse(
-        _leaderboardCacheKey(coachId),
-      );
+      AppLogger.debug('Fetching cached leaderboard for coach $coachId', tag: 'LeaderboardRepo');
+      final cached = await _cache.getRaw(_leaderboardCacheKey(coachId));
       if (cached == null) {
         return const Success(null);
       }
@@ -197,26 +160,16 @@ class LeaderboardRepository {
       final data = jsonDecode(cached) as Map<String, dynamic>;
       return Success(ClassLeaderboardResponse.fromJson(data));
     } catch (e) {
-      AppLogger.error(
-        'Failed to fetch cached leaderboard',
-        tag: 'LeaderboardRepo',
-        error: e,
-      );
-      return Failure(
-        DatabaseError(message: 'Failed to load cached leaderboard: $e'),
-      );
+      AppLogger.error('Failed to fetch cached leaderboard', tag: 'LeaderboardRepo', error: e);
+      return Failure(DatabaseError(message: 'Failed to load cached leaderboard: $e'));
     }
   }
 
-  /// Fetch class leaderboard from server and update local cache
   Future<Result<ClassLeaderboardResponse, AppError>> syncLeaderboard(
     String coachId, {
     int limit = 50,
   }) async {
-    AppLogger.debug(
-      'Syncing leaderboard for coach $coachId',
-      tag: 'LeaderboardRepo',
-    );
+    AppLogger.debug('Syncing leaderboard for coach $coachId', tag: 'LeaderboardRepo');
 
     final result = await _apiClient.get<Map<String, dynamic>>(
       '${ApiConstants.leaderboardClass}/$coachId',
@@ -228,10 +181,10 @@ class LeaderboardRepository {
         try {
           final leaderboard = ClassLeaderboardResponse.fromJson(data);
 
-          // Cache the response
-          await _db.upsertCachedApiResponse(
-            key: _leaderboardCacheKey(coachId),
-            responseJson: jsonEncode(leaderboard.toJson()),
+          await _cache.put(
+            _leaderboardCacheKey(coachId),
+            jsonEncode(leaderboard.toJson()),
+            version: DateTime.now().toIso8601String(),
           );
 
           AppLogger.info(
@@ -240,14 +193,8 @@ class LeaderboardRepository {
           );
           return Success(leaderboard);
         } catch (e) {
-          AppLogger.error(
-            'Failed to parse/cache leaderboard',
-            tag: 'LeaderboardRepo',
-            error: e,
-          );
-          return Failure(
-            DatabaseError(message: 'Failed to parse leaderboard: $e'),
-          );
+          AppLogger.error('Failed to parse/cache leaderboard', tag: 'LeaderboardRepo', error: e);
+          return Failure(DatabaseError(message: 'Failed to parse leaderboard: $e'));
         }
       },
       failure: (error) => Failure(error),
@@ -255,11 +202,10 @@ class LeaderboardRepository {
   }
 }
 
-/// Provider for LeaderboardRepository
 @Riverpod(keepAlive: true)
 LeaderboardRepository leaderboardRepository(Ref ref) {
   return LeaderboardRepository(
-    database: ref.watch(appDatabaseProvider),
     apiClient: ref.watch(apiClientProvider),
+    cache: ref.watch(cacheServiceProvider),
   );
 }

@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../auth/data/models/user_model.dart';
@@ -78,14 +79,10 @@ class ShareStatsCard extends StatelessWidget {
   Widget _buildLogo() {
     return Row(
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.asset(
-            'assets/images/logo.jpg',
-            width: 64,
-            height: 64,
-            fit: BoxFit.cover,
-          ),
+        SvgPicture.asset(
+          'assets/images/logo.svg',
+          width: 64,
+          height: 64,
         ),
         const SizedBox(width: 16),
         Text(

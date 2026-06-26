@@ -391,7 +391,7 @@ class _HistoryEntryCardState extends State<_HistoryEntryCard> {
               _headerCell(theme, 'Set', flex: 1),
               _headerCell(theme, 'Reps', flex: 2),
               _headerCell(theme, 'Weight', flex: 2),
-              _headerCell(theme, 'RPE', flex: 1),
+              _headerCell(theme, 'Form', flex: 1),
             ],
           ),
           const SizedBox(height: 4),
@@ -411,7 +411,7 @@ class _HistoryEntryCardState extends State<_HistoryEntryCard> {
                   ),
                   _dataCell(
                     theme,
-                    set.rpe != null ? '${set.rpe}' : '—',
+                    set.overallScore != null ? '${set.overallScore}%' : '—',
                     flex: 1,
                   ),
                 ],

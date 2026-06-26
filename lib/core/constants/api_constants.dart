@@ -31,11 +31,12 @@ class ApiConstants {
   static const String verifyOtp = '/auth/verify-otp';
   static const String resetPassword = '/auth/reset-password';
   static const String checkEmailVerified = '/auth/check-email-verified';
+  static const String sendVerificationCode = '/auth/send-verification-code';
+  static const String verifyEmailCode = '/auth/verify-email-code';
 
   // User Endpoints
   static const String userProfile = '/users/profile';
   static const String updateProfile = '/users/profile';
-  static const String userPrograms = '/user/programs';
 
   // Profile Endpoints (fitness profile / onboarding)
   static const String profile = '/profile';
@@ -65,6 +66,10 @@ class ApiConstants {
   static const String coachClass = '/coach/class';
   static const String coachSettings = '/coach/settings';
 
+  // Coach Onboarding Endpoints
+  static const String coachVerifyInvite = '/coach/verify-invite';
+  static const String coachProfile = '/coach/profile';
+
   // Coach Client Progress Endpoints
   // Sessions:         GET /coach/clients/:userId/sessions
   // Session detail:   GET /coach/clients/:userId/sessions/:sessionId
@@ -78,17 +83,22 @@ class ApiConstants {
   static const String standaloneExercises = '/standalone/exercises';
   static const String standaloneRoutines = '/standalone/routines';
   static const String standalonePrograms = '/standalone/programs';
+  static const String standaloneProgramsBuild = '/standalone/programs/build';
   static const String standaloneActiveProgram = '/standalone/programs/active';
-  static const String standaloneToday = '/standalone/today';
   static const String standaloneSessions = '/standalone/sessions';
   static const String standaloneActiveSession = '/standalone/sessions/active';
-  static const String standaloneWeeklyStats = '/standalone/stats/weekly';
+  static const String standaloneStats = '/standalone/stats/summary';
 
   // Unified Stats Endpoints
   static const String unifiedWeeklyStats = '/stats/weekly';
+  static const String monthlyInsight = '/stats/monthly-insight';
 
-  // Unified Session History Endpoints
+  // Unified Session Endpoints
   static const String unifiedSessionHistory = '/sessions/history';
+  static const String sessionCalendar = '/sessions/calendar';
+
+  /// GET /sessions/:id — unified session detail (coach or standalone)
+  static String sessionDetail(String id) => '/sessions/$id';
 
   // Coach Discovery Endpoints (Client-Facing)
   static const String discoverCoaches = '/user/coaches';
@@ -100,6 +110,9 @@ class ApiConstants {
   /// GET /pose/forms/:formId/download-url
   static String poseFormDownloadUrl(String formId) =>
       '/pose/forms/$formId/download-url';
+
+  /// GET /pose/frames/download-url?key=<recorded_frames_key>
+  static const String poseFramesDownloadUrl = '/pose/frames/download-url';
 
   // Sync Endpoints
   static const String sync = '/sync';

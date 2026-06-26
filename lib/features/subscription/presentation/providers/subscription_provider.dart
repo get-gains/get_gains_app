@@ -199,6 +199,60 @@ class SubscriptionNotifier extends _$SubscriptionNotifier {
     }
   }
 
+  /// Purchase a specific Google Play subscription option by offer tag.
+  /// Finds the first monthly package that exposes the option and purchases it.
+  Future<void> purchaseDiscountedOption(String offerTag) async {
+    final currentState = state;
+    if (currentState is! SubscriptionLoaded) return;
+
+    final packages = currentState.currentOffering?.availablePackages ?? [];
+    final monthlyPackage = packages.firstWhere(
+      (p) =>
+          p.storeProduct.subscriptionPeriod?.toUpperCase().contains('M') ??
+          false,
+      orElse: () => packages.first,
+    );
+
+    final options = monthlyPackage.storeProduct.subscriptionOptions;
+    final option = options?.firstWhere(
+      (o) => o.tags.contains(offerTag),
+      orElse: () =>
+          options.firstWhere((o) => o.isBasePlan, orElse: () => options.first),
+    );
+
+    if (option == null) {
+      state = currentState.copyWith(
+        purchaseInProgress: false,
+        purchaseError: 'Discounted option not available',
+      );
+      return;
+    }
+
+    state = currentState.copyWith(
+      purchaseInProgress: true,
+      purchaseError: null,
+    );
+
+    try {
+      await _rcService.purchaseSubscriptionOption(option);
+      await _pollForPremium(currentState);
+    } on Exception catch (e) {
+      final errorMsg = RevenueCatErrorMapper.mapError(e);
+
+      if (RevenueCatErrorMapper.isUserCanceled(e)) {
+        AppLogger.info('Discounted purchase canceled by user', tag: 'SubProvider');
+        state = currentState.copyWith(purchaseInProgress: false);
+        return;
+      }
+
+      AppLogger.error('Discounted purchase error: $errorMsg', tag: 'SubProvider');
+      state = currentState.copyWith(
+        purchaseInProgress: false,
+        purchaseError: errorMsg,
+      );
+    }
+  }
+
   /// Restore purchases via RevenueCat, then poll backend.
   Future<void> restorePurchases() async {
     final currentState = state;

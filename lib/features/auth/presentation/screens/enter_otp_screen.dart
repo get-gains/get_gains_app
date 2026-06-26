@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +8,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/app_error.dart';
 import '../../../../providers/router_provider.dart';
+import '../../../../core/formatters/text_formatters.dart';
 import '../../../../widgets/widgets.dart';
 import '../providers/otp_provider.dart';
 
@@ -395,19 +396,6 @@ class _EnterOtpScreenState extends ConsumerState<EnterOtpScreen>
           color: isDark ? AppColors.foregroundDark : AppColors.foregroundLight,
         ),
       ),
-    );
-  }
-}
-
-class UpperCaseTextFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    return TextEditingValue(
-      text: newValue.text.toUpperCase(),
-      selection: newValue.selection,
     );
   }
 }
