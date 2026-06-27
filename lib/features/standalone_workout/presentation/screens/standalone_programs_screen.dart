@@ -18,6 +18,10 @@ class StandaloneProgramsScreen extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final programsAsync = ref.watch(standaloneProgramListProvider);
     final pagination = ref.watch(standaloneProgramPaginationProvider);
+    final hasPrograms = programsAsync.maybeWhen(
+      data: (response) => response.programs.isNotEmpty,
+      orElse: () => false,
+    );
 
     void loadMore() {
       ref.read(standaloneProgramPaginationProvider.notifier).loadMore();
@@ -40,11 +44,14 @@ class StandaloneProgramsScreen extends ConsumerWidget {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push(AppRoutes.standaloneProgramBuilder),
-        icon: const Icon(Icons.add),
-        label: const Text('New Program'),
-      ),
+      floatingActionButton: hasPrograms
+          ? FloatingActionButton.extended(
+              onPressed: () =>
+                  context.push(AppRoutes.standaloneProgramBuilder),
+              icon: const Icon(Icons.add),
+              label: const Text('New Program'),
+            )
+          : null,
       body: programsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => AppEmptyState(
@@ -279,3 +286,4 @@ class _ProgramListItem extends ConsumerWidget {
     );
   }
 }
+
