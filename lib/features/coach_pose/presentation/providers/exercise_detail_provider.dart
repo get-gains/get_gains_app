@@ -133,4 +133,28 @@ class ExerciseDetailNotifier extends _$ExerciseDetailNotifier {
   Future<void> refresh() async {
     await loadAll();
   }
+
+  /// Mark a form as the active one for client viewing.
+  Future<void> setActiveForm(String formId) async {
+    final repo = ref.read(coachPoseRepositoryProvider);
+    final result = await repo.setActiveForm(formId);
+
+    result.when(
+      success: (_) {
+        AppLogger.info(
+          'Form $formId set as active',
+          tag: 'ExerciseDetail',
+        );
+        // Deactivate all, then activate the selected one
+        state = state.copyWith(
+          forms: state.forms.map((f) {
+            return f.copyWith(isActive: f.id == formId);
+          }).toList(),
+        );
+      },
+      failure: (error) {
+        state = state.copyWith(errorMessage: error.message);
+      },
+    );
+  }
 }

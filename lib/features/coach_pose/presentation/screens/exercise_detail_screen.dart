@@ -344,6 +344,11 @@ class _FormsTab extends ConsumerWidget {
                     .deleteForm(form.id);
               }
             },
+            onSetActive: () {
+              ref
+                  .read(exerciseDetailProvider(exerciseId).notifier)
+                  .setActiveForm(form.id);
+            },
           );
         },
       ),
