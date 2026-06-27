@@ -7,6 +7,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../providers/router_provider.dart';
 import '../../../../widgets/widgets.dart';
 import '../../data/models/models.dart';
+import '../../data/standalone_workout_repository.dart';
 import '../providers/standalone_program_provider.dart';
 
 class StandaloneProgramsScreen extends ConsumerWidget {
@@ -27,7 +28,9 @@ class StandaloneProgramsScreen extends ConsumerWidget {
     }
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+      backgroundColor: isDark
+          ? AppColors.backgroundDark
+          : AppColors.backgroundLight,
       appBar: AppBar(
         title: Text(
           'My Programs',
@@ -117,10 +120,77 @@ class _ProgramListItem extends ConsumerWidget {
   final bool isDark;
   final VoidCallback onTap;
 
+  Future<void> _showOptions(BuildContext context, WidgetRef ref) async {
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Edit Program'),
+              onTap: () => Navigator.pop(ctx, 'edit'),
+            ),
+            ListTile(
+              leading: Icon(Icons.delete_outline, color: AppColors.error),
+              title: Text(
+                'Delete Program',
+                style: TextStyle(color: AppColors.error),
+              ),
+              onTap: () => Navigator.pop(ctx, 'delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!context.mounted || result == null) return;
+
+    if (result == 'edit') {
+      context.push(
+        '${AppRoutes.standaloneProgramBuilder}?programId=${program.id}',
+      );
+    } else if (result == 'delete') {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Delete Program?'),
+          content: const Text(
+            'This will permanently delete the program and all its routines.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true && context.mounted) {
+        final repo = ref.read(standaloneWorkoutRepositoryProvider);
+        final result = await repo.deleteProgram(program.id);
+        result.when(
+          success: (_) {
+            ref.invalidate(standaloneProgramListProvider);
+            AppToast.success(context, 'Program deleted');
+          },
+          failure: (error) {
+            AppToast.error(context, 'Failed to delete program');
+          },
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final primaryColor = isDark ? AppColors.primaryDark : AppColors.primaryLight;
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: AppCard.elevated(
@@ -134,9 +204,9 @@ class _ProgramListItem extends ConsumerWidget {
                   child: Text(
                     program.name,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontFamily: AppTextStyles.fontFamilySans,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      fontFamily: AppTextStyles.fontFamilySans,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 if (program.isActive)
@@ -159,6 +229,19 @@ class _ProgramListItem extends ConsumerWidget {
                       ),
                     ),
                   ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.edit, size: 20),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 36,
+                    minHeight: 36,
+                  ),
+                  color: isDark
+                      ? AppColors.mutedForegroundDark
+                      : AppColors.mutedForegroundLight,
+                  onPressed: () => _showOptions(context, ref),
+                ),
               ],
             ),
             if (program.description.isNotEmpty) ...[
@@ -168,10 +251,10 @@ class _ProgramListItem extends ConsumerWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
-                    ),
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                ),
               ),
             ],
             const SizedBox(height: 12),
