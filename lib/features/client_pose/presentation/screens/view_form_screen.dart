@@ -144,13 +144,14 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
                           ?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 16),
-                    ...forms.map((formData) {
-                      final form = formData as Map<String, dynamic>;
+                    ...(() {
+                      // Show only the active/latest form (server now returns one)
+                      if (forms.isEmpty) return [];
+                      final form = forms.first as Map<String, dynamic>;
                       final formId = form['id'] as String?;
                       final formsBlobs =
                           data['formsBlobs'] as Map<String, dynamic>? ?? {};
 
-                      // Try blob first, fall back to inline landmarkFrames
                       List<LandmarkFrame> landmarkFrames = [];
                       if (formId != null && formsBlobs.containsKey(formId)) {
                         final blobJson =
@@ -164,13 +165,13 @@ class _ViewFormScreenState extends ConsumerState<ViewFormScreen> {
                           form['landmarkFrames'] as List?,
                         );
                       }
-                      return _FormPlaybackCard(
+                      return [_FormPlaybackCard(
                         exerciseId: widget.exerciseId,
                         form: form,
                         landmarkFrames: landmarkFrames,
                         isDark: isDark,
-                      );
-                    }),
+                      )];
+                    })(),
                     const SizedBox(height: 32),
                   ],
                 ),

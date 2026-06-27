@@ -183,7 +183,7 @@ class OutboxService {
         if (operation == 'create') {
           return '$base/standalone/sessions/${payload['session_id'] ?? payload['sessionId']}/sets';
         }
-        if (operation == 'update') {
+        if (operation == 'update' || operation == 'delete') {
           return '$base/standalone/sessions/${payload['session_id'] ?? payload['sessionId']}/sets/${payload['id']}';
         }
         return '$base/standalone/sessions/${payload['session_id'] ?? payload['sessionId']}/sets';
@@ -201,7 +201,7 @@ class OutboxService {
         return '$base/standalone/routines';
 
       case 'standalone_program':
-        if (operation == 'update') {
+        if (operation == 'update' || operation == 'delete') {
           return '$base/standalone/programs/${payload['id']}';
         }
         if (operation == 'activate') {
@@ -213,9 +213,15 @@ class OutboxService {
         return '$base/standalone/programs';
 
       case 'standalone_program_routine':
+        if (operation == 'update' || operation == 'delete') {
+          return '$base/standalone/programs/${payload['program_id'] ?? payload['programId']}/routines/${payload['id']}';
+        }
         return '$base/standalone/programs/${payload['program_id'] ?? payload['programId']}/routines';
 
       case 'standalone_routine_exercise':
+        if (operation == 'update' || operation == 'delete') {
+          return '$base/standalone/routines/${payload['routine_id'] ?? payload['routineId']}/exercises/${payload['id']}';
+        }
         return '$base/standalone/routines/${payload['routine_id'] ?? payload['routineId']}/exercises';
 
       default:

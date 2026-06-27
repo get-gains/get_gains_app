@@ -50,6 +50,7 @@ abstract class ExerciseFormModel with _$ExerciseFormModel {
     @JsonKey(name: 'exercise_id') required String exerciseId,
     @JsonKey(name: 'camera_angle') required CameraAngle cameraAngle,
     @JsonKey(name: 'recorded_frames_key') String? recordedFramesKey,
+    @JsonKey(name: 'is_active') @Default(false) bool isActive,
     @JsonKey(name: 'created_at') DateTime? createdAt,
     @JsonKey(name: 'updated_at') DateTime? updatedAt,
   }) = _ExerciseFormModel;

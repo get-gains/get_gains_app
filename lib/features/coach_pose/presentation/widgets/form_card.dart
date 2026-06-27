@@ -11,12 +11,14 @@ class FormCard extends StatelessWidget {
     this.onTap,
     this.onDelete,
     this.onEditAngle,
+    this.onSetActive,
   });
 
   final ExerciseFormModel form;
   final VoidCallback? onTap;
   final VoidCallback? onDelete;
   final void Function(CameraAngle selectedAngle)? onEditAngle;
+  final VoidCallback? onSetActive;
 
   static void _showEditAngleDialog(
     BuildContext context, {
@@ -109,11 +111,25 @@ class FormCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        form.cameraAngle.displayName,
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              form.cameraAngle.displayName,
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          if (form.isActive)
+                            Icon(
+                              Icons.star,
+                              size: 18,
+                              color: isDark
+                                  ? AppColors.primaryDark
+                                  : AppColors.primaryLight,
+                            ),
+                        ],
                       ),
                       if (form.createdAt != null) ...[
                         const SizedBox(height: 2),
@@ -130,8 +146,8 @@ class FormCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                // Edit / Delete actions
-                if (onDelete != null || onEditAngle != null)
+                // Edit / Delete / Set Active actions
+                if (onDelete != null || onEditAngle != null || (onSetActive != null && !form.isActive))
                   PopupMenuButton<String>(
                     icon: Icon(
                       Icons.more_vert,
@@ -148,8 +164,26 @@ class FormCard extends StatelessWidget {
                           onSelected: (angle) => onEditAngle?.call(angle),
                         );
                       }
+                      if (value == 'setActive') onSetActive?.call();
                     },
                     itemBuilder: (context) => [
+                      if (onSetActive != null && !form.isActive)
+                        PopupMenuItem(
+                          value: 'setActive',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.star_outline,
+                                size: 20,
+                                color: isDark
+                                    ? AppColors.primaryDark
+                                    : AppColors.primaryLight,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text('Set as Active'),
+                            ],
+                          ),
+                        ),
                       if (onEditAngle != null)
                         PopupMenuItem(
                           value: 'editAngle',
