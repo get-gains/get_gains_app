@@ -13,6 +13,7 @@ import '../../../../widgets/app_toast.dart';
 import '../../../workout/data/models/models.dart';
 import '../../../workout/presentation/widgets/exercise_tab_bar.dart';
 import '../../../workout/presentation/widgets/set_input_row.dart';
+import '../../../gains_coins/presentation/providers/coin_balance_provider.dart';
 import '../../data/models/standalone_request_models.dart';
 import '../../data/standalone_workout_repository.dart';
 
@@ -208,6 +209,7 @@ class _StandaloneWorkoutScreenState
     result.when(
       success: (_) async {
         if (mounted) {
+          ref.read(coinBalanceProvider.notifier).refresh();
           AppToast.success(context, 'Workout complete!');
           context.go(AppRoutes.home);
         }

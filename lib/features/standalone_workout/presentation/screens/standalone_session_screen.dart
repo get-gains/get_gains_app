@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../widgets/widgets.dart';
 import '../../../workout/presentation/providers/calendar_provider.dart';
+import '../../../gains_coins/presentation/providers/coin_balance_provider.dart';
 import '../../data/models/models.dart';
 import '../../data/standalone_workout_repository.dart';
 import '../providers/standalone_session_provider.dart';
@@ -62,6 +63,7 @@ class _StandaloneSessionScreenState
     // Invalidate the calendar cache (all months) so today's session
     // appears immediately when the user next opens the calendar.
     ref.invalidate(monthlyWorkoutDaysProvider);
+    ref.read(coinBalanceProvider.notifier).refresh();
     setState(() => _completing = false);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

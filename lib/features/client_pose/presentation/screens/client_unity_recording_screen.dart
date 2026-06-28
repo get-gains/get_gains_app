@@ -89,11 +89,7 @@ class _ClientUnityRecordingScreenState
   // Prevents native crash dialog on emulators where libmain.so is absent.
   bool _showUnity = false;
 
-  // Results screen: show side-by-side 3D Unity comparison instead of 2D skeletons.
-  bool _showUnityComparison = false;
-  bool _isUnityComparisonLoaded = false;
-  bool _comparisonFramesSent = false;
-  Timer? _comparisonSendTimer;
+
   // ── Workout mode: set logger ─────────────────────────────────────────────────────
   bool get _isWorkoutMode => widget.workoutSessionId != null;
   final TextEditingController _weightController = TextEditingController();
@@ -531,18 +527,6 @@ class _ClientUnityRecordingScreenState
     _cancelAutoStartCountdown();
     _repsController.clear();
     _weightController.clear();
-    if (_showUnityComparison || _isUnityComparisonLoaded) {
-      sendToUnity(
-        UnityMessageContract.gameObjectName,
-        UnityMessageContract.methodExitComparisonMode,
-        '',
-      );
-    }
-    _comparisonSendTimer?.cancel();
-    _comparisonSendTimer = null;
-    _showUnityComparison = false;
-    _isUnityComparisonLoaded = false;
-    _comparisonFramesSent = false;
     ref
         .read(clientRecordingProvider(widget.exerciseId).notifier)
         .resetForNewAttempt();
@@ -626,7 +610,6 @@ class _ClientUnityRecordingScreenState
   void dispose() {
     WakelockPlus.disable();
     _autoStartTimer?.cancel();
-    _comparisonSendTimer?.cancel();
     _stopSetupStream();
     _cameraController?.dispose();
     _weightController.dispose();
@@ -1449,49 +1432,7 @@ class _ClientUnityRecordingScreenState
     );
   }
 
-  /// Handles Unity messages from the results-screen comparison EmbedUnity.
-  void _onComparisonMessageFromUnity(String message) {
-    if (!mounted) return;
-    if (message == UnityMessageContract.unityEventSceneLoaded) {
-      setState(() => _isUnityComparisonLoaded = true);
-      _sendComparisonFramesToUnity();
-      return;
-    }
-    // Unity echoes back when EnterComparisonMode is processed.
-    if (message == UnityMessageContract.unityEventComparisonEntered) {
-      _comparisonSendTimer?.cancel();
-      _comparisonSendTimer = null;
-      if (mounted) setState(() => _comparisonFramesSent = true);
-    }
-  }
-
-  /// Sends reference + client frames to Unity's side-by-side comparison mode.
-  void _sendComparisonFramesToUnity() {
-    final state = ref.read(clientRecordingProvider(widget.exerciseId));
-    if (state is! ClientRecordingComplete) return;
-    if (_comparisonFramesSent) return;
-
-    sendToUnity(
-      UnityMessageContract.gameObjectName,
-      UnityMessageContract.methodSetRecordingAngleHint,
-      state.result.cameraAngle,
-    );
-
-    final payload = jsonEncode({
-      'referenceFrames': state.referenceLandmarkFrames.map((f) => f.toJson()).toList(),
-      'clientFrames': state.clientLandmarkFrames.map((f) => f.toJson()).toList(),
-      'fps': 15,
-      'loop': true,
-    });
-
-    sendToUnity(
-      UnityMessageContract.gameObjectName,
-      UnityMessageContract.methodEnterComparisonMode,
-      payload,
-    );
-  }
-
-  /// Builds the form comparison card with a 2D/3D toggle in the top-right.
+  /// Builds the form comparison card.
   Widget _buildComparisonSection(
     BuildContext context,
     ClientRecordingComplete state,
@@ -1499,126 +1440,21 @@ class _ClientUnityRecordingScreenState
   ) {
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Form Comparison',
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            // 2D ↔ 3D comparison toggle
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  _showUnityComparison = !_showUnityComparison;
-                  if (!_showUnityComparison) {
-                    _comparisonSendTimer?.cancel();
-                    _comparisonSendTimer = null;
-                    _isUnityComparisonLoaded = false;
-                    _comparisonFramesSent = false;
-                    sendToUnity(
-                      UnityMessageContract.gameObjectName,
-                      UnityMessageContract.methodExitComparisonMode,
-                      '',
-                    );
-                  }
-                });
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? AppColors.surface1Dark
-                      : AppColors.surface1Light,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _showUnityComparison ? Icons.view_in_ar : Icons.grain,
-                      size: 16,
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _showUnityComparison ? '3D' : '2D',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: isDark
-                            ? AppColors.textSecondaryDark
-                            : AppColors.textSecondaryLight,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            'Form Comparison',
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+          ),
         ),
         const SizedBox(height: 8),
         SizedBox(
           height: 260,
-          child: _showUnityComparison
-              ? _buildUnityComparisonView(context, state)
-              : _build2DComparisonView(context, state),
+          child: _build2DComparisonView(context, state),
         ),
       ],
-    );
-  }
-
-
-
-  Widget _buildUnityComparisonView(
-    BuildContext context,
-    ClientRecordingComplete state,
-  ) {
-    // Unity may already be running (scene_loaded already sent) or may still be
-    // attaching. Retry sending frames on a timer until they are acknowledged.
-    if (!_comparisonFramesSent) {
-      _comparisonSendTimer?.cancel();
-      _comparisonSendTimer = Timer.periodic(const Duration(milliseconds: 400), (timer) {
-        if (!mounted || !_showUnityComparison || _comparisonFramesSent) {
-          timer.cancel();
-          _comparisonSendTimer = null;
-          return;
-        }
-        _sendComparisonFramesToUnity();
-      });
-      // First attempt as soon as the frame is built.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _showUnityComparison) _sendComparisonFramesToUnity();
-      });
-    }
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          EmbedUnity(onMessageFromUnity: _onComparisonMessageFromUnity),
-          if (!_comparisonFramesSent)
-            Container(
-              color: const Color(0xFF0F0F1A),
-              child: const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(color: Colors.cyanAccent),
-                    SizedBox(height: 12),
-                    Text(
-                      'Loading 3D comparison...',
-                      style: TextStyle(color: Colors.cyanAccent),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 

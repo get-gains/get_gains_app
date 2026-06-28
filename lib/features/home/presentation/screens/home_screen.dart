@@ -13,6 +13,7 @@ import '../../../guidance/guidance.dart';
 import '../../../profile/profile.dart';
 import '../../../subscription/subscription.dart';
 import '../../../form_library/presentation/widgets/featured_forms_strip.dart';
+import '../../../gains_coins/presentation/providers/coin_balance_provider.dart';
 import '../providers/home_providers.dart';
 import '../widgets/widgets.dart';
 
@@ -332,6 +333,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     ref.invalidate(homeStatusProvider);
     ref.invalidate(unifiedWeeklyStatsProvider);
     ref.invalidate(recentActivityProvider);
+    ref.invalidate(coinBalanceProvider);
     await Future.wait<void>([
       ref.read(homeStatusProvider.future).then((_) {}),
       ref.read(unifiedWeeklyStatsProvider.future).then((_) {}),
