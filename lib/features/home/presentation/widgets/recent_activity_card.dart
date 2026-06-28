@@ -8,9 +8,14 @@ import '../../../workout/data/models/models.dart';
 
 /// Card displaying a single recent workout session on the home screen.
 class RecentActivityCard extends StatelessWidget {
-  const RecentActivityCard({super.key, required this.session});
+  const RecentActivityCard({
+    super.key,
+    required this.session,
+    this.onTap,
+  });
 
   final WorkoutSessionSummary session;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -18,6 +23,7 @@ class RecentActivityCard extends StatelessWidget {
     final dateStr = _formatRelativeDate(session.startedAt);
 
     return AppCard(
+      onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(

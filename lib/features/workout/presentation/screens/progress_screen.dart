@@ -157,6 +157,10 @@ class ProgressScreen extends ConsumerWidget {
                                       child: _RecentSessionTile(
                                         session: s,
                                         isDark: isDark,
+                                        onTap: () => context.push(
+                                          AppRoutes.workoutSessionDetail
+                                              .replaceFirst(':id', s.id),
+                                        ),
                                       ),
                                     ),
                                   )
@@ -493,16 +497,22 @@ class _SummaryTile extends StatelessWidget {
 
 /// Compact tile for a recent workout session.
 class _RecentSessionTile extends StatelessWidget {
-  const _RecentSessionTile({required this.session, required this.isDark});
+  const _RecentSessionTile({
+    required this.session,
+    required this.isDark,
+    this.onTap,
+  });
 
   final WorkoutSessionSummary session;
   final bool isDark;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final dateStr = _formatRelativeDate(session.startedAt);
 
     return AppCard(
+      onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(

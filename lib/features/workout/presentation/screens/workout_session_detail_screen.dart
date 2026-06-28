@@ -569,6 +569,7 @@ class _ExerciseTileState extends State<_ExerciseTile> {
                 _headerCell(theme, 'Reps', secondary, flex: 2),
                 const Spacer(flex: 2),
                 _headerCell(theme, 'Weight', secondary, flex: 2),
+                _headerCell(theme, 'Score', secondary, flex: 2),
                 const SizedBox(width: 24), // trophy column
               ],
             ),
@@ -662,6 +663,15 @@ class _SetRow extends StatelessWidget {
               set.weightKg != null
                   ? '${set.weightKg!.toStringAsFixed(1)} kg'
                   : '—',
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: isPR ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              set.rpe != null ? '${set.rpe!.round()}' : '—',
               style: theme.textTheme.bodySmall?.copyWith(
                 fontWeight: isPR ? FontWeight.bold : FontWeight.normal,
               ),

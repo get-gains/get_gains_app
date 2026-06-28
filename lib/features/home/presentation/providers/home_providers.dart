@@ -241,6 +241,7 @@ Future<List<WorkoutSessionSummary>> recentActivity(Ref ref) async {
 
   if (result is Success<UnifiedSessionHistoryResponse, AppError>) {
     return result.value.sessions
+        .where((s) => s.totalSets > 0)
         .map(
           (s) => WorkoutSessionSummary(
             id: s.id,
@@ -269,7 +270,9 @@ Future<List<WorkoutSessionSummary>> recentActivity(Ref ref) async {
       offset: 0,
     );
     if (localResult is Success<WorkoutHistoryResponse, AppError>) {
-      return localResult.value.sessions;
+      return localResult.value.sessions
+          .where((s) => s.totalSets > 0)
+          .toList();
     }
   }
   return const [];

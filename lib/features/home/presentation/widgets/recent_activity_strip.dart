@@ -64,7 +64,13 @@ class RecentActivityStrip extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: display.length,
               separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (_, i) => RecentActivityCard(session: display[i]),
+              itemBuilder: (_, i) => RecentActivityCard(
+                session: display[i],
+                onTap: () => context.push(
+                  AppRoutes.workoutSessionDetail
+                      .replaceFirst(':id', display[i].id),
+                ),
+              ),
             );
           },
           loading: () => Padding(
